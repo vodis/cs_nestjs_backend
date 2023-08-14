@@ -55,3 +55,4 @@ services:
 
 volumes:
   cs-volume:
+  nginx.conf: # Define the named volume details

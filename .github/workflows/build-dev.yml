@@ -1,0 +1,49 @@
+name: Build DEV - Frontend
+
+on:
+  push:
+    branches:
+      - "develop"
+      - 'releases/**'
+    paths-ignore:
+      - "README.md"
+
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-frontend-ci:
+    runs-on: ubuntu-latest
+    name: build&deploy
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+      - name: 🕵️‍♂️ Get latest code
+        uses: actions/checkout@v3
+
+      - name: 🚀 Deploy file to server
+        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        with:
+          username: ${{ secrets.REMOTE_USER }}
+          server: '${{ secrets.REMOTE_HOST }}'
+          ssh_private_key: ${{ secrets.REMOTE_KEY }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local_path: './'
+          remote_path: ${{ secrets.FTP_PATH }}
+          sftpArgs: '-o ConnectTimeout=5'
+          sftp_only: true
+
+      - name: 👾 Creact network for containers and communicate with them
+        run: docker network create cs-network
+
+      - name: Run Docker containers
+        run: |
+          cd .docker/development
+          docker-compose up
+          

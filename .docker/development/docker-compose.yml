@@ -44,14 +44,14 @@ services:
 
   nginx:
     build:
-      context: .
+      context: ../../.nginx
       target: runner
     ports:
       - "3030:3030"
     networks:
       - cs-network
     volumes:
-      - ../.nginx/nginx.conf:/etc/nginx/nginx.conf
+      - nginx.conf:/etc/nginx/nginx.conf
 
 volumes:
   cs-volume:

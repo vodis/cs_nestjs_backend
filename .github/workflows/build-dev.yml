@@ -44,6 +44,5 @@ jobs:
 
       - name: Run Docker containers
         run: |
-          cd .docker/development
           docker-compose up
           

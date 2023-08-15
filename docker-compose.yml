@@ -44,7 +44,7 @@ services:
 
   nginx:
     build:
-      context: ../../.nginx
+      context: .
       target: runner
     ports:
       - "3030:3030"

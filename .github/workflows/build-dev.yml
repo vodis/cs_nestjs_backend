@@ -14,24 +14,24 @@ permissions:
   contents: read
 
 jobs:
-  build-frontend-ci:
-    runs-on: ubuntu-latest
-    name: build&deploy
+  cve-scan:
+    uses: vodis/cs_nestjs_backend/.github/workflows/reusable_security_cve_scanning.yaml@dev
+    with:
+      service_name: "cs_nestjs_backend"
+      service_path: "."
 
-    strategy:
-      matrix:
-        node-version: [18.x]
-
-    steps:
-      - name: 🕵️‍♂️ Get latest code
-        uses: actions/checkout@v3
-
-      cve-scan:
-        uses: vodis/cs_nestjs_backend/.github/workflows/reusable_security_cve_scanning.yaml@dev
-        with:
-          service_name: "cs_nestjs_backend"
-          service_path: "."
-
+#  build-frontend-ci:
+#    runs-on: ubuntu-latest
+#    name: build&deploy
+#
+#    strategy:
+#      matrix:
+#        node-version: [18.x]
+#
+#    steps:
+#      - name: 🕵️‍♂️ Get latest code
+#        uses: actions/checkout@v3
+#
 #      - name: 🚀 Deploy file to server
 #        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
 #        with:

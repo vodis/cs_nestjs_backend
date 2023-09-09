@@ -6,4 +6,5 @@ COPY nginx.conf /etc/nginx/conf.d/
 
 EXPOSE 3030
 
-CMD ["npm", "run", "start:prod;"]
+CMD ["nginx", "-g", "daemon off;"]
+#CMD ["npm", "run", "start:prod;"]

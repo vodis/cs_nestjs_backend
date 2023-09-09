@@ -1,4 +1,4 @@
-version: "3.9"
+version: '3.9'
 
 networks:
   cs-network:
@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       DB_POSTGRES: ${DB_POSTGRES}
     ports:
-      - "5434:5432"
+      - '5434:5432'
     volumes:
       - cs-volume:/var/lib/postgresql/data/
     networks:
@@ -23,17 +23,17 @@ services:
     image: server_app
     container_name: app_cs
     build:
-      dockerfile: "Dockerfile"
+      dockerfile: '.docker/Dockerfile'
       context: .
       # target: release
     env_file:
-      - ".env"
+      - '.env'
     volumes:
-      - "./src:/code/src"
-      - "./package.json:/code/package.json"
-      - "./package-lock.json:/code/package-lock.json"
+      - './src:/code/src'
+      - './package.json:/code/package.json'
+      - './package-lock.json:/code/package-lock.json'
     ports:
-      - "3001:3001"
+      - '3001:3001'
     environment:
       - SERVER_PORT=3001
       - POSTGRES_CONNECTOR=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_POSTGRES}
@@ -42,12 +42,23 @@ services:
     networks:
       - cs-network
 
+  migration:
+    build:
+      dockerfile: '.docker/Dockerfile'
+      context: .
+      target: build
+    env_file:
+      - '.env'
+    command: ['npm', 'run', 'db:migrate']
+    depends_on:
+      - db
+
   nginx:
     build:
       context: .
       # target: runner
     ports:
-      - "3030:3030"
+      - '3030:3030'
     networks:
       - cs-network
     volumes:

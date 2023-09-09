@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   cve-scan:
-    uses: vodis/cs_nestjs_backend/.github/workflows/reusable_security_cve_scanning.yaml@dev
+    uses: vodis/cs_nestjs_backend/.github/workflows/reusable_security_cve_scanning.yaml@develop
     with:
       service_name: "cs_nestjs_backend"
       service_path: "."

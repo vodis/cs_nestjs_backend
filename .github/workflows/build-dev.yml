@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - "develop"
-      - 'releases/**'
     paths-ignore:
       - "README.md"
 
@@ -27,22 +26,28 @@ jobs:
       - name: 🕵️‍♂️ Get latest code
         uses: actions/checkout@v3
 
-      - name: 🚀 Deploy file to server
-        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+      cve-scan:
+        uses: vodis/cs_nestjs_backend/.github/workflows/reusable_security_cve_scanning.yaml@dev
         with:
-          username: ${{ secrets.REMOTE_USER }}
-          server: '${{ secrets.REMOTE_HOST }}'
-          ssh_private_key: ${{ secrets.REMOTE_KEY }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local_path: './'
-          remote_path: ${{ secrets.FTP_PATH }}
-          sftpArgs: '-o ConnectTimeout=5'
-          sftp_only: true
+          service_name: "cs_nestjs_backend"
+          service_path: "."
 
-      - name: 👾 Creact network for containers and communicate with them
-        run: docker network create cs-network
-
-      - name: Run Docker containers
-        run: |
-          docker-compose up
+#      - name: 🚀 Deploy file to server
+#        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+#        with:
+#          username: ${{ secrets.REMOTE_USER }}
+#          server: '${{ secrets.REMOTE_HOST }}'
+#          ssh_private_key: ${{ secrets.REMOTE_KEY }}
+#          password: ${{ secrets.FTP_PASSWORD }}
+#          local_path: './'
+#          remote_path: ${{ secrets.FTP_PATH }}
+#          sftpArgs: '-o ConnectTimeout=5'
+#          sftp_only: true
+#
+#      - name: 👾 Creact network for containers and communicate with them
+#        run: docker network create cs-network
+#
+#      - name: Run Docker containers
+#        run: |
+#          docker-compose up
           

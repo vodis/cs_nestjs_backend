@@ -1,0 +1,33 @@
+name: "Vulnerability scan"
+description: "Scanning apps for vulnerabilities in files, libs, configs, etc."
+
+inputs:
+  scan_type:
+    description: "Scan Type (fs, image, config, rootfs, etc.)" # https://aquasecurity.github.io/trivy/v0.23.0/vulnerability/scanning/
+    required: true
+    default: fs
+  severity:
+    description: "CVE Severity"
+    required: false
+    default: "CRITICAL,HIGH"
+  folder_to_scan:
+    description: "Forder to run scan against"
+    required: false
+    default: "."
+  output_format:
+    description: "Report format"
+    required: false
+    default: "table"
+
+runs:
+  using: composite
+  steps:
+    - name: Scanning for CVEs
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: ${{ inputs.scan_type }}
+        scan-ref: ${{ inputs.folder_to_scan }}
+        hide-progress: false
+        ignore-unfixed: true
+        format: ${{ inputs.output_format }}
+        severity: ${{ inputs.severity }}

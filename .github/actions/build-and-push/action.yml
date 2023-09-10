@@ -24,7 +24,7 @@ runs:
         echo "IMAGE_TAG: ${{ inputs.image_tag }}"
         echo "#################################################"
         
-        cp .env.sample .env
+        cp .env.example .env
         make docker-build
         docker image ls
         docker tag $(docker image ls | grep app | awk '{print $1}') ${{ inputs.repo_name }}:${{ inputs.image_tag }}

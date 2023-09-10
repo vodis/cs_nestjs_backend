@@ -27,7 +27,7 @@ runs:
         echo "IMAGE_TAG: ${{ inputs.image_tag }}"
         echo "#################################################"
         
-        docker login -u vodis -p ${{ inputs.token }}
+        docker login -u vodis --password-stdin -p ${{ inputs.token }}
         
         cp .env.example .env
         make docker-build

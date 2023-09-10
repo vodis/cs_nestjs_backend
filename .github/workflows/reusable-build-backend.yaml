@@ -13,6 +13,9 @@ on:
         required: false
         type: string
         default: ""
+    secrets:
+      DOCKER_ACCESS_TOKEN:
+        required: true
 
 permissions:
   id-token: write
@@ -35,6 +38,7 @@ jobs:
           service_name: ${{ matrix.service_name }}
           repo_name: "vodis-${{ matrix.environment }}-${{ matrix.service_name }}"
           image_tag: "${{ github.run_number }}"
+          token: "${{ secrets.DOCKER_ACCESS_TOKEN }}"
 
       - name: Cleanup
         run: docker image rmi $(docker image ls | grep nftprim | awk '{print $3}') -f

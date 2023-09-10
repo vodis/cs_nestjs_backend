@@ -11,6 +11,9 @@ inputs:
   image_tag:
     description: "Name of image tag (usually build number or commit hash)"
     required: true
+  token:
+    description: "Docker access token"
+    required: true
 
 runs:
   using: composite
@@ -23,6 +26,8 @@ runs:
         echo "IMAGE_NAME: ${{ inputs.repo_name }}"
         echo "IMAGE_TAG: ${{ inputs.image_tag }}"
         echo "#################################################"
+        
+        docker login -u vodis -p ${{ inputs.token }}
         
         cp .env.example .env
         make docker-build

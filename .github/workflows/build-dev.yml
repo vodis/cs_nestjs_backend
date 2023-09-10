@@ -20,6 +20,8 @@ jobs:
     with:
       service_name: "cs_nestjs_backend"
       environment: "develop"
+    secrets:
+      DOCKER_ACCESS_TOKEN: ${{ secrets.DOCKER_ACCESS_TOKEN }}
 
 #  build-frontend-ci:
 #    runs-on: ubuntu-latest

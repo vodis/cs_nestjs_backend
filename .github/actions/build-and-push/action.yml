@@ -20,3 +20,4 @@ runs:
       run: |
         docker build -t {{ inputs.repo_name }}:${{ inputs.image_tag }} .
         docker push ${{ inputs.repo_name }}:${{ inputs.image_tag }}
+      shell: bash

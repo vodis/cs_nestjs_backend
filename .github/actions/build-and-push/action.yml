@@ -5,9 +5,6 @@ inputs:
   service_name:
     description: "Service to build e.g. dataset"
     required: true
-  registry_url:
-    description: "Image registry host e.g. <account_id>.dkr.ecr.<region>.example.com"
-    required: true
   repo_name:
     description: "Image registry repo e.g. my_image_repo"
     required: true
@@ -21,5 +18,5 @@ runs:
     - name: Build, tag, and push ${{ inputs.service_name }} image to registry
       # working-directory: ./services/${{ inputs.service_name }}
       run: |
-        docker build -t ${{ inputs.registry_url }}/${{ inputs.ecr_repo_name }}:${{ inputs.image_tag }} .
-        docker push ${{ inputs.registry_url }}/${{ inputs.ecr_repo_name }}:${{ inputs.image_tag }}
+        docker build -t {{ inputs.repo_name }}:${{ inputs.image_tag }} .
+        docker push ${{ inputs.repo_name }}:${{ inputs.image_tag }}

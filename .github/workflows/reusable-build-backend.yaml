@@ -1,0 +1,41 @@
+name: Reusable - Build Backend
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: "Application name you want to deploy (dataset, run, project, etc.)"
+        required: false
+        type: string
+        default: ""
+      environment:
+        description: "Environment name you want to deploy to (dev, test, etc.)"
+        required: false
+        type: string
+        default: ""
+    secrets:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service_name: ["${{ inputs.service_name }}"]
+        environment: ["${{ inputs.environment }}"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Building and pushing image to registry
+        uses: ./.github/actions/build-and-push
+        with:
+          service_name: ${{ matrix.service_name }}
+          image_tag: "${{ github.run_number }}"
+
+      - name: Cleanup
+        run: docker image rmi $(docker image ls | grep nftprim | awk '{print $3}') -f

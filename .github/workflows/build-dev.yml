@@ -14,11 +14,13 @@ permissions:
   contents: read
 
 jobs:
-  cve-scan:
-    uses: vodis/cs_nestjs_backend/.github/workflows/reusable_security_cve_scanning.yaml@develop
+  build-and-deploy:
+    needs: cve-scan
+    uses: vodis/cs_nestjs_backend/.github/workflows/reusable-build-backend.yaml@develop
     with:
       service_name: "cs_nestjs_backend"
-      service_path: "."
+      environment: "develop"
+    secrets:
 
 #  build-frontend-ci:
 #    runs-on: ubuntu-latest

@@ -18,6 +18,16 @@ runs:
     - name: Build, tag, and push ${{ inputs.service_name }} image to registry
       # working-directory: ./services/${{ inputs.service_name }}
       run: |
-        docker build -t ${{ inputs.repo_name }}:${{ inputs.image_tag }} .
+        echo "#################################################"
+        echo "Building image:"
+        echo "IMAGE_NAME: ${{ inputs.repo_name }}"
+        echo "IMAGE_TAG: ${{ inputs.image_tag }}"
+        echo "#################################################"
+        
+        cp .env.sample .env
+        make docker-build
+        docker image ls
+        docker tag $(docker image ls | grep app | awk '{print $1}') ${{ inputs.repo_name }}:${{ inputs.image_tag }}
+        docker image ls
         docker push ${{ inputs.repo_name }}:${{ inputs.image_tag }}
       shell: bash

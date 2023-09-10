@@ -18,6 +18,6 @@ runs:
     - name: Build, tag, and push ${{ inputs.service_name }} image to registry
       # working-directory: ./services/${{ inputs.service_name }}
       run: |
-        docker build -t {{ inputs.repo_name }}:${{ inputs.image_tag }} .
+        docker build -t ${{ inputs.repo_name }}:${{ inputs.image_tag }} .
         docker push ${{ inputs.repo_name }}:${{ inputs.image_tag }}
       shell: bash

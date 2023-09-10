@@ -41,28 +41,28 @@ services:
       - db
     networks:
       - cs-network
-
-  migration:
-    build:
-      dockerfile: '.docker/Dockerfile'
-      context: .
-      target: build
-    env_file:
-      - '.env'
-    command: ['npm', 'run', 'db:migrate']
-    depends_on:
-      - db
-
-  nginx:
-    build:
-      context: .
-      # target: runner
-    ports:
-      - '3030:3030'
-    networks:
-      - cs-network
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
+#
+#  migration:
+#    build:
+#      dockerfile: '.docker/Dockerfile'
+#      context: .
+##      target: build
+#    env_file:
+#      - '.env'
+#    command: ['npm', 'run', 'db:migrate']
+#    depends_on:
+#      - db
+#
+#  nginx:
+#    build:
+#      context: .
+#      # target: runner
+#    ports:
+#      - '3030:3030'
+#    networks:
+#      - cs-network
+#    volumes:
+#      - ./nginx.conf:/etc/nginx/nginx.conf
 
 volumes:
   cs-volume:

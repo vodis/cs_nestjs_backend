@@ -43,25 +43,25 @@ jobs:
       - name: Cleanup
         run: docker image rmi $(docker image ls | grep nftprim | awk '{print $3}') -f
 
-  deploy:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service_name: [ "${{ inputs.service_name }}" ]
-        environment: [ "${{ inputs.environment }}" ]
-    needs: build
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: 🚀 Deploy file to server
-        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
-        with:
-          username: ${{ secrets.REMOTE_USER }}
-          server: '${{ secrets.REMOTE_HOST }}'
-          ssh_private_key: ${{ secrets.REMOTE_KEY }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local_path: './'
-          remote_path: ${{ secrets.FTP_PATH }}
-          sftpArgs: '-o ConnectTimeout=5'
-          sftp_only: true
+#  deploy:
+#    runs-on: ubuntu-latest
+#    strategy:
+#      matrix:
+#        service_name: [ "${{ inputs.service_name }}" ]
+#        environment: [ "${{ inputs.environment }}" ]
+#    needs: build
+#    steps:
+#      - name: Checkout
+#        uses: actions/checkout@v3
+#
+#      - name: 🚀 Deploy file to server
+#        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+#        with:
+#          username: ${{ secrets.REMOTE_USER }}
+#          server: '${{ secrets.REMOTE_HOST }}'
+#          ssh_private_key: ${{ secrets.REMOTE_KEY }}
+#          password: ${{ secrets.FTP_PASSWORD }}
+#          local_path: './'
+#          remote_path: ${{ secrets.FTP_PATH }}
+#          sftpArgs: '-o ConnectTimeout=5'
+#          sftp_only: true

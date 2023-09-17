@@ -37,7 +37,7 @@ runs:
         echo "IMAGE_TAG: ${{ inputs.image_tag }}"
         echo "ENVIRONMENT: ${{ inputs.environment }}"
         
-        docker build -t ${{ input.image_name }}:${{ input.repo_name }} --build-arg NPM_TOKEN=${{ inputs.registry_token }}
+        docker build -t ${{ inputs.image_name }}:${{ inputs.repo_name }} --build-arg NPM_TOKEN=${{ inputs.registry_token }}
         docker push ${{ inputs.image_name }}:${{ inputs.repo_name }}
         echo "#################################################"
       shell: bash

@@ -17,7 +17,7 @@ RUN echo "*/2     *       *       *       *       run-parts /etc/periodic/2min" 
     && echo "*/6     *       *       *       *       run-parts /etc/periodic/6min" >> /etc/crontabs/root \
     && echo "*/60     *       *       *       *       run-parts /etc/periodic/60min" >> /etc/crontabs/root
 RUN chmod a+x /code/docker_scripts/run* \
-    && cp ./docker_scripts/runCleanerDaemon /etc/periodic/daily/ \
+    && cp ./docker_scripts/runCleanerDaemon /etc/periodic/daily/
 
 RUN rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/

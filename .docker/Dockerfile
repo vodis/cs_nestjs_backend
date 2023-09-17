@@ -1,4 +1,4 @@
-FROM nginx:latest AS runner
+FROM nginx:latest AS base
 
 WORKDIR "/code"
 COPY . .
@@ -21,8 +21,6 @@ RUN chmod a+x /code/docker_scripts/run* \
 
 RUN rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/
-
-EXPOSE 3030
 
 FROM base AS dependencies
 RUN npm ci --only=production

@@ -27,6 +27,7 @@ runs:
         echo "IMAGE_TAG: ${{ inputs.image_tag }}"
         echo "#################################################"
         
+        docker-credential-secretservice configure
         echo ${{ inputs.token }} | docker login -u vodis --password-stdin
         
         cp .env.example .env

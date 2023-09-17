@@ -24,10 +24,11 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Configure Docker credential helper
+      run: docker-credential-secretservice configure
+
     - name: Login to Docker Hub
-      run: |
-        docker login --username ${{ inputs.registry_user }} --password-stdin ${{ inputs.registry_token }}
-      shell: bash
+      run: echo ${{ inputs.registry_token }} | docker login -u ${{ inputs.registry_user }} --password-stdin
 
     - name: Fill in the new image ID
       run: |

@@ -1,0 +1,42 @@
+name: "Deploying backend DB migrations"
+description: "Builds and pushes an image to a registry"
+
+inputs:
+  environment:
+    description: "Environment name e.g. develop"
+    required: true
+  service_name:
+    description: "Name of service to build e.g. craftscript"
+    required: true
+  repo_name:
+    description: "Name of the service to update"
+    required: false
+  image_tag:
+    description: "Name of image tag (usually build number or commit hash)"
+    required: true
+  registry_user:
+    description: "Docker registry user"
+    required: true
+  registry_token:
+    description: "Docker registry token"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Login to Docker Hub
+      run: |
+        docker login --username ${{ input.registry_user }} --password-stdin ${{ inputs.registry_token }}
+
+    - name: Fill in the new image ID
+      run: |
+        echo "#################################################"
+        echo "Deploying image:"
+        echo "IMAGE_NAME: ${{ inputs.repo_name }}"
+        echo "IMAGE_TAG: ${{ inputs.image_tag }}"
+        echo "ENVIRONMENT: ${{ inputs.environment }}"
+        
+        docker build -t ${{ input.image_name }}:${{ input.repo_name }} --build-arg NPM_TOKEN=${{ inputs.registry_token }}
+        docker push ${{ input.image_name }}:${{ input.repo_name }}
+        echo "#################################################"
+      shell: bash

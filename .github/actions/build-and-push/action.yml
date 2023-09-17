@@ -27,8 +27,7 @@ runs:
         echo "IMAGE_TAG: ${{ inputs.image_tag }}"
         echo "#################################################"
         
-        echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"$(echo -n vodis:${{ inputs.token }} | base64)\"}}}" > ~/.docker/config.json
-        docker login -u vodis
+        docker login -u vodis -p ${{ inputs.token }}
         
         cp .env.example .env
         make docker-build

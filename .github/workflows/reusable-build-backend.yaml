@@ -28,7 +28,6 @@ jobs:
       matrix:
         service_name: ["${{ inputs.service_name }}"]
         environment: ["${{ inputs.environment }}"]
-        image_tag: "${{ github.run_number }}"
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -37,14 +36,14 @@ jobs:
         run: echo ${{ secrets.DOCKER_ACCESS_TOKEN }} | docker login -u vodis --password-stdin
 
       - name: Installing ${{ matrix.service_name }} DB migrations
-          uses: ./.github/actions/deploy-db-migrations
-          with:
-            environment: ${{ matrix.environment }}
-            service_name: ${{ matrix.service_name }}
-            repo_name: "vodis-${{ matrix.environment }}-${{ matrix.service_name }}"
-            image_tag: "${{ github.run_number }}"
-            registry_user: "vodis"
-            registry_token: "${{ secrets.DOCKER_ACCESS_TOKEN }}"
+        uses: ./.github/actions/deploy-db-migrations
+        with:
+          environment: ${{ matrix.environment }}
+          service_name: ${{ matrix.service_name }}
+          repo_name: "vodis-${{ matrix.environment }}-${{ matrix.service_name }}"
+          image_tag: "${{ github.run_number }}"
+          registry_user: "vodis"
+          registry_token: "${{ secrets.DOCKER_ACCESS_TOKEN }}"
 
 #      - name: Building and pushing image to registry
 #        uses: ./.github/actions/build-and-push

@@ -18,9 +18,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Configure Docker credential helper
-      run: docker-credential-secretservice configure
-
     - name: Build, tag, and push ${{ inputs.service_name }} image to registry
       # working-directory: ./services/${{ inputs.service_name }}
       run: |
@@ -30,7 +27,8 @@ runs:
         echo "IMAGE_TAG: ${{ inputs.image_tag }}"
         echo "#################################################"
         
-        echo ${{ inputs.token }} | docker login -u vodis --password-stdin
+        echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"$(echo -n vodis:${{ inputs.token }} | base64)\"}}}" > ~/.docker/config.json
+        docker login -u vodis
         
         cp .env.example .env
         make docker-build

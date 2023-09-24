@@ -1,0 +1,36 @@
+name: "Copy to"
+description: "Copy project to remote"
+
+inputs:
+  remote_user:
+    description: "Remote user name"
+    required: true
+  remote_host:
+    description: "Remote host connector"
+    required: true
+  remote_key:
+    description: "SSH private key"
+    required: true
+  ftp_password:
+    description: "Password to ftp client"
+    required: true
+  ftp_path:
+    description: "Project location"
+    required: true
+
+runs:
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: 🚀 Deploy file to server
+      uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+      with:
+        username: ${{ inputs.remote_user }}
+        server: '${{ inputs.remote_host }}'
+        ssh_private_key: ${{ inputs.remote_key }}
+        password: ${{ inputs.ftp_password }}
+        local_path: './'
+        remote_path: ${{ inputs.ftp_path }}
+        sftpArgs: '-o ConnectTimeout=5'
+        sftp_only: true

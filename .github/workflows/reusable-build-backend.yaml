@@ -14,7 +14,15 @@ on:
         type: string
         default: ""
     secrets:
-      DOCKER_ACCESS_TOKEN:
+      REMOTE_USER:
+        required: true
+      REMOTE_HOST:
+        required: true
+      REMOTE_KEY:
+        required: true
+      FTP_PASSWORD:
+        required: true
+      FTP_PATH:
         required: true
 
 permissions:
@@ -26,55 +34,24 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service_name: ["${{ inputs.service_name }}"]
-        environment: ["${{ inputs.environment }}"]
+        service_name: [ "${{ inputs.service_name }}" ]
+        environment: [ "${{ inputs.environment }}" ]
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Login to Docker Hub
-        run: echo ${{ secrets.DOCKER_ACCESS_TOKEN }} | docker login -u vodis --password-stdin
-
-      - name: Installing ${{ matrix.service_name }} DB migrations
-        uses: ./.github/actions/deploy-db-migrations
+      - name: Migrate ${{ matrix.service_name }} from ${{ matrix.environment }} to remote
+        uses: ./.github/actions/copy-to
         with:
-          environment: ${{ matrix.environment }}
+          remote_user: ${{ secrets.REMOTE_USER }}
+          remote_host: ${{ secrets.REMOTE_HOST }}
+          remote_key: ${{ secrets.REMOTE_KEY }}
+          ftp_password: ${{ secrets.FTP_PASSWORD }}
+          ftp_path: ${{ secrets.FTP_PATH }}
+
+      - name: Building and pushing image
+        uses: ./.github/actions/build-and-push
+        with:
           service_name: ${{ matrix.service_name }}
-          image_name: "vodis-${{ matrix.environment }}-${{ matrix.service_name }}"
+          repo_name: "vodis-${{ matrix.environment }}-${{ matrix.service_name }}"
           image_tag: "${{ github.run_number }}"
-          registry_user: "vodis"
-          registry_token: "${{ secrets.DOCKER_ACCESS_TOKEN }}"
-
-#      - name: Building and pushing image to registry
-#        uses: ./.github/actions/build-and-push
-#        with:
-#          service_name: ${{ matrix.service_name }}
-#          repo_name: "vodis-${{ matrix.environment }}-${{ matrix.service_name }}"
-#          image_tag: "${{ github.run_number }}"
-#          token: "${{ secrets.DOCKER_ACCESS_TOKEN }}"
-#
-#      - name: Cleanup
-#        run: docker image rmi $(docker image ls | grep nftprim | awk '{print $3}') -f
-
-#  deploy:
-#    runs-on: ubuntu-latest
-#    strategy:
-#      matrix:
-#        service_name: [ "${{ inputs.service_name }}" ]
-#        environment: [ "${{ inputs.environment }}" ]
-#    needs: build
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v3
-#
-#      - name: 🚀 Deploy file to server
-#        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
-#        with:
-#          username: ${{ secrets.REMOTE_USER }}
-#          server: '${{ secrets.REMOTE_HOST }}'
-#          ssh_private_key: ${{ secrets.REMOTE_KEY }}
-#          password: ${{ secrets.FTP_PASSWORD }}
-#          local_path: './'
-#          remote_path: ${{ secrets.FTP_PATH }}
-#          sftpArgs: '-o ConnectTimeout=5'
-#          sftp_only: true

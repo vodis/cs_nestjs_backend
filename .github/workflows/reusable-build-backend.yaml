@@ -36,7 +36,6 @@ jobs:
       matrix:
         service_name: [ "${{ inputs.service_name }}" ]
         environment: [ "${{ inputs.environment }}" ]
-        node-version: [18.x]
     steps:
       - name: Checkout
         uses: actions/checkout@v3

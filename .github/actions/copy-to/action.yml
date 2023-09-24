@@ -19,7 +19,7 @@ inputs:
     required: true
 
 runs:
-  using:  node16
+  using:  composite
   steps:
     - name: Checkout
       uses: actions/checkout@v3

@@ -18,13 +18,13 @@ FROM base AS build
 COPY --from=dependencies code/node_modules ./node_modules
 RUN npm run build
 
-#FROM base as develop
-#COPY --from=dependencies code/node_modules ./node_modules
-#COPY --from=build code/dist ./dist
-#CMD ["npm", "run", "start:dev"]
-#
-#FROM base AS release
-#COPY --from=dependencies code/prod_node_modules ./node_modules
-#COPY --from=build code/dist ./dist
-#COPY ./docker_scripts/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-#CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+FROM base as develop
+COPY --from=dependencies code/node_modules ./node_modules
+COPY --from=build code/dist ./dist
+CMD ["npm", "run", "start:dev"]
+
+FROM base AS release
+COPY --from=dependencies code/prod_node_modules ./node_modules
+COPY --from=build code/dist ./dist
+COPY ./docker_scripts/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

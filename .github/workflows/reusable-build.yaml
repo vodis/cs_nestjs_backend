@@ -17,6 +17,10 @@ on:
         description: "DockerHub registry name"
         required: true
         type: string
+      repo_name:
+        description: "DockerHub repository name"
+        required: true
+        type: string
     secrets:
       REMOTE_USER:
         required: true

@@ -30,7 +30,7 @@ runs:
         echo "Building image:"
         echo "IMAGE_NAME: ${{ inputs.image_name }}"
         echo "IMAGE_TAG: ${{ inputs.image_tag }}"
-        echo "DOCKER_HUB_REFS: ${{ inputs.registry_url }}/${{ inputs.repo_name }}:v_${{ inputs.image_tag }}
+        echo "DOCKER_HUB_REFS: ${{ inputs.registry_url }}/${{ inputs.repo_name }}:v_${{ inputs.image_tag }}"
         echo "#################################################"
         
         cp .env.example .env

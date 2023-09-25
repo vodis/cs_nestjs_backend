@@ -2,6 +2,9 @@ name: "Build and push image"
 description: "Builds and pushes an image to a registry"
 
 inputs:
+  token:
+    description: "DockerHub secret token"
+    required: true
   service_name:
     description: "Service to build e.g. dataset"
     required: true
@@ -10,6 +13,12 @@ inputs:
     required: true
   image_tag:
     description: "Name of image tag (usually build number or commit hash)"
+    required: true
+  registry_url:
+    description: "References to DockerHub registry"
+    required: true
+  repo_name:
+    description: "References to DockerHub repository"
     required: true
 
 runs:
@@ -28,5 +37,7 @@ runs:
         docker image ls
         docker tag $(docker image ls | grep app | awk '{print $1}') ${{ inputs.image_name }}:${{ inputs.image_tag }}
         docker image ls
-        docker push ${{ inputs.ecr_registry_url }}/${{ inputs.ecr_repo_name }}:${{ inputs.image_tag }}
+        
+        docker login -u ${{ inputs.registry_url }} -p ${{ inputs.token }}
+        docker push ${{ inputs.registry_url }}/${{ inputs.repo_name }}:${{ inputs.image_tag }}
       shell: bash

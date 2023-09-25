@@ -44,6 +44,6 @@ runs:
         
         echo ${{ inputs.dockerhub_password }} | docker login -u ${{ inputs.dockerhub_username }} --password-stdin
         
-        docker build -t "${{ inputs.registry_url }}/${{ inputs.image_name }}:v_${{ inputs.image_tag }}" .
+#        docker build -t "${{ inputs.registry_url }}/${{ inputs.image_name }}:v_${{ inputs.image_tag }}" .
         docker push "${{ inputs.registry_url }}/${{ inputs.image_name }}:v_${{ inputs.image_tag }}"
       shell: bash

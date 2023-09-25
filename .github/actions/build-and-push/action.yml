@@ -30,7 +30,7 @@ runs:
         echo "Building image:"
         echo "IMAGE_NAME: ${{ inputs.image_name }}"
         echo "IMAGE_TAG: ${{ inputs.image_tag }}"
-        echo "DOCKER_HUB_REPO_NAME: ${{ inputs.repo_name }}"
+        echo "DOCKER_HUB_REFS: ${{ inputs.registry_url }}/${{ inputs.repo_name }}:v_${{ inputs.image_tag }}
         echo "#################################################"
         
         cp .env.example .env
@@ -40,5 +40,5 @@ runs:
         docker image ls
         
         docker login -u ${{ inputs.registry_url }} -p ${{ inputs.token }}
-        docker push ${{ inputs.registry_url }}/${{ inputs.repo_name }}:[v_'${{ inputs.image_tag }}']
+        docker push ${{ inputs.registry_url }}/${{ inputs.repo_name }}:v_${{ inputs.image_tag }}
       shell: bash

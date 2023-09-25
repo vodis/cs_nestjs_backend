@@ -1,13 +1,16 @@
 FROM nginx:latest AS base
 
+RUN apk update && apk add openrc busybox-openrc busybox-extras-openrc busybox-mdev-openrc supervisor --no-cache
+RUN mkdir /run/openrc/ && touch /run/openrc/softlevel
+
+FROM node:16-alpine as base
+
 WORKDIR "/code"
 COPY . .
 
 RUN rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/
 
-RUN apk update && apk add openrc busybox-openrc busybox-extras-openrc busybox-mdev-openrc supervisor --no-cache
-RUN mkdir /run/openrc/ && touch /run/openrc/softlevel
 
 RUN mkdir /etc/periodic/2min \
     && mkdir /etc/periodic/4min \

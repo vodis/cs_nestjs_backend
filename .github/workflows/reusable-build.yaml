@@ -17,10 +17,6 @@ on:
         description: "DockerHub registry name"
         required: true
         type: string
-      repo_name:
-        description: "DockerHub repository name"
-        required: true
-        type: string
     secrets:
       REMOTE_USER:
         required: true
@@ -65,8 +61,7 @@ jobs:
         uses: ./.github/actions/build-and-push
         with:
           service_name: ${{ matrix.service_name }}
-          image_name: "${{ matrix.registry_url }}-${{ matrix.environment }}-${{ matrix.service_name }}"
+          image_name: "${{ inputs.repo_name }}"
           image_tag: "${{ github.run_number }}"
           registry_url: "${{ inputs.registry_url }}"
-          repo_name: "${{ inputs.repo_name }}"
           token:  ${{ secrets.DOCKER_ACCESS_TOKEN }}

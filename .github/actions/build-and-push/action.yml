@@ -17,9 +17,6 @@ inputs:
   registry_url:
     description: "References to DockerHub registry"
     required: true
-  repo_name:
-    description: "References to DockerHub repository"
-    required: true
 
 runs:
   using: composite
@@ -30,7 +27,7 @@ runs:
         echo "Building image:"
         echo "IMAGE_NAME: ${{ inputs.image_name }}"
         echo "IMAGE_TAG: ${{ inputs.image_tag }}"
-        echo "DOCKER_HUB_REFS: ${{ inputs.registry_url }}/${{ inputs.repo_name }}:v_${{ inputs.image_tag }}"
+        echo "DOCKER_HUB_REFS: ${{ inputs.registry_url }}/${{ inputs.image_name }}:v_${{ inputs.image_tag }}"
         echo "#################################################"
         
         cp .env.example .env
@@ -40,5 +37,5 @@ runs:
         docker image ls
         
         docker login -u ${{ inputs.registry_url }} -p ${{ inputs.token }}
-        docker push ${{ inputs.registry_url }}/${{ inputs.repo_name }}:v_${{ inputs.image_tag }}
+        docker push ${{ inputs.registry_url }}/${{ inputs.image_name }}:v_${{ inputs.image_tag }}
       shell: bash

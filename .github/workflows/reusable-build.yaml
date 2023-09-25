@@ -51,9 +51,9 @@ jobs:
           ftp_password: ${{ secrets.FTP_PASSWORD }}
           ftp_path: ${{ secrets.FTP_PATH }}
 
-#      - name: Building and pushing image
-#        uses: ./.github/actions/build-and-push
-#        with:
-#          service_name: ${{ matrix.service_name }}
-#          repo_name: "vodis-${{ matrix.environment }}-${{ matrix.service_name }}"
-#          image_tag: "${{ github.run_number }}"
+      - name: Building and pushing image
+        uses: ./.github/actions/build-and-push
+        with:
+          service_name: ${{ matrix.service_name }}
+          repo_name: "vodis-${{ matrix.environment }}-${{ matrix.service_name }}"
+          image_tag: "${{ github.run_number }}"

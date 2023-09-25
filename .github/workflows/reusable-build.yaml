@@ -32,12 +32,6 @@ on:
         required: true
       FTP_PATH:
         required: true
-      DOCKER_ACCESS_TOKEN:
-        required: true
-      DOCKERHUB_USERNAME:
-        required: true
-      DOCKERHUB_PASSWORD:
-        required: true
 
 permissions:
   id-token: write
@@ -65,13 +59,13 @@ jobs:
           ftp_password: ${{ secrets.FTP_PASSWORD }}
           ftp_path: ${{ secrets.FTP_PATH }}
 
-      - name: Building and pushing image
-        uses: ./.github/actions/build-and-push
+      - name: Building images on remote
+        uses: ./.github/actions/build
         with:
           service_name: ${{ matrix.service_name }}
-          image_name: "${{ inputs.repo_name }}"
-          image_tag: "${{ github.run_number }}"
-          registry_url: "${{ inputs.registry_url }}"
-          token:  ${{ secrets.DOCKER_ACCESS_TOKEN }}
-          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
-          dockerhub_password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          image_name: ${{ inputs.repo_name }}
+          image_tag: ${{ github.run_number }}
+          registry_url: ${{ inputs.registry_url }}
+          remote_user: ${{ secrets.REMOTE_USER }}
+          remote_host: ${{ secrets.REMOTE_HOST }}
+          ftp_password: ${{ secrets.FTP_PASSWORD }}

@@ -37,5 +37,7 @@ runs:
         docker image ls
         
         docker login -u ${{ inputs.registry_url }} -p ${{ inputs.token }}
-        docker push ${{ inputs.registry_url }}/${{ inputs.image_name }}:v_${{ inputs.image_tag }}
+        
+        docker build -t "${{ inputs.registry_url }}/${{ inputs.image_name }}:v_${{ inputs.image_tag }}" .
+        docker push "${{ inputs.registry_url }}/${{ inputs.image_name }}:v_${{ inputs.image_tag }}"
       shell: bash

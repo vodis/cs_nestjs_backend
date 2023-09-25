@@ -46,7 +46,7 @@ services:
     build:
       dockerfile: '.docker/Dockerfile'
       context: .
-#      target: build
+      target: build
     env_file:
       - '.env'
     command: ['npm', 'run', 'db:migrate']

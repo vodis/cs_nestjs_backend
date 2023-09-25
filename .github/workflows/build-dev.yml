@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build-and-deploy:
-    uses: vodis/cs_nestjs_backend/.github/workflows/reusable-build-backend.yaml@develop
+    uses: vodis/cs_nestjs_backend/.github/workflows/reusable-build.yaml@develop
     with:
       service_name: "cs_nestjs_backend"
       environment: "develop"

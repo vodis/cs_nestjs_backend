@@ -39,6 +39,8 @@ runs:
         cp .env.example .env
         
         echo ${{ inputs.dockerhub_password }} | docker login -u ${{ inputs.dockerhub_username }} --password-stdin
+        echo "Building locally Image:"
+        docker build -t "${{ inputs.registry_url }}/${{ inputs.image_name }}:v_${{ inputs.image_tag }}" .
         
         make docker-build
         docker image ls

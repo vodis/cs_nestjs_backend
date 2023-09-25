@@ -37,13 +37,12 @@ runs:
         echo "#################################################"
         
         cp .env.example .env
+        
+        echo ${{ inputs.dockerhub_password }} | docker login -u ${{ inputs.dockerhub_username }} --password-stdin
+        
         make docker-build
         docker image ls
         docker tag $(docker image ls | grep app | awk '{print $1}') ${{ inputs.image_name }}:${{ inputs.image_tag }}
         docker image ls
-        
-        echo ${{ inputs.dockerhub_password }} | docker login -u ${{ inputs.dockerhub_username }} --password-stdin
-        
-#        docker build -t "${{ inputs.registry_url }}/${{ inputs.image_name }}:v_${{ inputs.image_tag }}" .
         docker push "${{ inputs.registry_url }}/${{ inputs.image_name }}:v_${{ inputs.image_tag }}"
       shell: bash

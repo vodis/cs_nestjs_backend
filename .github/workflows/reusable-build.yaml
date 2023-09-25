@@ -15,12 +15,14 @@ on:
         default: ""
       registry_url:
         description: "DockerHub registry name"
-        required: true
+        required: false
         type: string
+        default: ""
       repo_name: "cs"
         description: "DockerHub repository name"
-        required: true
+        required: false
         type: string
+        default: ""
     secrets:
       REMOTE_USER:
         required: true

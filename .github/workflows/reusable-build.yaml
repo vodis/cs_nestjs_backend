@@ -24,6 +24,8 @@ on:
         required: true
       FTP_PATH:
         required: true
+      DOCKER_ACCESS_TOKEN:
+        required: true
 
 permissions:
   id-token: write
@@ -55,5 +57,8 @@ jobs:
         uses: ./.github/actions/build-and-push
         with:
           service_name: ${{ matrix.service_name }}
-          image_name: "vodis-${{ matrix.environment }}-${{ matrix.service_name }}"
+          image_name: "${{ matrix.registry_url }}-${{ matrix.environment }}-${{ matrix.service_name }}"
           image_tag: "${{ github.run_number }}"
+          registry_url: "${{ inputs.registry_url }}"
+          repo_name: "${{ inputs.repo_name }}"
+          token:  ${{ secrets.DOCKER_ACCESS_TOKEN }}

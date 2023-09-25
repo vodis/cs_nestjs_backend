@@ -19,9 +19,12 @@ jobs:
     with:
       service_name: "cs_nestjs_backend"
       environment: "develop"
+      registry_url: "vodis"
+      repo_name: "cs"
     secrets:
       REMOTE_USER: ${{ secrets.REMOTE_USER }}
       REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
       REMOTE_KEY: ${{ secrets.REMOTE_KEY }}
       FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
       FTP_PATH: ${{ secrets.FTP_PATH }}
+      DOCKER_ACCESS_TOKEN: ${{ secrets.DOCKER_ACCESS_TOKEN }}

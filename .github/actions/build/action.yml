@@ -33,7 +33,7 @@ runs:
         host: ${{ inputs.remote_host }}
         username: ${{ inputs.remote_user }}
         password: ${{ inputs.ftp_password }}
-      run: |
+      script: |
         echo "#################################################"
         echo "Building image:"
         echo "IMAGE_NAME: ${{ inputs.image_name }}"

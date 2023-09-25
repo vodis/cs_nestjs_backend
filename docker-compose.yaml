@@ -20,8 +20,8 @@ services:
       - cs-network
 
   app:
-    image: server_app
-    container_name: app_cs
+    image: cs
+    container_name: vodis
     build:
       dockerfile: '.docker/Dockerfile'
       context: .

@@ -9,8 +9,5 @@ docker-run:
 docker-stop:
 	@docker compose -f docker-compose.yaml down --remove-orphans
 
-docker-exec:
-	@docker compose -f docker-compose.yaml run app /bin/sh
-
 docker-db-migrate:
 	@docker compose -f docker-compose.yaml run app npm run db:migrate

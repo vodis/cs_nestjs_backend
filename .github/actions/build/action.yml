@@ -23,17 +23,25 @@ inputs:
   ftp_password:
     description: "Password to ftp client"
     required: true
+  ftp_path:
+    description: "Path to ftp repository"
+    required: true
 
 runs:
   using: composite
   steps:
     - name: Build, tag and ${{ inputs.service_name }} image
       uses: appleboy/ssh-action@master
-      command: |
+      with:
+        host: ${{ inputs.remote_host }}
+        username: ${{ inputs.remote_user }}
+        password: ${{ inputs.ftp_password }}
+        script: |
           echo "#################################################"
           echo "Building image:"
           echo "#################################################"
           
+          cd ${{ inputs.ftp_path }}
           cp .env.example .env
           make docker-build
           docker tag $(docker image ls | grep app | awk '{print $1}') ${{ inputs.image_name }}:${{ inputs.image_tag }}

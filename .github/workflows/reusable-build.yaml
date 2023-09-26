@@ -68,4 +68,5 @@ jobs:
           registry_url: ${{ inputs.registry_url }}
           remote_user: ${{ secrets.REMOTE_USER }}
           remote_host: ${{ secrets.REMOTE_HOST }}
+          ftp_path: ${{ secrets.FTP_PATH }}
           ftp_password: ${{ secrets.FTP_PASSWORD }}

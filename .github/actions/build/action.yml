@@ -29,11 +29,7 @@ runs:
   steps:
     - name: Build, tag and ${{ inputs.service_name }} image
       uses: appleboy/ssh-action@master
-      with:
-        host: ${{ inputs.remote_host }}
-        username: ${{ inputs.remote_user }}
-        password: ${{ inputs.ftp_password }}
-        run: |
+      run: |
           echo "#################################################"
           echo "Building image:"
           echo "#################################################"

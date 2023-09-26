@@ -1,35 +1,29 @@
 name: "Deploying backend DB migrations"
-description: "Builds and pushes an image to a registry"
+description: "Builds an image on remote"
 
 inputs:
-  environment:
-    description: "Environment name e.g. develop"
+  remote_host:
+    description: "Remote host connector"
     required: true
-  service_name:
-    description: "Name of service to build e.g. craftscript"
+  remote_user:
+    description: "SSH private key"
     required: true
-  image_name:
-    description: "Name of the service to update"
-    required: false
-  image_tag:
-    description: "Name of image tag (usually build number or commit hash)"
+  ftp_password:
+    description: "Password to ftp client"
     required: true
-  registry_user:
-    description: "Docker registry user"
-    required: true
-  registry_token:
-    description: "Docker registry token"
+  ftp_path:
+    description: "Path to ftp repository"
     required: true
 
 runs:
   using: composite
   steps:
-    - name: Login to Docker Hub
-      run: |
-        echo ${{ inputs.registry_token }} | docker login -u ${{ inputs.registry_user }} --password-stdin
-      shell: bash
-
-    - name: Fill in the new image ID
-      run: |
-        docker build -t {{ inputs.registry_user }}/{{ inputs.image_user }}:{{ inputs.image_tag }}
-      shell: bash
+    - name: Run migration scripts
+      uses: appleboy/ssh-action@master
+        with:
+          host: ${{ inputs.remote_host }}
+          username: ${{ inputs.remote_user }}
+          password: ${{ inputs.ftp_password }}
+          script: |
+            cd ${{ secrets.FTP_PATH }}
+            make docker-db-migrate

@@ -42,16 +42,16 @@ services:
     networks:
       - cs-network
 
-#  migration:
-#    build:
-#      dockerfile: '.docker/Dockerfile'
-#      context: .
-#      target: build
-#    env_file:
-#      - '.env'
-#    command: ['npm', 'run', 'db:migrate']
-#    depends_on:
-#      - db
+  migration:
+    build:
+      dockerfile: '.docker/Dockerfile'
+      context: .
+      target: build
+    env_file:
+      - '.env'
+    command: ['npm', 'run', 'db:migrate']
+    depends_on:
+      - db
 
 #  nginx:
 #    build:

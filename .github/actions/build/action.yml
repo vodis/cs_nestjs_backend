@@ -36,11 +36,7 @@ runs:
         host: ${{ inputs.remote_host }}
         username: ${{ inputs.remote_user }}
         password: ${{ inputs.ftp_password }}
-        script: |
-          echo "#################################################"
-          echo "Building image:"
-          echo "#################################################"
-          
+        script: |          
           cd ${{ inputs.ftp_path }}
           cp .env.example .env
           make docker-build

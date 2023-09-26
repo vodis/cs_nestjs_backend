@@ -25,5 +25,5 @@ runs:
         username: ${{ inputs.remote_user }}
         password: ${{ inputs.ftp_password }}
         script: |
-          cd ${{ secrets.FTP_PATH }}
+          cd ${{ inputs.ftp_path }}
           make docker-db-migrate

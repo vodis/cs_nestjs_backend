@@ -26,5 +26,6 @@ runs:
         password: ${{ inputs.ftp_password }}
         script: |
           cd ${{ inputs.ftp_path }}
-          echo "List of scripts: ${{ npm run }}"
+          echo "List of scripts: "
+          npm run
           make docker-db-migrate

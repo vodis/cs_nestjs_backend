@@ -25,7 +25,7 @@ runs:
         username: ${{ inputs.remote_user }}
         password: ${{ inputs.ftp_password }}
         script: |
+          export NVM_DIR=~/.nvm
+          source ~/.nvm/nvm.sh 
           cd ${{ inputs.ftp_path }}
-          echo "List of scripts: "
-          npm run
           make docker-db-migrate

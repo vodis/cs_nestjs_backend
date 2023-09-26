@@ -50,14 +50,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-#      - name: Migrate ${{ matrix.service_name }} from ${{ matrix.environment }} to remote
-#        uses: ./.github/actions/copy-to
-#        with:
-#          remote_user: ${{ secrets.REMOTE_USER }}
-#          remote_host: ${{ secrets.REMOTE_HOST }}
-#          remote_key: ${{ secrets.REMOTE_KEY }}
-#          ftp_password: ${{ secrets.FTP_PASSWORD }}
-#          ftp_path: ${{ secrets.FTP_PATH }}
+      - name: Migrate ${{ matrix.service_name }} from ${{ matrix.environment }} to remote
+        uses: ./.github/actions/copy-to
+        with:
+          remote_user: ${{ secrets.REMOTE_USER }}
+          remote_host: ${{ secrets.REMOTE_HOST }}
+          remote_key: ${{ secrets.REMOTE_KEY }}
+          ftp_password: ${{ secrets.FTP_PASSWORD }}
+          ftp_path: ${{ secrets.FTP_PATH }}
 
       - name: Cleanup and build images on remote
         uses: ./.github/actions/build

@@ -29,7 +29,7 @@ runs:
   steps:
     - name: Build, tag and ${{ inputs.service_name }} image
       uses: appleboy/ssh-action@master
-      script: |
+      command: |
           echo "#################################################"
           echo "Building image:"
           echo "#################################################"

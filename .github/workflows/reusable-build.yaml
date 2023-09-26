@@ -59,7 +59,7 @@ jobs:
 #          ftp_password: ${{ secrets.FTP_PASSWORD }}
 #          ftp_path: ${{ secrets.FTP_PATH }}
 
-      - name: Building images on remote
+      - name: Cleanup and build images on remote
         uses: ./.github/actions/build
         with:
           service_name: ${{ matrix.service_name }}

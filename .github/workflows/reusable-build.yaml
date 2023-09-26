@@ -84,7 +84,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Installing ${{ matrix.service_name }} DB migrations
-        uses: appleboy/ssh-action@master
+        uses: ./.github/actions/deploy-db-migrations
         with:
           remote_user: ${{ secrets.REMOTE_USER }}
           remote_host: ${{ secrets.REMOTE_HOST }}

@@ -6,12 +6,12 @@ networks:
 
 services:
   db:
-    image: postgres:latest
+    image: ${DB_CLIENT}
     container_name: db_cs
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      DB_POSTGRES: ${DB_POSTGRES}
+      DB_POSTGRES: ${DB_NAME}
     ports:
       - '5434:5432'
     volumes:

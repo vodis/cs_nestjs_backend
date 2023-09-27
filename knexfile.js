@@ -1,3 +1,3 @@
-import configuration from './config/configuration';
+import configuration from './secrets';
 
-export default configuration().database;
+export default configuration.database;

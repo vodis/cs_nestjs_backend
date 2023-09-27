@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       DB_POSTGRES: ${DB_NAME}
     ports:
-      - '5434:5432'
+      - ${DB_PORT}:5432
     volumes:
       - cs-volume:/var/lib/postgresql/data/
     networks:

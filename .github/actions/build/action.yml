@@ -44,7 +44,6 @@ runs:
           docker image rmi $(docker image ls | grep ${{  inputs.image_name }} | awk '{print $3}') -f
           
           cd ${{ inputs.ftp_path }}
-          cp .env.example .env
           
           make docker-build
           

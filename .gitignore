@@ -89,3 +89,6 @@ typings/
 .vscode
 
 assets/translations-merge-helper/
+
+# Internal
+secrets.*

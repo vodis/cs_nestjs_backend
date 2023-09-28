@@ -2,8 +2,8 @@
 dist/
 
 # Migrations
-/migrations/*.js
-/seeds/*.js
+#/migrations/*.js
+#/seeds/*.js
 
 # Logs
 logs

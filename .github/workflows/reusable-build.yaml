@@ -71,3 +71,22 @@ jobs:
           ftp_path: ${{ secrets.FTP_PATH }}
           ftp_password: ${{ secrets.FTP_PASSWORD }}
 
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service_name: [ "${{ inputs.service_name }}" ]
+        environment: [ "${{ inputs.environment }}" ]
+        node-version: [ 18.x ]
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Installing ${{ matrix.service_name }} DB migrations
+        uses: ./.github/actions/deploy-db-migrations
+        with:
+          remote_user: ${{ secrets.REMOTE_USER }}
+          remote_host: ${{ secrets.REMOTE_HOST }}
+          ftp_path: ${{ secrets.FTP_PATH }}
+          ftp_password: ${{ secrets.FTP_PASSWORD }}

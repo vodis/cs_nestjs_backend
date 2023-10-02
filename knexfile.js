@@ -2,7 +2,7 @@ module.exports = {
   development: {
     client: process.env.KNEX_DB_CLIENT,
     connection: {
-      host: process.env.DB_HOST,
+      host: process.env.HOST_IP_ADDRESS,
       port: parseInt(process.env.DB_PORT, 10) || 5432,
       database: process.env.DB_NAME,
       user: process.env.DB_USER,

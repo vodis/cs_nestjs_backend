@@ -13,11 +13,5 @@ export default () => ({
       min: 2,
       max: 20,
     },
-    migrations: {
-      tableName: process.env.DB_MIGRATIONS_TN,
-    },
-    seeds: {
-      directory: process.env.DB_SEED_PATH,
-    },
   },
 });

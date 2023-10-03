@@ -8,11 +8,10 @@ module.exports = {
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
     },
+    debug: true,
     pool: {
-      min: 2, // Minimum number of connections
-      max: 5, // Maximum number of connections (adjust as needed)
-      idleTimeoutMillis: 30000, // How long a connection can remain idle before being closed (in milliseconds)
-      acquireTimeoutMillis: 30000, // How long to wait for a connection to be acquired before timing out (in milliseconds)
+      min: 2,
+      max: 20,
     },
     migrations: {
       directory: process.env.DB_MIGRATIONS_TN,

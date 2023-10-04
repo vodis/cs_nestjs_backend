@@ -3,7 +3,7 @@ FROM nginx:latest AS base
 RUN rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/
 
-FROM node:16-alpine as base
+FROM node:14.18.2-alpine3.13 as base
 
 WORKDIR "/code"
 COPY . .

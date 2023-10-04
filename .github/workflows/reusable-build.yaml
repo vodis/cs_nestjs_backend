@@ -77,7 +77,7 @@ jobs:
       matrix:
         service_name: [ "${{ inputs.service_name }}" ]
         environment: [ "${{ inputs.environment }}" ]
-        node-version: [ 18.x ]
+        node-version: [ 14.x ]
     needs: build
     steps:
       - name: Checkout

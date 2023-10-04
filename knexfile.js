@@ -12,6 +12,13 @@ module.exports = {
     pool: {
       min: 2,
       max: 20,
+      acquireTimeoutMillis: 60000,
+      createTimeoutMillis: 30000,
+      destroyTimeoutMillis: 5000,
+      idleTimeoutMillis: 60000,
+      reapIntervalMillis: 1000,
+      createRetryIntervalMillis: 200,
+      propagateCreateError: false,
     },
     migrations: {
       directory: process.env.DB_MIGRATIONS_TN,

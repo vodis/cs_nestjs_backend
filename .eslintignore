@@ -7,3 +7,9 @@ build
 public
 tests
 .env
+
+**/config/*.js
+**/db/*.ts
+**/migrations/*.js
+**/seeders/*.js
+**/models/*.js

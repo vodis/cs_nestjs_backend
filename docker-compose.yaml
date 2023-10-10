@@ -1,29 +1,18 @@
 version: '3.9'
 
-networks:
-  cs-network:
-    external: true
-
 services:
   db:
     image: ${DB_CLIENT}
-    container_name: db_cs
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
-    expose:
-      - ${DB_PORT}
     ports:
       - ${DB_PORT}:5432
     volumes:
-      - cs-volume:/var/lib/postgresql/data/
-    networks:
-      - cs-network
+      - 'pg-db:/var/lib/postgres'
 
   app:
-    image: server_app
-    container_name: app_cs
     build:
       dockerfile: '.docker/Dockerfile'
       context: .
@@ -36,13 +25,8 @@ services:
       - './package-lock.json:/code/package-lock.json'
     ports:
       - '3001:3001'
-    environment:
-      - SERVER_PORT=3001
-      - POSTGRES_CONNECTOR=postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME}
     depends_on:
       - db
-    networks:
-      - cs-network
 
   migration:
     build:
@@ -54,9 +38,6 @@ services:
     command: ['npm', 'run', 'database:migrate']
     depends_on:
       - db
-    networks:
-      - cs-network
 
 volumes:
-  cs-volume:
-  nginx.conf: # Define the named volume details
+  pg-db:

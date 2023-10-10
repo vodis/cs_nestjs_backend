@@ -14,5 +14,12 @@ export const config = {
             autoJsonMap: false,
         },
         seederStorage: 'sequelize',
+        pool: {
+            max: 50,
+            min: 0,
+            idle: 10000,
+            acquire: 30000,
+            evict: 5000,
+        },
     },
 };

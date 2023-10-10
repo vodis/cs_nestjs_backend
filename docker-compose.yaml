@@ -1,8 +1,13 @@
 version: '3.9'
 
+networks:
+  cs-network:
+    external: true
+
 services:
   db:
     image: ${DB_CLIENT}
+    container_name: db_cs
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -10,7 +15,9 @@ services:
     ports:
       - ${DB_PORT}:5432
     volumes:
-      - 'pg-db:/var/lib/postgres'
+      - pg-db:/var/lib/postgres
+    networks:
+      - cs-network
 
   app:
     build:
@@ -27,6 +34,8 @@ services:
       - '3001:3001'
     depends_on:
       - db
+    networks:
+      - cs-network
 
   migration:
     build:
@@ -35,9 +44,11 @@ services:
       target: build
     env_file:
       - '.env'
-    command: ['npm', 'run', 'database:migrate']
+    command: ['npm', 'run', 'db:migrate']
     depends_on:
       - db
+    networks:
+      - cs-network
 
 volumes:
   pg-db:

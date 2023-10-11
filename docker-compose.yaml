@@ -2,7 +2,6 @@ version: '3.9'
 
 networks:
   cs-network:
-    external: true
 
 services:
   db:
@@ -15,7 +14,7 @@ services:
     ports:
       - ${DB_PORT}:5432
     volumes:
-      - pg-db:/var/lib/postgres
+      - pg-db:/var/lib/postgres/data
     networks:
       - cs-network
 

@@ -2,6 +2,7 @@ version: '3.9'
 
 networks:
   cs-network:
+    driver: bridge
 
 services:
   db:
@@ -31,19 +32,6 @@ services:
       - './package-lock.json:/code/package-lock.json'
     ports:
       - '3001:3001'
-    depends_on:
-      - db
-    networks:
-      - cs-network
-
-  migration:
-    build:
-      dockerfile: '.docker/Dockerfile'
-      context: .
-      target: build
-    env_file:
-      - '.env'
-    command: ['npm', 'run', 'db:migrate']
     depends_on:
       - db
     networks:

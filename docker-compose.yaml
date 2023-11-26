@@ -1,0 +1,41 @@
+version: '3.9'
+
+networks:
+  cs-network:
+    driver: bridge
+
+services:
+  db:
+    image: ${DB_CLIENT}
+    container_name: db_cs
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - ${DB_PORT}:5432
+    volumes:
+      - pg-db:/var/lib/postgres/data
+    networks:
+      - cs-network
+
+  app:
+    build:
+      dockerfile: '.docker/Dockerfile'
+      context: .
+      target: develop
+    env_file:
+      - '.env'
+    volumes:
+      - './src:/code/src'
+      - './package.json:/code/package.json'
+      - './package-lock.json:/code/package-lock.json'
+    ports:
+      - ${SERVER_PORT}:${SERVER_PORT}
+    depends_on:
+      - db
+    networks:
+      - cs-network
+
+volumes:
+  pg-db:

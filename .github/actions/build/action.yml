@@ -1,0 +1,51 @@
+name: "Build and push image"
+description: "Builds and pushes an image to a registry"
+
+inputs:
+  service_name:
+    description: "Service to build e.g. dataset"
+    required: true
+  image_name:
+    description: "Image registry repo e.g. my_image_repo"
+    required: true
+  image_tag:
+    description: "Name of image tag (usually build number or commit hash)"
+    required: true
+  registry_url:
+    description: "References to DockerHub registry"
+    required: true
+  remote_host:
+    description: "Remote host connector"
+    required: true
+  remote_user:
+    description: "SSH private key"
+    required: true
+  ftp_password:
+    description: "Password to ftp client"
+    required: true
+  ftp_path:
+    description: "Path to ftp repository"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Build, tag and ${{ inputs.service_name }} image
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ inputs.remote_host }}
+        username: ${{ inputs.remote_user }}
+        password: ${{ inputs.ftp_password }}
+        script: |
+          echo "#################################################"
+          echo "IMAGE_NAME: ${{ inputs.image_name }}"
+          echo "IMAGE_TAG: ${{ inputs.image_tag }}"
+          echo "#################################################"
+          docker image rmi $(docker image ls | grep ${{  inputs.image_name }} | awk '{print $3}') -f
+          
+          cd ${{ inputs.ftp_path }}
+          
+          make docker-build
+          
+          docker tag $(docker image ls | grep app | awk '{print $1}') ${{ inputs.image_name }}:${{ inputs.image_tag }}
+          docker image ls

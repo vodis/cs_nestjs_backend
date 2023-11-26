@@ -1,0 +1,15 @@
+src/vendor/*
+src/alib/*
+node_modules
+dist
+build
+.circleci
+public
+tests
+.env
+
+**/config/*.js
+**/db/*.ts
+**/migrations/*.js
+**/seeders/*.js
+**/models/*.js

@@ -1,0 +1,72 @@
+name: Reusable - Build Backend
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: "Application name you want to deploy (dataset, run, project, etc.)"
+        required: false
+        type: string
+        default: ""
+      environment:
+        description: "Environment name you want to deploy to (dev, test, etc.)"
+        required: false
+        type: string
+        default: ""
+      registry_url:
+        description: "DockerHub registry name"
+        required: true
+        type: string
+      repo_name:
+        description: "DockerHub repository name"
+        required: true
+        type: string
+    secrets:
+      REMOTE_USER:
+        required: true
+      REMOTE_HOST:
+        required: true
+      REMOTE_KEY:
+        required: true
+      FTP_PASSWORD:
+        required: true
+      FTP_PATH:
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service_name: [ "${{ inputs.service_name }}" ]
+        environment: [ "${{ inputs.environment }}" ]
+        node-version: [18.x]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Migrate ${{ matrix.service_name }} from ${{ matrix.environment }} to remote
+        uses: ./.github/actions/copy-to
+        with:
+          remote_user: ${{ secrets.REMOTE_USER }}
+          remote_host: ${{ secrets.REMOTE_HOST }}
+          remote_key: ${{ secrets.REMOTE_KEY }}
+          ftp_password: ${{ secrets.FTP_PASSWORD }}
+          ftp_path: ${{ secrets.FTP_PATH }}
+
+      - name: Cleanup and build images on remote
+        uses: ./.github/actions/build
+        with:
+          service_name: ${{ matrix.service_name }}
+          image_name: ${{ inputs.repo_name }}
+          image_tag: ${{ github.run_number }}
+          registry_url: ${{ inputs.registry_url }}
+          remote_user: ${{ secrets.REMOTE_USER }}
+          remote_host: ${{ secrets.REMOTE_HOST }}
+          ftp_path: ${{ secrets.FTP_PATH }}
+          ftp_password: ${{ secrets.FTP_PASSWORD }}

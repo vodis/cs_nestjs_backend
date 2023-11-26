@@ -1,0 +1,29 @@
+name: Build DEV - Frontend
+
+on:
+  push:
+    branches:
+      - "develop"
+    paths-ignore:
+      - "README.md"
+
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-deploy:
+    uses: vodis/cs_nestjs_backend/.github/workflows/reusable-build.yaml@develop
+    with:
+      service_name: "cs_nestjs_backend"
+      environment: "develop"
+      registry_url: "vodis"
+      repo_name: "cs"
+    secrets:
+      REMOTE_USER: ${{ secrets.REMOTE_USER }}
+      REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+      REMOTE_KEY: ${{ secrets.REMOTE_KEY }}
+      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+      FTP_PATH: ${{ secrets.FTP_PATH }}

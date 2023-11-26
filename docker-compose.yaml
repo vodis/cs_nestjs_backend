@@ -31,7 +31,7 @@ services:
       - './package.json:/code/package.json'
       - './package-lock.json:/code/package-lock.json'
     ports:
-      - ${SERVER_PORT}:3000
+      - ${SERVER_PORT}:${SERVER_PORT}
     depends_on:
       - db
     networks:

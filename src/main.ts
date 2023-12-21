@@ -2,16 +2,16 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { RequestMethod, ValidationPipe, VersioningType } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const { SERVER_PORT: PORT = 3000, ALLOWED_ORIGIN: ORIGIN = '*.craftscript.com' } = process.env;
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
 
-    app.enableCors({
-        origin: [...ORIGIN.split(',')],
-        credentials: true,
-    });
+    // app.enableCors({
+    //     origin: [...ORIGIN.split(',')],
+    //     credentials: true,
+    // });
     app.setGlobalPrefix('/api', {
         exclude: [{ path: '/health', method: RequestMethod.GET }],
     });

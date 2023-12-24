@@ -32,7 +32,7 @@ export class TranslationsController {
         try {
             res.cookie('active-language', language, {
                 sameSite: 'lax',
-                // domain: this.configService.getOrThrow('COOKIES_DOMAIN'),
+                domain: this.configService.getOrThrow('COOKIES_DOMAIN'),
             });
             return await this.i18nService.getLanguage(language, system);
         } catch (e) {

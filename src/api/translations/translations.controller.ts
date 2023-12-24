@@ -27,7 +27,7 @@ export class TranslationsController {
     ): Promise<GetLanguageRequestsDto> {
         try {
             res.cookie('active-language', language, {
-                sameSite: true,
+                sameSite: 'lax',
             });
             return await this.i18nService.getLanguage(language, system);
         } catch (e) {

@@ -3,10 +3,14 @@ import { TranslationsService } from './translations.service';
 import { GetLanguageRequestsDto } from './dto/responses/get-language-requests.dto';
 import { ApiResponse, ApiParam } from '@nestjs/swagger';
 import { Request, Response } from 'express';
+import { ConfigService } from '@nestjs/config';
 
 @Controller({ version: '1', path: 'translations' })
 export class TranslationsController {
-    constructor(private readonly i18nService: TranslationsService) {}
+    constructor(
+        private configService: ConfigService,
+        private readonly i18nService: TranslationsService,
+    ) {}
 
     @Get('/:language')
     @ApiParam({
@@ -27,7 +31,7 @@ export class TranslationsController {
     ): Promise<GetLanguageRequestsDto> {
         try {
             res.cookie('active-language', language, {
-                sameSite: 'lax',
+                domain: this.configService.getOrThrow('COOKIES_DOMAIN'),
             });
             return await this.i18nService.getLanguage(language, system);
         } catch (e) {

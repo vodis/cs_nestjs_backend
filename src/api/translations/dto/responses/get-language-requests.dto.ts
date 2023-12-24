@@ -18,7 +18,7 @@ class LanguagesIndexer {
     [indexer: string]: LanguageDetails;
 }
 
-class translationsIndexer {
+class TranslationsIndexer {
     [indexer: string]: LanguageDetails;
 }
 
@@ -31,5 +31,5 @@ export class GetLanguageRequestsDto {
     @ApiProperty()
     @Expose()
     @Type()
-    translations: translationsIndexer;
+    translations: TranslationsIndexer;
 }

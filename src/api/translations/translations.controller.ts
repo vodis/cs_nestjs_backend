@@ -1,7 +1,8 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, Res } from '@nestjs/common';
 import { TranslationsService } from './translations.service';
 import { GetLanguageRequestsDto } from './dto/responses/get-language-requests.dto';
 import { ApiResponse, ApiParam } from '@nestjs/swagger';
+import { Request, Response } from 'express';
 
 @Controller({ version: '1', path: 'translations' })
 export class TranslationsController {
@@ -19,9 +20,16 @@ export class TranslationsController {
         type: GetLanguageRequestsDto,
     })
     async getLanguageRequests(
+        @Req() req: Request,
         @Param('language') language: string,
         @Query('system') system?: string,
+        @Res({ passthrough: true }) res?: Response,
     ): Promise<GetLanguageRequestsDto> {
-        return await this.i18nService.getLanguage(language, system);
+        try {
+            res.cookie('active-language', language);
+            return await this.i18nService.getLanguage(language, system);
+        } catch (e) {
+            throw e;
+        }
     }
 }

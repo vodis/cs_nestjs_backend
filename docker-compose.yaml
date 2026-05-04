@@ -15,7 +15,27 @@ services:
     ports:
       - ${DB_PORT}:5432
     volumes:
-      - pg-db:/var/lib/postgres/data
+      - pg-db:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cs-network
+
+  redis:
+    image: ${REDIS_IMAGE}
+    container_name: redis_cs
+    ports:
+      - ${REDIS_PORT}:6379
+    volumes:
+      - redis-db:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - cs-network
 
@@ -33,9 +53,13 @@ services:
     ports:
       - ${SERVER_PORT}:${SERVER_PORT}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - cs-network
 
 volumes:
   pg-db:
+  redis-db:

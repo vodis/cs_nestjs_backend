@@ -35,6 +35,10 @@ $ npm install
 ## Running the app
 
 ```bash
+# start local infra
+$ cp .env.example .env
+$ npm run infra:up
+
 # development
 $ npm run start
 
@@ -43,6 +47,21 @@ $ npm run start:dev
 
 # production mode
 $ npm run start:prod
+```
+
+## Local service ports
+
+- Gateway API: `http://localhost:5000`
+- i18n service: `http://localhost:5001`
+
+## Health check
+
+```bash
+# local
+$ curl http://localhost:5000/health
+
+# deployed gateway (craftscript domain standard)
+$ curl https://api.craftscript.com/health
 ```
 
 ## Test

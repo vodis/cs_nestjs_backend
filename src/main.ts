@@ -5,7 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const { SERVER_PORT: PORT = 3000, ALLOWED_ORIGIN: ORIGIN = '*.craftscript.com' } = process.env;
+const { SERVER_PORT: PORT = 5000, ALLOWED_ORIGIN: ORIGIN = '*.craftscript.com' } = process.env;
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
@@ -20,10 +20,7 @@ async function bootstrap() {
         exclude: [{ path: '/health', method: RequestMethod.GET }],
     });
 
-    const config = new DocumentBuilder()
-        .setTitle('CSS-API Web Api Service')
-        .setVersion('1.0')
-        .build();
+    const config = new DocumentBuilder().setTitle('CSS-API Web Api Service').setVersion('1.0').build();
     const swaggerUrl = '/swagger';
 
     const document = SwaggerModule.createDocument(app, config);

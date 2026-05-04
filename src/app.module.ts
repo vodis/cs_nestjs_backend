@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { HttpClientsModule } from '@http-clients/http-clients.module';
 import { ApiModule } from './api/api.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
     imports: [
@@ -10,6 +11,7 @@ import { ApiModule } from './api/api.module';
         }),
         HttpClientsModule,
         ApiModule,
+        HealthModule,
     ],
 })
 export class AppModule {}

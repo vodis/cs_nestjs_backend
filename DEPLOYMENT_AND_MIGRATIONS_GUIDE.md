@@ -11,6 +11,15 @@ Applies to:
 - `i18n` (`cs_i18n_service`)
 - future side services (`solver`, `spot`, workers)
 
+## Domain Convention
+
+- All externally reachable services must live under `craftscript.com` subdomains.
+- Recommended mapping:
+  - `api.craftscript.com` -> gateway
+  - `admin-api.craftscript.com` -> restricted admin APIs
+  - `i18n-api.craftscript.com` -> i18n service
+- Internal-only services (`core-finance`, `solver`, `spot`, workers, databases) must remain private and must not be published on public DNS.
+
 ## Core Decision (Recommended)
 
 - Use **one PostgreSQL cluster** initially.

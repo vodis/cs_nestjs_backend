@@ -42,6 +42,15 @@ Adopt a boundary-first model:
 
 This model optimizes long-term security, maintainability, and team velocity.
 
+## Service Domain Standard
+
+All service endpoints in this ecosystem must be hosted under the `craftscript.com` domain.
+
+- Public services use dedicated subdomains (for example: `api.craftscript.com`, `i18n-api.craftscript.com`).
+- Restricted services use protected subdomains (for example: `admin-api.craftscript.com`) with network and auth controls.
+- Internal-only services (`core-finance`, `solver`, `spot`, workers, databases) stay private and must not be exposed on public DNS.
+- Local development may use `localhost`, but production and staging contracts must use `*.craftscript.com` names.
+
 ## Product and Domain Focus
 
 - **Gateway responsibilities**

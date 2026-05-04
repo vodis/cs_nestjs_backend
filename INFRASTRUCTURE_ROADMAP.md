@@ -33,7 +33,7 @@ Related document:
 
 Use subdomain-based routing with strict separation by exposure level.
 
-Recommended initial DNS layout:
+Canonical DNS layout:
 
 - `api.craftscript.com` -> public gateway API
 - `admin-api.craftscript.com` -> restricted admin API (IP allowlist/VPN)
@@ -195,7 +195,7 @@ services:
     image: your-org/gateway:${IMAGE_TAG}
     restart: always
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -20,6 +20,14 @@ The goal is predictable delivery, financial safety, and long-term maintainabilit
 
 This is the default long-term architecture and should guide all new implementation decisions.
 
+## Service URL and Domain Policy
+
+- `craftscript.com` is the canonical parent domain for all deployed services.
+- Public gateway endpoints must be served from `api.craftscript.com` (or versioned paths under it).
+- Public/supporting services must use dedicated `*.craftscript.com` subdomains (for example `i18n-api.craftscript.com`).
+- Private/internal services must stay on private networking and are never exposed directly as public DNS records.
+- Local development may use `localhost`, but inter-service contracts and deployment docs must reference `*.craftscript.com`.
+
 ## Target Technical Baseline
 
 - Node.js: current LTS (upgrade in lockstep with NestJS support matrix)

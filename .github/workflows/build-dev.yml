@@ -1,29 +1,109 @@
-name: Build DEV - Frontend
+name: Build Development - CI
 
 on:
   push:
     branches:
       - "develop"
-    paths-ignore:
-      - "README.md"
-
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - "develop"
 
 permissions:
-  id-token: write
   contents: read
 
 jobs:
-  build-and-deploy:
-    uses: vodis/cs_nestjs_backend/.github/workflows/reusable-build.yaml@develop
-    with:
-      service_name: "cs_nestjs_backend"
-      environment: "develop"
-      registry_url: "vodis"
-      repo_name: "cs"
-    secrets:
-      REMOTE_USER: ${{ secrets.REMOTE_USER }}
-      REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
-      REMOTE_KEY: ${{ secrets.REMOTE_KEY }}
-      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-      FTP_PATH: ${{ secrets.FTP_PATH }}
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build check
+        run: npm run build
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Format check
+        run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
+
+      - name: Lint check
+        run: npm run lint
+
+      - name: Detect migration changes
+        id: migration_changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+          fi
+
+          if [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            echo "has_changes=false" >> "${GITHUB_OUTPUT}"
+            echo "No reliable base SHA found. Skipping migration safety diff check."
+            exit 0
+          fi
+
+          CHANGED_FILES="$(git diff --name-only "${BASE_SHA}" "${{ github.sha }}" -- 'db/migrations/**' || true)"
+
+          if [ -z "${CHANGED_FILES}" ]; then
+            echo "has_changes=false" >> "${GITHUB_OUTPUT}"
+            echo "No migration changes detected."
+          else
+            echo "has_changes=true" >> "${GITHUB_OUTPUT}"
+            echo "changed_files<<EOF" >> "${GITHUB_OUTPUT}"
+            echo "${CHANGED_FILES}" >> "${GITHUB_OUTPUT}"
+            echo "EOF" >> "${GITHUB_OUTPUT}"
+            echo "Migration changes detected:"
+            echo "${CHANGED_FILES}"
+          fi
+
+      - name: Migration safety check
+        if: steps.migration_changes.outputs.has_changes == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXIT_CODE=0
+          while IFS= read -r file; do
+            [ -z "${file}" ] && continue
+            if [ ! -f "${file}" ]; then
+              continue
+            fi
+
+            if ! grep -Eq "up\\s*\\(" "${file}"; then
+              echo "Missing up() in migration: ${file}"
+              EXIT_CODE=1
+            fi
+
+            if ! grep -Eq "down\\s*\\(" "${file}"; then
+              echo "Missing down() in migration: ${file}"
+              EXIT_CODE=1
+            fi
+          done <<< "${{ steps.migration_changes.outputs.changed_files }}"
+
+          if [ "${EXIT_CODE}" -ne 0 ]; then
+            echo "Migration safety check failed."
+            exit 1
+          fi
+
+          echo "Migration safety check passed."
+
+      - name: Unit tests
+        run: npm run test -- --ci --runInBand

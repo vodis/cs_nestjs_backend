@@ -20,10 +20,7 @@ async function bootstrap() {
         exclude: [{ path: '/health', method: RequestMethod.GET }],
     });
 
-    const config = new DocumentBuilder()
-        .setTitle('CSS-API Web Api Service')
-        .setVersion('1.0')
-        .build();
+    const config = new DocumentBuilder().setTitle('CSS-API Web Api Service').setVersion('1.0').build();
     const swaggerUrl = '/swagger';
 
     const document = SwaggerModule.createDocument(app, config);

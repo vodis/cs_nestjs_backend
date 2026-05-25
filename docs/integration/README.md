@@ -4,7 +4,7 @@ Guides for integrating **this repository** with **cs_orchestrator**.
 
 | Document | Role |
 |----------|------|
-| [ORCHESTRATOR_INTEGRATION.md](../ORCHESTRATOR_INTEGRATION.md) | App-repo checklist, CI tags, metadata fields, operator handoff |
+| [ORCHESTRATOR_INTEGRATION.md](../ORCHESTRATOR_INTEGRATION.md) | Boundaries (Dockerfile + CI → GHCR; orchestrator deploys by digest), branch flow, metadata |
 | [../phases/nestjs-backend-onboarding.md](../phases/nestjs-backend-onboarding.md) | Cutover status vs platform catalog |
 
 **Normative contracts** (maintained in the orchestrator repo):

@@ -2,6 +2,23 @@
 
 This repo publishes deploy artifacts; **cs_orchestrator** is the only production deploy authority.
 
+## System boundaries
+
+```text
+App repo:     Dockerfile + build-prod / build-staging  →  GHCR image + metadata
+Orchestrator: validate metadata, pull digest, run container on host
+```
+
+| Layer | This repository | `cs_orchestrator` |
+|-------|-----------------|-------------------|
+| Image build | Root [`Dockerfile`](../../Dockerfile) (CI target `production`) | Does not build |
+| CI publish | [`build-staging.yml`](../.github/workflows/build-staging.yml), [`build-prod.yml`](../.github/workflows/build-prod.yml) | Watches GHCR tags / ingests metadata |
+| Deploy | **No** SSH or `docker compose` on VPS | Blue/green container + Nginx on host |
+
+Legacy [`.docker/Dockerfile`](../.docker/Dockerfile) is for local `docker-compose` only; orchestrator uses the root `Dockerfile`. Same pattern as [`cs_nextjs_client`](https://github.com/vodis/cs_nextjs_client) (root `Dockerfile` + workflows).
+
+Full app-team guide: [`cs_orchestrator/docs/integration/SERVICE_INTEGRATION_GUIDE.md`](https://github.com/vodis/cs_orchestrator/blob/main/docs/integration/SERVICE_INTEGRATION_GUIDE.md).
+
 ## Branch flow
 
 ```text

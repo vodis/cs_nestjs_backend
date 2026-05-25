@@ -1,0 +1,40 @@
+# Staging — orchestrator intake via GHCR (no SSH deploy).
+#
+# On push / workflow_dispatch to `staging`:
+#   1. ghcr.io/vodis/cs_nestjs_backend:staging
+#   2. ghcr.io/vodis/cs_nestjs_backend:staging-metadata
+#
+# PRs targeting `staging` run lint/tests only (no image push).
+# Branch flow: develop → staging → master
+
+name: Build Staging - Backend
+
+on:
+  pull_request:
+    branches:
+      - staging
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  staging:
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      environment: staging
+      service_name: staging-nestjs-backend
+      git_branch: staging
+      image_tag: staging
+      metadata_tag: staging-metadata
+      artifact_prefix: staging-deploy-bundle
+      concurrency_group: staging-orchestrator

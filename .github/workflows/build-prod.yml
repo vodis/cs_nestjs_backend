@@ -1,0 +1,40 @@
+# Production — orchestrator intake via GHCR (cs_orchestrator polls tags; no SSH deploy).
+#
+# On push / workflow_dispatch to `master`:
+#   1. ghcr.io/vodis/cs_nestjs_backend:production
+#   2. ghcr.io/vodis/cs_nestjs_backend:production-metadata
+#
+# PRs targeting `master` run lint/tests only (no image push).
+# Branch flow: develop → staging → master
+
+name: Build Production - Backend
+
+on:
+    pull_request:
+        branches:
+            - master
+    push:
+        branches:
+            - master
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    packages: write
+    id-token: write
+
+jobs:
+    prod:
+        permissions:
+            contents: read
+            packages: write
+            id-token: write
+        uses: ./.github/workflows/reusable-build.yml
+        with:
+            environment: production
+            service_name: nestjs-backend
+            git_branch: master
+            image_tag: production
+            metadata_tag: production-metadata
+            artifact_prefix: prod-deploy-bundle
+            concurrency_group: prod-orchestrator

@@ -10,6 +10,10 @@ describe('Health (e2e)', () => {
         const moduleFixture: TestingModule = await Test.createTestingModule({
             imports: [AppModule],
         }).compile();
+    beforeEach(async () => {
+        const moduleFixture: TestingModule = await Test.createTestingModule({
+            imports: [AppModule],
+        }).compile();
 
         app = moduleFixture.createNestApplication();
         app.setGlobalPrefix('/api', {

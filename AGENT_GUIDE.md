@@ -11,6 +11,7 @@ Use **this file** as the single anchor when starting a new task or onboarding an
 | [INFRASTRUCTURE_ROADMAP.md](./INFRASTRUCTURE_ROADMAP.md) | Ubuntu/Docker → observability → Kubernetes decision; `craftscript.com` DNS/TLS; resilience and ops maturity. |
 | [DEPLOYMENT_AND_MIGRATIONS_GUIDE.md](./DEPLOYMENT_AND_MIGRATIONS_GUIDE.md) | Multi-service deploys, who runs DB migrations, schema-per-service, rollout order, env/secrets, when *not* to use a global migration repo. |
 | [README.md](./README.md) | Project bootstrap: install, run, test scripts (starter-level; extend as the app grows). |
+| [docs/ORCHESTRATOR_INTEGRATION.md](./docs/ORCHESTRATOR_INTEGRATION.md) | GHCR production CI, `deploy-metadata.json`, health endpoint, cutover checklist. |
 
 **Related repositories (not in this tree)**
 

@@ -1,0 +1,270 @@
+# Reusable GHCR build + deploy-metadata publish (orchestrator intake; no host deploy).
+#
+# Callers: build-prod.yml
+
+name: Reusable build
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Metadata environment field (e.g. production)
+        required: true
+        type: string
+      service_name:
+        description: Orchestrator service id (e.g. nestjs-backend)
+        required: true
+        type: string
+      git_branch:
+        description: Git branch recorded in deploy-metadata
+        required: true
+        type: string
+      image_tag:
+        description: GHCR mutable app image tag (e.g. production)
+        required: true
+        type: string
+      metadata_tag:
+        description: GHCR ORAS metadata tag (e.g. production-metadata)
+        required: true
+        type: string
+      artifact_prefix:
+        description: GitHub Actions artifact name prefix
+        required: true
+        type: string
+      concurrency_group:
+        description: Concurrency group prefix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: ${{ inputs.concurrency_group }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOCKER_CLIENT_TIMEOUT: '600'
+  COMPOSE_HTTP_TIMEOUT: '600'
+  GHCR_IMAGE: ghcr.io/vodis/cs_nestjs_backend
+  METADATA_MEDIA_TYPE: application/vnd.craftscript.deploy-metadata.v1+json
+  ORAS_VERSION: 1.2.2
+
+jobs:
+  pr-checks:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.0
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.0
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test -- --ci --runInBand
+
+  bundle:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.0
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.0
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test -- --ci --runInBand
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.5.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push app image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.18.0
+        with:
+          context: .
+          file: Dockerfile
+          target: production
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.GHCR_IMAGE }}:${{ inputs.image_tag }}
+            ${{ env.GHCR_IMAGE }}:${{ github.sha }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          provenance: true
+          sbom: true
+
+      - name: Verify build digest output
+        run: |
+          set -euo pipefail
+          if [ -z "${{ steps.build.outputs.digest }}" ]; then
+            echo "::error::steps.build.outputs.digest is empty"
+            exit 1
+          fi
+          echo "build.digest=${{ steps.build.outputs.digest }}"
+
+      - name: Wait for image manifest on GHCR
+        env:
+          IMAGE_REF: ${{ env.GHCR_IMAGE }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "$IMAGE_DIGEST"
+          REF="${IMAGE_REF}@${IMAGE_DIGEST}"
+          for i in $(seq 1 12); do
+            if docker buildx imagetools inspect "$REF" >/dev/null 2>&1; then
+              echo "Manifest available (attempt ${i}/12)"
+              exit 0
+            fi
+            echo "::warning::Manifest not ready (attempt ${i}/12); sleeping 15s..."
+            sleep 15
+          done
+          echo "::error::Timed out waiting for GHCR manifest"
+          exit 1
+
+      - name: Pull image for local scanners
+        env:
+          IMAGE_REF: ${{ env.GHCR_IMAGE }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          REF="${IMAGE_REF}@${IMAGE_DIGEST}"
+          echo "SCAN_IMAGE_REF=${REF}" >> "$GITHUB_ENV"
+          for i in $(seq 1 12); do
+            if docker pull "$REF"; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Timed out pulling image from GHCR"
+          exit 1
+
+      - name: Install Syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: SBOM (CycloneDX JSON)
+        run: |
+          mkdir -p artifacts
+          syft "${SCAN_IMAGE_REF}" -o cyclonedx-json=artifacts/sbom.cdx.json
+
+      - name: Trivy vulnerability scan (JSON)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.SCAN_IMAGE_REF }}
+          format: json
+          output: artifacts/scan-summary.json
+          exit-code: '0'
+
+      - name: Write deploy-metadata.json
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          RUN_ID: ${{ github.run_id }}
+          SERVICE_NAME: ${{ inputs.service_name }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          GIT_BRANCH: ${{ inputs.git_branch }}
+        run: |
+          mkdir -p artifacts
+          python3 <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+
+          server = "https://github.com"
+          gh_repo = "vodis/cs_nestjs_backend"
+          run_id = os.environ["RUN_ID"]
+          digest = os.environ["DIGEST"]
+
+          meta = {
+              "schemaVersion": "1",
+              "service": os.environ["SERVICE_NAME"],
+              "environment": os.environ["ENVIRONMENT"],
+              "git": {
+                  "repository": "https://github.com/vodis/cs_nestjs_backend.git",
+                  "commitSha": os.environ["SHA"],
+                  "branch": os.environ["GIT_BRANCH"],
+                  "actor": os.environ["ACTOR"],
+              },
+              "image": {
+                  "registry": "ghcr.io",
+                  "repository": "vodis/cs_nestjs_backend",
+                  "digest": digest,
+              },
+              "security": {
+                  "sbomUri": f"{server}/{gh_repo}/actions/runs/{run_id}#artifacts-sbom.cdx.json",
+                  "scanSummaryUri": f"{server}/{gh_repo}/actions/runs/{run_id}#artifacts-scan-summary.json",
+                  "signatureRef": f"ghcr.io/vodis/cs_nestjs_backend@{digest}",
+              },
+              "build": {
+                  "pipelineId": run_id,
+                  "pipelineUrl": f"{server}/{gh_repo}/actions/runs/{run_id}",
+                  "builtAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              },
+          }
+          with open("artifacts/deploy-metadata.json", "w", encoding="utf-8") as f:
+              json.dump(meta, f, indent=2)
+              f.write("\n")
+          PY
+
+      - name: Install ORAS
+        run: |
+          curl -sSfL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin oras
+
+      - name: Push deploy-metadata to GHCR (OCI artifact)
+        run: |
+          oras push "${GHCR_IMAGE}:${{ inputs.metadata_tag }}" \
+            "artifacts/deploy-metadata.json:${METADATA_MEDIA_TYPE}"
+
+      - name: Upload deploy bundle (debug / audit)
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: ${{ inputs.artifact_prefix }}-${{ github.sha }}
+          path: artifacts/

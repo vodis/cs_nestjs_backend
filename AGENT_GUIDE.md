@@ -111,6 +111,17 @@ No framework details should leak into `domain`.
   - retry only idempotent operations
   - circuit breaker for downstream failures
 
+### 4.1) Exchange/Spot Trading Asset Ownership
+
+This backend/BFF owns the canonical supported asset/token registry for exchange, spot trading, solver, and balance workflows.
+
+- Own token identifiers, decimals, chain/network mappings, tradable/depositable/withdrawable flags, risk/safety flags, and public asset metadata exposed to clients.
+- Execute private RPC balance reads through server-side adapters only; clients and wallet MFEs must not call private RPC directly.
+- Validate every quote, balance, order, and execution request against the server-side registry and reject unsupported assets by default.
+- Expose versioned read/execution contracts such as `/api/v1/assets`, `/api/v1/balances`, `/api/v1/markets`, `/api/v1/swaps/quote`, and `/api/v1/spot/orders`.
+- Treat client-side or community token lists as non-authoritative inputs. Ingest, validate, and allowlist them server-side before they affect balances, quotes, orders, or execution.
+- Keep `cs_ng_app_client` responsible for rendering/mapping backend-provided assets, and keep `cs_mfe-wallets` responsible only for wallet connectivity, account/chain events, safety/verification gates, and signing prepared payloads.
+
 ### 5) Multi-Network Rules
 
 - Introduce chain/network abstraction (`NetworkAdapter` contract).

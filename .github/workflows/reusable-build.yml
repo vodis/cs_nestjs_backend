@@ -59,6 +59,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.0
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.0
@@ -91,6 +93,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.0
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.0
@@ -201,6 +205,40 @@ jobs:
           output: artifacts/scan-summary.json
           exit-code: '0'
 
+      - name: Detect database release risk
+        id: database_risk
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "risk=migration" >> "${GITHUB_OUTPUT}"
+            echo "Non-push build has no reliable before SHA; using database.risk=migration."
+            exit 0
+          fi
+
+          BASE_SHA="${{ github.event.before }}"
+          if [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            echo "risk=migration" >> "${GITHUB_OUTPUT}"
+            echo "No reliable before SHA; using database.risk=migration."
+            exit 0
+          fi
+
+          CHANGED_FILES="$(git diff --name-only "${BASE_SHA}" "${{ github.sha }}" -- \
+            'migrations/**' \
+            'db/migrations/**' \
+            'src/**/migration/**' \
+            'src/**/migrations/**' || true)"
+
+          if [ -z "${CHANGED_FILES}" ]; then
+            echo "risk=none" >> "${GITHUB_OUTPUT}"
+            echo "No database migration changes detected; using database.risk=none."
+          else
+            echo "risk=migration" >> "${GITHUB_OUTPUT}"
+            echo "Database migration changes detected; using database.risk=migration:"
+            echo "${CHANGED_FILES}"
+          fi
+
       - name: Write deploy-metadata.json
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -210,6 +248,7 @@ jobs:
           SERVICE_NAME: ${{ inputs.service_name }}
           ENVIRONMENT: ${{ inputs.environment }}
           GIT_BRANCH: ${{ inputs.git_branch }}
+          DB_RISK: ${{ steps.database_risk.outputs.risk }}
         run: |
           mkdir -p artifacts
           python3 <<'PY'
@@ -246,6 +285,9 @@ jobs:
                   "pipelineId": run_id,
                   "pipelineUrl": f"{server}/{gh_repo}/actions/runs/{run_id}",
                   "builtAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              },
+              "database": {
+                  "risk": os.environ["DB_RISK"],
               },
           }
           with open("artifacts/deploy-metadata.json", "w", encoding="utf-8") as f:

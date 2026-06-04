@@ -7,6 +7,10 @@ describe('Health (e2e)', () => {
     let app: INestApplication;
 
     beforeEach(async () => {
+        process.env.CS_I18N_SERVICE_URL = process.env.CS_I18N_SERVICE_URL || 'http://127.0.0.1:1';
+        process.env.DEFAULT_LANGUAGE = process.env.DEFAULT_LANGUAGE || 'en';
+        process.env.COOKIES_DOMAIN = process.env.COOKIES_DOMAIN || 'localhost';
+
         const moduleFixture: TestingModule = await Test.createTestingModule({
             imports: [AppModule],
         }).compile();
@@ -19,7 +23,7 @@ describe('Health (e2e)', () => {
     });
 
     afterEach(async () => {
-        await app.close();
+        await app?.close();
     });
 
     it('/health (GET)', () => {

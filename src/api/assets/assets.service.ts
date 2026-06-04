@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { OneClickApiHttpClient } from '../../http-clients/one-click-api/one-click-api.http-client';
 import { OneClickTokenDto } from '../../http-clients/one-click-api/dto/one-click-token.dto';
 import { AssetDto, GetAssetsResponseDto } from './dto/get-assets-response.dto';
+import { getSeedAssetMetadata } from './assets-metadata.seed';
 
 type AssetsCacheEntry = {
     data: AssetDto[];
@@ -66,10 +67,14 @@ export class AssetsService {
     }
 
     private toAsset(token: OneClickTokenDto): AssetDto {
+        const metadata = getSeedAssetMetadata(token.assetId, token.symbol);
+
         return {
             assetId: token.assetId,
             defuseAssetId: token.assetId,
             symbol: token.symbol,
+            name: metadata?.name,
+            icon: metadata?.icon || undefined,
             decimals: token.decimals,
             blockchain: token.blockchain,
             contractAddress: token.contractAddress,

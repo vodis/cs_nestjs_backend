@@ -10,6 +10,12 @@ export class AssetDto {
     @ApiProperty()
     symbol: string;
 
+    @ApiPropertyOptional()
+    name?: string;
+
+    @ApiPropertyOptional()
+    icon?: string;
+
     @ApiProperty()
     decimals: number;
 

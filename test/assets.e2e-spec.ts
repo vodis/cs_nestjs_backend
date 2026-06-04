@@ -47,6 +47,8 @@ describe('Assets (e2e)', () => {
                             assetId: 'nep141:wrap.near',
                             defuseAssetId: 'nep141:wrap.near',
                             symbol: 'wNEAR',
+                            name: 'NEAR Protocol',
+                            icon: 'https://s2.coinmarketcap.com/static/img/coins/128x128/6535.png',
                             decimals: 24,
                             blockchain: 'near',
                             contractAddress: 'wrap.near',

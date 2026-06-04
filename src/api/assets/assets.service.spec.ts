@@ -38,6 +38,8 @@ describe('AssetsService', () => {
                     assetId: 'nep141:wrap.near',
                     defuseAssetId: 'nep141:wrap.near',
                     symbol: 'wNEAR',
+                    name: 'NEAR Protocol',
+                    icon: 'https://s2.coinmarketcap.com/static/img/coins/128x128/6535.png',
                     decimals: 24,
                     blockchain: 'near',
                     contractAddress: 'wrap.near',
@@ -102,5 +104,25 @@ describe('AssetsService', () => {
 
         expect(result.data).toHaveLength(1);
         expect(result.data[0].assetId).toBe(validToken.assetId);
+    });
+
+    it('enriches assets from the seeded frontend token metadata by symbol fallback', async () => {
+        const service = createService(
+            jest.fn().mockResolvedValue([
+                {
+                    assetId: 'nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near',
+                    decimals: 6,
+                    blockchain: 'eth',
+                    symbol: 'USDC',
+                },
+            ]),
+        );
+
+        const result = await service.getAssets();
+
+        expect(result.data[0]).toMatchObject({
+            name: 'USD Coin',
+            icon: 'https://s2.coinmarketcap.com/static/img/coins/128x128/3408.png',
+        });
     });
 });

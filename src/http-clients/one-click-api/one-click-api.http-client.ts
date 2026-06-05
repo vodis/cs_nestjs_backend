@@ -16,7 +16,6 @@ export type OneClickQuoteRequest = {
     refundTo: string;
     refundType: 'ORIGIN_CHAIN' | 'INTENTS';
     deadline: string;
-    isConfidential?: boolean;
 };
 
 @Injectable()

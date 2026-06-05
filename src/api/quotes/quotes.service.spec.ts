@@ -41,7 +41,6 @@ describe('QuotesService', () => {
             refundTo: '0x380B8Fa1eBFe8a652Dbb55c5a7DEc2C683BbD8b9',
             refundType: 'ORIGIN_CHAIN',
             deadline: '2026-06-05T22:16:58.776Z',
-            isConfidential: false,
         });
     });
 });

@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { AxiosError } from 'axios';
 import {
     OneClickApiHttpClient,
     OneClickQuoteRequest,
@@ -10,7 +11,17 @@ export class QuotesService {
     constructor(private readonly oneClickApiHttpClient: OneClickApiHttpClient) {}
 
     async createOneClickQuote(dto: CreateOneClickQuoteRequestDto): Promise<unknown> {
-        return this.oneClickApiHttpClient.createQuote(this.toOneClickQuoteRequest(dto));
+        try {
+            return await this.oneClickApiHttpClient.createQuote(this.toOneClickQuoteRequest(dto));
+        } catch (error) {
+            const axiosError = error as AxiosError;
+
+            if (axiosError.response?.status && axiosError.response.status >= 400 && axiosError.response.status < 500) {
+                throw new BadRequestException(axiosError.response.data);
+            }
+
+            throw error;
+        }
     }
 
     private toOneClickQuoteRequest(dto: CreateOneClickQuoteRequestDto): OneClickQuoteRequest {
@@ -30,7 +41,6 @@ export class QuotesService {
             refundTo: dto.userAddress,
             refundType: userAddressType,
             deadline: dto.deadline,
-            isConfidential: dto.isConfidential,
         };
     }
 }

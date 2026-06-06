@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsBoolean, IsIn, IsISO8601, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
+const deadlineExample = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
 export class CreateOneClickQuoteRequestDto {
     @ApiProperty({ example: true })
     @IsBoolean()
@@ -23,11 +25,11 @@ export class CreateOneClickQuoteRequestDto {
     @IsString()
     amount: string;
 
-    @ApiProperty({ example: '2026-06-05T22:16:58.776Z' })
+    @ApiProperty({ example: deadlineExample })
     @IsISO8601()
     deadline: string;
 
-    @ApiProperty({ example: '0x380B8Fa1eBFe8a652Dbb55c5a7DEc2C683BbD8b9' })
+    @ApiProperty({ example: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9' })
     @IsString()
     userAddress: string;
 

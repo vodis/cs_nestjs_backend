@@ -18,7 +18,11 @@ const intervalMs: Record<HyperliquidCandleInterval, number> = {
 export class MarketsService {
     constructor(private readonly hyperliquidApiHttpClient: HyperliquidApiHttpClient) {}
 
-    async getCandles(symbol: string, interval: HyperliquidCandleInterval, limit: number): Promise<GetMarketCandlesResponseDto> {
+    async getCandles(
+        symbol: string,
+        interval: HyperliquidCandleInterval,
+        limit: number,
+    ): Promise<GetMarketCandlesResponseDto> {
         const normalizedSymbol = symbol.trim().toUpperCase();
         const endTime = Date.now();
         const startTime = endTime - limit * intervalMs[interval];

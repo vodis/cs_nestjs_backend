@@ -1,5 +1,6 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, Sse } from '@nestjs/common';
 import { ApiResponse } from '@nestjs/swagger';
+import { Observable } from 'rxjs';
 import { GetMarketCandlesQueryDto } from './dto/get-market-candles-query.dto';
 import { GetMarketCandlesResponseDto } from './dto/get-market-candles-response.dto';
 import { MarketsService } from './markets.service';
@@ -19,5 +20,13 @@ export class MarketsController {
         @Query() query: GetMarketCandlesQueryDto,
     ): Promise<GetMarketCandlesResponseDto> {
         return this.marketsService.getCandles(symbol, query.interval || '1h', query.limit || 120);
+    }
+
+    @Sse(':symbol/candles/stream')
+    streamCandles(
+        @Param('symbol') symbol: string,
+        @Query() query: GetMarketCandlesQueryDto,
+    ): Observable<{ data: GetMarketCandlesResponseDto }> {
+        return this.marketsService.streamCandles(symbol, query.interval || '1m');
     }
 }

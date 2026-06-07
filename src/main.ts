@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { RequestMethod, ValidationPipe, VersioningType } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { WsAdapter } from '@nestjs/platform-ws';
 import * as cookieParser from 'cookie-parser';
 import { config as loadEnv } from 'dotenv';
 
@@ -48,6 +49,7 @@ function isAllowedOrigin(origin?: string): boolean {
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
+    app.useWebSocketAdapter(new WsAdapter(app));
 
     app.enableCors({
         origin: isProduction

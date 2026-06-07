@@ -5,6 +5,8 @@ import { GetMarketCandlesQueryDto } from './dto/get-market-candles-query.dto';
 import { GetMarketCandlesResponseDto } from './dto/get-market-candles-response.dto';
 import { GetMarketComparisonQueryDto } from './dto/get-market-comparison-query.dto';
 import { GetMarketComparisonResponseDto } from './dto/get-market-comparison-response.dto';
+import { GetMarketChartQueryDto } from './dto/get-market-chart-query.dto';
+import { GetMarketChartResponseDto } from './dto/get-market-chart-response.dto';
 import { MarketsService } from './markets.service';
 
 @Controller({ version: '1', path: 'markets' })
@@ -32,6 +34,19 @@ export class MarketsController {
         @Query() query: GetMarketCandlesQueryDto,
     ): Promise<GetMarketCandlesResponseDto> {
         return this.marketsService.getCandles(symbol, query.interval || '1h', query.limit || 120);
+    }
+
+    @Get(':symbol/chart')
+    @ApiResponse({
+        status: 200,
+        description: 'Get chart bootstrap payload with candles and 24h market context',
+        type: GetMarketChartResponseDto,
+    })
+    async getChart(
+        @Param('symbol') symbol: string,
+        @Query() query: GetMarketChartQueryDto,
+    ): Promise<GetMarketChartResponseDto> {
+        return this.marketsService.getChart(symbol, query.windowSecs);
     }
 
     @Sse(':symbol/candles/stream')

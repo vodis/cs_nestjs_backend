@@ -1,11 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { Observable } from 'rxjs';
+import { AssetsService } from '../assets/assets.service';
+import { AssetDto } from '../assets/dto/get-assets-response.dto';
+import { CoinGeckoMarketHistoryClient } from './coingecko-market-history.client';
+import { MarketComparisonTimeframe } from './dto/get-market-comparison-query.dto';
+import {
+    GetMarketComparisonResponseDto,
+    MarketComparisonPointDto,
+    MarketComparisonTokenDto,
+} from './dto/get-market-comparison-response.dto';
 import {
     HyperliquidApiHttpClient,
     HyperliquidCandleInterval,
 } from '../../http-clients/hyperliquid-api/hyperliquid-api.http-client';
 import { GetMarketCandlesResponseDto, MarketCandleDto } from './dto/get-market-candles-response.dto';
 import { HyperliquidCandleDto } from '../../http-clients/hyperliquid-api/dto/hyperliquid-candle.dto';
+import { MarketHistoryPoint } from './market-history.types';
 
 const intervalMs: Record<HyperliquidCandleInterval, number> = {
     '1m': 60_000,
@@ -38,7 +48,11 @@ interface HyperliquidWsMessage {
 
 @Injectable()
 export class MarketsService {
-    constructor(private readonly hyperliquidApiHttpClient: HyperliquidApiHttpClient) {}
+    constructor(
+        private readonly hyperliquidApiHttpClient: HyperliquidApiHttpClient,
+        private readonly coinGeckoMarketHistoryClient: CoinGeckoMarketHistoryClient,
+        private readonly assetsService: AssetsService,
+    ) {}
 
     async getCandles(
         symbol: string,
@@ -54,6 +68,42 @@ export class MarketsService {
             symbol: normalizedSymbol,
             interval,
             candles: candles.map(normalizeCandle),
+        };
+    }
+
+    async getComparison(
+        base: string,
+        quote: string,
+        timeframe: MarketComparisonTimeframe,
+    ): Promise<GetMarketComparisonResponseDto> {
+        const baseSymbol = normalizeSymbol(base);
+        const quoteSymbol = normalizeSymbol(quote);
+        const assets = await this.getAssetsBySymbol();
+        const [baseHistory, quoteHistory] = await Promise.all([
+            this.getComparisonHistory(baseSymbol, timeframe),
+            this.getComparisonHistory(quoteSymbol, timeframe),
+        ]);
+        const baseSeries = normalizeHistory(baseHistory);
+        const quoteSeries = normalizeHistory(quoteHistory);
+        const baseChange = calculateChangePercent(baseHistory);
+        const quoteChange = calculateChangePercent(quoteHistory);
+        const baseToken = toComparisonToken(baseSymbol, assets.get(baseSymbol), baseChange, baseSeries.length > 0);
+        const quoteToken = toComparisonToken(quoteSymbol, assets.get(quoteSymbol), quoteChange, quoteSeries.length > 0);
+        const availableCount = [baseToken, quoteToken].filter((token) => token.historyAvailable).length;
+
+        return {
+            base: baseSymbol,
+            quote: quoteSymbol,
+            timeframe,
+            status: availableCount === 2 ? 'ready' : availableCount === 1 ? 'partial' : 'unavailable',
+            baseToken,
+            quoteToken,
+            relativeStrength:
+                baseChange === undefined || quoteChange === undefined ? undefined : round(baseChange - quoteChange, 2),
+            series: [
+                { symbol: baseSymbol, points: baseSeries },
+                { symbol: quoteSymbol, points: quoteSeries },
+            ],
         };
     }
 
@@ -123,6 +173,52 @@ export class MarketsService {
             };
         });
     }
+
+    private async getComparisonHistory(
+        symbol: string,
+        timeframe: MarketComparisonTimeframe,
+    ): Promise<MarketHistoryPoint[]> {
+        const hyperliquid = await this.tryHyperliquidHistory(symbol, timeframe);
+        if (hyperliquid.length > 0) {
+            return hyperliquid;
+        }
+
+        try {
+            return await this.coinGeckoMarketHistoryClient.getHistory(symbol, timeframe);
+        } catch {
+            return [];
+        }
+    }
+
+    private async tryHyperliquidHistory(
+        symbol: string,
+        timeframe: MarketComparisonTimeframe,
+    ): Promise<MarketHistoryPoint[]> {
+        try {
+            const interval = hyperliquidIntervalForTimeframe(timeframe);
+            const endTime = Date.now();
+            const startTime = endTime - hyperliquidLookbackMs(timeframe);
+            const candles = await this.hyperliquidApiHttpClient.getCandles(symbol, interval, startTime, endTime);
+
+            return candles
+                .map((candle) => ({
+                    time: Math.floor(candle.t / 1000),
+                    price: Number(candle.c),
+                }))
+                .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.price) && point.price > 0);
+        } catch {
+            return [];
+        }
+    }
+
+    private async getAssetsBySymbol(): Promise<Map<string, AssetDto>> {
+        try {
+            const response = await this.assetsService.getAssets();
+            return new Map(response.data.map((asset) => [normalizeSymbol(asset.symbol), asset]));
+        } catch {
+            return new Map();
+        }
+    }
 }
 
 function parseHyperliquidWsMessage(data: unknown): HyperliquidWsMessage | undefined {
@@ -146,4 +242,80 @@ function normalizeCandle(item: HyperliquidCandleDto): MarketCandleDto {
         close: Number(item.c),
         volume: Number(item.v),
     };
+}
+
+function normalizeSymbol(symbol: string): string {
+    return symbol.trim().toUpperCase();
+}
+
+function hyperliquidIntervalForTimeframe(timeframe: MarketComparisonTimeframe): HyperliquidCandleInterval {
+    if (timeframe === '1H') {
+        return '1m';
+    }
+
+    if (timeframe === '1D') {
+        return '15m';
+    }
+
+    return '1h';
+}
+
+function hyperliquidLookbackMs(timeframe: MarketComparisonTimeframe): number {
+    if (timeframe === '1H') {
+        return 60 * 60_000;
+    }
+
+    if (timeframe === '1D') {
+        return 24 * 60 * 60_000;
+    }
+
+    return 7 * 24 * 60 * 60_000;
+}
+
+function normalizeHistory(history: MarketHistoryPoint[]): MarketComparisonPointDto[] {
+    const first = history.find((point) => point.price > 0);
+    if (!first) {
+        return [];
+    }
+
+    return history.map((point) => ({
+        time: point.time,
+        value: round((point.price / first.price) * 100, 4),
+    }));
+}
+
+function calculateChangePercent(history: MarketHistoryPoint[]): number | undefined {
+    const first = history.find((point) => point.price > 0);
+    const last = history[history.length - 1];
+    if (!first || !last || last.price <= 0) {
+        return undefined;
+    }
+
+    return round(((last.price - first.price) / first.price) * 100, 2);
+}
+
+function toComparisonToken(
+    symbol: string,
+    asset: AssetDto | undefined,
+    changePercent: number | undefined,
+    historyAvailable: boolean,
+): MarketComparisonTokenDto {
+    return {
+        symbol,
+        name: asset?.name,
+        icon: asset?.icon,
+        currentPrice: toNumber(asset?.price),
+        changePercent,
+        historyAvailable,
+    };
+}
+
+function toNumber(value: string | number | undefined): number | undefined {
+    const parsed = typeof value === 'number' ? value : value === undefined ? Number.NaN : Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function round(value: number, precision: number): number {
+    const factor = 10 ** precision;
+    return Math.round(value * factor) / factor;
 }

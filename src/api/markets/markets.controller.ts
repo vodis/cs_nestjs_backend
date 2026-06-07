@@ -3,11 +3,23 @@ import { ApiResponse } from '@nestjs/swagger';
 import { Observable } from 'rxjs';
 import { GetMarketCandlesQueryDto } from './dto/get-market-candles-query.dto';
 import { GetMarketCandlesResponseDto } from './dto/get-market-candles-response.dto';
+import { GetMarketComparisonQueryDto } from './dto/get-market-comparison-query.dto';
+import { GetMarketComparisonResponseDto } from './dto/get-market-comparison-response.dto';
 import { MarketsService } from './markets.service';
 
 @Controller({ version: '1', path: 'markets' })
 export class MarketsController {
     constructor(private readonly marketsService: MarketsService) {}
+
+    @Get('comparison')
+    @ApiResponse({
+        status: 200,
+        description: 'Get normalized comparative market performance for a swap pair',
+        type: GetMarketComparisonResponseDto,
+    })
+    async getComparison(@Query() query: GetMarketComparisonQueryDto): Promise<GetMarketComparisonResponseDto> {
+        return this.marketsService.getComparison(query.base, query.quote, query.timeframe);
+    }
 
     @Get(':symbol/candles')
     @ApiResponse({

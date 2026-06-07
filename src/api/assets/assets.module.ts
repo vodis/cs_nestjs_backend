@@ -7,5 +7,6 @@ import { AssetsService } from './assets.service';
     imports: [OneClickApiModule],
     controllers: [AssetsController],
     providers: [AssetsService],
+    exports: [AssetsService],
 })
 export class AssetsModule {}

@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TranslationsModule } from './translations/translations.module';
+import { AssetsModule } from './assets/assets.module';
+import { QuotesModule } from './quotes/quotes.module';
+import { MarketsModule } from './markets/markets.module';
 
 @Module({
-    imports: [TranslationsModule],
+    imports: [TranslationsModule, AssetsModule, QuotesModule, MarketsModule],
 })
 export class ApiModule {}

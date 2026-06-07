@@ -45,6 +45,13 @@ Internal-only services should not be publicly routed:
 - `core-finance`, `solver`, `spot`, workers, and databases stay on private network only.
 - Access internal services through service-to-service networking, not public DNS.
 
+Exchange/spot trading data-plane ownership:
+
+- The gateway/BFF owns the canonical supported asset/token registry exposed to clients.
+- Private RPC balance reads stay server-side behind gateway or private service adapters; browsers and wallet MFEs must not call private RPC directly.
+- `cs_ng_app_client` renders backend-provided assets, while `cs_mfe-wallets` stays scoped to wallet connectivity, account/chain events, safety gates, and signing prepared payloads.
+- Community/public token lists may become inputs later, but backend validation and allowlisting must happen before they influence balances, quotes, orders, or execution.
+
 TLS and edge policy:
 
 - Enforce HTTPS for all public endpoints with automatic certificate renewal.

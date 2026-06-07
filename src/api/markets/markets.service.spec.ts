@@ -124,11 +124,7 @@ describe('MarketsService', () => {
         });
 
         const updates: unknown[] = [];
-        const subscription = new MarketsService(
-            hyperliquidApiHttpClient,
-            coinGeckoMarketHistoryClient,
-            assetsService,
-        )
+        const subscription = new MarketsService(hyperliquidApiHttpClient, coinGeckoMarketHistoryClient, assetsService)
             .streamCandles('near', '1m')
             .subscribe({
                 next: (event) => updates.push(event),

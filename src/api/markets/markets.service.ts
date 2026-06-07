@@ -79,12 +79,7 @@ export class MarketsService {
         const endTime = Date.now();
         const startTime = endTime - config.lookbackMs;
         const [candles, context] = await Promise.all([
-            this.hyperliquidApiHttpClient.getCandles(
-                normalizedSymbol,
-                config.interval,
-                startTime,
-                endTime,
-            ),
+            this.hyperliquidApiHttpClient.getCandles(normalizedSymbol, config.interval, startTime, endTime),
             this.getAssetContext(normalizedSymbol),
         ]);
         const normalizedCandles = candles.map(normalizeCandle);

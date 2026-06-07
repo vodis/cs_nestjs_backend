@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { HyperliquidCandleDto } from './dto/hyperliquid-candle.dto';
-import {
-    HyperliquidAssetContextDto,
-    HyperliquidMetaDto,
-} from './dto/hyperliquid-asset-context.dto';
+import { HyperliquidAssetContextDto, HyperliquidMetaDto } from './dto/hyperliquid-asset-context.dto';
 
 export type HyperliquidCandleInterval = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
 

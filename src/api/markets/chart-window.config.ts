@@ -1,7 +1,4 @@
-import {
-    CHART_WINDOW_SECS,
-    ChartWindowSecs,
-} from './dto/get-market-chart-query.dto';
+import { CHART_WINDOW_SECS, ChartWindowSecs } from './dto/get-market-chart-query.dto';
 import { HyperliquidCandleInterval } from '../../http-clients/hyperliquid-api/hyperliquid-api.http-client';
 
 export interface ChartWindowConfig {

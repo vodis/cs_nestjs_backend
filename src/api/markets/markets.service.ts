@@ -14,8 +14,10 @@ import {
     HyperliquidCandleInterval,
 } from '../../http-clients/hyperliquid-api/hyperliquid-api.http-client';
 import { GetMarketCandlesResponseDto, MarketCandleDto } from './dto/get-market-candles-response.dto';
+import { GetMarketChartResponseDto } from './dto/get-market-chart-response.dto';
 import { HyperliquidCandleDto } from '../../http-clients/hyperliquid-api/dto/hyperliquid-candle.dto';
 import { MarketHistoryPoint } from './market-history.types';
+import { MarketAssetContext, resolveChartWindow } from './chart-window.config';
 
 const intervalMs: Record<HyperliquidCandleInterval, number> = {
     '1m': 60_000,
@@ -69,6 +71,55 @@ export class MarketsService {
             interval,
             candles: candles.map(normalizeCandle),
         };
+    }
+
+    async getChart(symbol: string, windowSecs?: number): Promise<GetMarketChartResponseDto> {
+        const normalizedSymbol = symbol.trim().toUpperCase();
+        const config = resolveChartWindow(windowSecs);
+        const endTime = Date.now();
+        const startTime = endTime - config.lookbackMs;
+        const [candles, context] = await Promise.all([
+            this.hyperliquidApiHttpClient.getCandles(normalizedSymbol, config.interval, startTime, endTime),
+            this.getAssetContext(normalizedSymbol),
+        ]);
+        const normalizedCandles = candles.map(normalizeCandle);
+        const lastClose = normalizedCandles[normalizedCandles.length - 1]?.close;
+        const currentPrice = context.markPx ?? lastClose;
+
+        return {
+            symbol: normalizedSymbol,
+            interval: config.interval,
+            windowSecs: config.windowSecs,
+            candles: normalizedCandles,
+            prevDayPx: context.prevDayPx,
+            currentPrice,
+            change24hPercent: this.calculateChange24hPercent(currentPrice, context.prevDayPx),
+        };
+    }
+
+    async getAssetContext(symbol: string): Promise<MarketAssetContext> {
+        const normalizedSymbol = symbol.trim().toUpperCase();
+        const [meta, assetCtxs] = await this.hyperliquidApiHttpClient.getMetaAndAssetCtxs();
+        const index = meta.universe.findIndex((asset) => asset.name === normalizedSymbol);
+
+        if (index < 0) {
+            throw new Error(`Unknown Hyperliquid market: ${normalizedSymbol}`);
+        }
+
+        const context = assetCtxs[index];
+
+        return {
+            prevDayPx: toNumber(context?.prevDayPx),
+            markPx: toNumber(context?.markPx ?? context?.midPx),
+        };
+    }
+
+    calculateChange24hPercent(currentPrice?: number, prevDayPx?: number): number | undefined {
+        if (!Number.isFinite(currentPrice) || !currentPrice || !prevDayPx || prevDayPx <= 0) {
+            return undefined;
+        }
+
+        return round(((currentPrice - prevDayPx) / prevDayPx) * 100, 2);
     }
 
     async getComparison(

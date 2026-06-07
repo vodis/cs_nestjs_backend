@@ -3,6 +3,7 @@ import { HttpModule, HttpService } from '@nestjs/axios';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { onHttpModuleInit } from '../http-clients.interceptor';
 import { HyperliquidApiHttpClient } from './hyperliquid-api.http-client';
+import { HyperliquidWsService } from './hyperliquid-ws.service';
 
 @Module({
     imports: [
@@ -18,8 +19,8 @@ import { HyperliquidApiHttpClient } from './hyperliquid-api.http-client';
             inject: [ConfigService],
         }),
     ],
-    providers: [HyperliquidApiHttpClient],
-    exports: [HyperliquidApiHttpClient],
+    providers: [HyperliquidApiHttpClient, HyperliquidWsService],
+    exports: [HyperliquidApiHttpClient, HyperliquidWsService],
 })
 export class HyperliquidApiModule implements OnModuleInit {
     constructor(private readonly httpService: HttpService) {}

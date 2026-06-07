@@ -2,10 +2,19 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { RequestMethod, ValidationPipe, VersioningType } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { WsAdapter } from '@nestjs/platform-ws';
 import * as cookieParser from 'cookie-parser';
+import { config as loadEnv } from 'dotenv';
+
+loadEnv();
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const { SERVER_PORT: PORT = 3000, ALLOWED_ORIGIN: ORIGIN = '*.craftscript.com' } = process.env;
+const {
+    SERVER_PORT: PORT = 3000,
+    ALLOWED_ORIGIN: ORIGIN = '*.craftscript.com',
+    NODE_ENV = 'development',
+} = process.env;
+const isProduction = NODE_ENV === 'production';
 const allowedOrigins = ORIGIN.split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
@@ -40,11 +49,14 @@ function isAllowedOrigin(origin?: string): boolean {
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
+    app.useWebSocketAdapter(new WsAdapter(app));
 
     app.enableCors({
-        origin: (origin, callback) => {
-            callback(null, isAllowedOrigin(origin));
-        },
+        origin: isProduction
+            ? (origin, callback) => {
+                  callback(null, isAllowedOrigin(origin));
+              }
+            : true,
         credentials: true,
     });
     app.enableVersioning({ type: VersioningType.URI });
@@ -68,6 +80,6 @@ async function bootstrap() {
     // );
 
     await app.listen(PORT);
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT} (NODE_ENV=${NODE_ENV}, CORS=${isProduction ? 'restricted' : 'open'})`);
 }
 bootstrap();

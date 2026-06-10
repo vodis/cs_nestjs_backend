@@ -8,10 +8,20 @@ import { config as loadEnv } from 'dotenv';
 
 loadEnv();
 
+const LOCAL_DEV_ORIGINS = [
+    'http://localhost:4200',
+    'http://127.0.0.1:4200',
+    'http://localhost:5002',
+    'http://127.0.0.1:5002',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+];
+const DEFAULT_ALLOWED_ORIGINS = ['*.craftscript.com', ...LOCAL_DEV_ORIGINS].join(',');
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const {
     SERVER_PORT: PORT = 3000,
-    ALLOWED_ORIGIN: ORIGIN = '*.craftscript.com',
+    ALLOWED_ORIGIN: ORIGIN = DEFAULT_ALLOWED_ORIGINS,
     NODE_ENV = 'development',
 } = process.env;
 const isProduction = NODE_ENV === 'production';

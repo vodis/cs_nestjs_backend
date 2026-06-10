@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { RequestMethod, ValidationPipe, VersioningType } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { WsAdapter } from '@nestjs/platform-ws';
+import { WsAdapter } from '@nestjs/platform-ws';
 import * as cookieParser from 'cookie-parser';
 import { config as loadEnv } from 'dotenv';
 
@@ -60,8 +61,14 @@ function isAllowedOrigin(origin?: string): boolean {
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
     app.useWebSocketAdapter(new WsAdapter(app));
+    app.useWebSocketAdapter(new WsAdapter(app));
 
     app.enableCors({
+        origin: isProduction
+            ? (origin, callback) => {
+                  callback(null, isAllowedOrigin(origin));
+              }
+            : true,
         origin: isProduction
             ? (origin, callback) => {
                   callback(null, isAllowedOrigin(origin));
@@ -90,6 +97,7 @@ async function bootstrap() {
     // );
 
     await app.listen(PORT);
+    console.log(`Server running on port ${PORT} (NODE_ENV=${NODE_ENV}, CORS=${isProduction ? 'restricted' : 'open'})`);
     console.log(`Server running on port ${PORT} (NODE_ENV=${NODE_ENV}, CORS=${isProduction ? 'restricted' : 'open'})`);
 }
 bootstrap();

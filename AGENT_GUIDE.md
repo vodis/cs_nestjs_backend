@@ -22,6 +22,12 @@ Use **this file** as the single anchor when starting a new task or onboarding an
 
 > Follow [AGENT_GUIDE.md](./AGENT_GUIDE.md) and linked docs. Scope: \<feature\>. Respect open-source vs private boundaries and financial-safety rules.
 
+## Branch and PR Workflow
+
+- Start each code-change task from fresh `develop`: checkout `develop`, pull `origin/develop`, then create a new task branch.
+- Open PRs from the task branch to the repository default release branch (`main` or `master`, whichever the repo uses).
+- Do not open PRs from `develop` directly to `main`/`master`; keep PRs small and free of unrelated `develop` history.
+
 ## Mission
 
 This repository is the first-class backend gateway for our financial platform with crypto exchange capabilities:

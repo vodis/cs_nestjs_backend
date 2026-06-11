@@ -1,13 +1,16 @@
 import { SwapValidationError } from '../errors/swap-validation.error';
 import { SwapQuoteCommand } from '../models/swap-quote-request';
+import { SwapAddressValidationService } from './swap-address-validation.service';
 
 export type SwapValidationPolicy = {
     maxSlippageBps: number;
 };
 
 export class SwapRequestValidationService {
+    private readonly addressValidationService: SwapAddressValidationService = new SwapAddressValidationService();
+
     validate(command: SwapQuoteCommand, policy: SwapValidationPolicy): void {
-        this.assertSignerId(command);
+        this.addressValidationService.assertSignerAddress(command.authMethod, command.signerId);
         this.assertDeadline(command.deadline);
         this.assertSlippageTolerance(command.slippageTolerance, policy.maxSlippageBps);
 
@@ -22,20 +25,6 @@ export class SwapRequestValidationService {
     assertAssetSupported(assetId: string, asset?: { assetId: string }): void {
         if (!asset) {
             throw new SwapValidationError('UNSUPPORTED_ASSET', 'Asset is not in the server allowlist', { assetId });
-        }
-    }
-
-    private assertSignerId(command: SwapQuoteCommand): void {
-        if (command.authMethod === 'evm' && !/^0x[a-fA-F0-9]{40}$/.test(command.signerId)) {
-            throw new SwapValidationError('INVALID_SIGNER', 'EVM signerId must be a 0x-prefixed 20-byte address', {
-                signerId: command.signerId,
-            });
-        }
-
-        if (command.authMethod === 'near' && !/^[a-z0-9._-]+\.(?:near|testnet|tg)$/i.test(command.signerId)) {
-            throw new SwapValidationError('INVALID_SIGNER', 'NEAR signerId must be a valid NEAR account id', {
-                signerId: command.signerId,
-            });
         }
     }
 

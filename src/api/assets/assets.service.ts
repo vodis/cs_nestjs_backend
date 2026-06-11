@@ -20,6 +20,11 @@ export class AssetsService {
         private readonly oneClickApiHttpClient: OneClickApiHttpClient,
     ) {}
 
+    async findAssetById(assetId: string): Promise<AssetDto | undefined> {
+        const { data } = await this.getAssets();
+        return data.find((asset) => asset.assetId === assetId || asset.defuseAssetId === assetId);
+    }
+
     async getAssets(): Promise<GetAssetsResponseDto> {
         const now = new Date();
 

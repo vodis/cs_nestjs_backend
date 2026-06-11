@@ -9,8 +9,7 @@ import { SolverRelayApiHttpClient } from './solver-relay-api.http-client';
         HttpModule.registerAsync({
             imports: [ConfigModule],
             useFactory: async (configService: ConfigService) => ({
-                baseURL:
-                    configService.get('SOLVER_RELAY_API_URL') || 'https://solver-relay-v2.chaindefuser.com',
+                baseURL: configService.get('SOLVER_RELAY_API_URL') || 'https://solver-relay-v2.chaindefuser.com',
                 headers: {
                     'Content-Type': 'application/json',
                 },

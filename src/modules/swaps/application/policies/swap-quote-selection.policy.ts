@@ -9,9 +9,13 @@ export class SwapQuoteSelectionPolicy {
         );
 
         if (!executableQuotes.length) {
-            throw new SwapValidationError('INSUFFICIENT_LIQUIDITY', 'No executable solver quotes available for this swap', {
-                providerCount: quotes.length,
-            });
+            throw new SwapValidationError(
+                'INSUFFICIENT_LIQUIDITY',
+                'No executable solver quotes available for this swap',
+                {
+                    providerCount: quotes.length,
+                },
+            );
         }
 
         const sorted = [...executableQuotes].sort((left, right) => {

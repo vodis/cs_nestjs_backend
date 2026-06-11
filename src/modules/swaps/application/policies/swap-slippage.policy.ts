@@ -23,8 +23,7 @@ export class SwapSlippagePolicy {
             return;
         }
 
-        const expectedOut =
-            (amountIn * BigInt(Math.round((originPrice / destinationPrice) * 1_000_000))) / 1_000_000n;
+        const expectedOut = (amountIn * BigInt(Math.round((originPrice / destinationPrice) * 1_000_000))) / 1_000_000n;
         const minAcceptableOut = (expectedOut * BigInt(10_000 - slippageTolerance)) / 10_000n;
 
         if (amountOut < minAcceptableOut) {

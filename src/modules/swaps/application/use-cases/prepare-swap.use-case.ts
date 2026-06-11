@@ -58,9 +58,11 @@ export class PrepareSwapUseCase {
         );
 
         return settled
-            .filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<QuoteProviderPort['requestQuotes']>>> => {
-                return result.status === 'fulfilled';
-            })
+            .filter(
+                (result): result is PromiseFulfilledResult<Awaited<ReturnType<QuoteProviderPort['requestQuotes']>>> => {
+                    return result.status === 'fulfilled';
+                },
+            )
             .flatMap((result) => result.value);
     }
 

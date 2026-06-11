@@ -4,6 +4,7 @@ import { PrepareSwapUseCase } from './prepare-swap.use-case';
 import { AssetRegistryPort } from '../ports/asset-registry.port';
 import { QuoteProviderPort } from '../ports/quote-provider.port';
 import { SwapQuoteCommand } from '../../domain/models/swap-quote-request';
+import { SwapValidationError } from '../../domain/errors/swap-validation.error';
 
 describe('PrepareSwapUseCase', () => {
     const command: SwapQuoteCommand = {
@@ -125,5 +126,43 @@ describe('PrepareSwapUseCase', () => {
         ];
 
         await expect(createUseCase(providers).execute(command)).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+
+    it('rejects unsupported wallet auth methods before requesting provider quotes', async () => {
+        const provider = {
+            providerId: 'one-click',
+            requestQuotes: jest.fn(),
+        };
+
+        await expect(
+            createUseCase([provider]).execute({
+                ...command,
+                signerId: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+                authMethod: 'stellar' as 'near',
+            }),
+        ).rejects.toMatchObject({
+            code: 'UNSUPPORTED_AUTH_METHOD',
+        } satisfies Partial<SwapValidationError>);
+
+        expect(provider.requestQuotes).not.toHaveBeenCalled();
+    });
+
+    it('rejects signer addresses that do not match the selected auth method before provider quotes', async () => {
+        const provider = {
+            providerId: 'one-click',
+            requestQuotes: jest.fn(),
+        };
+
+        await expect(
+            createUseCase([provider]).execute({
+                ...command,
+                signerId: 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+                authMethod: 'near',
+            }),
+        ).rejects.toMatchObject({
+            code: 'INVALID_SIGNER',
+        } satisfies Partial<SwapValidationError>);
+
+        expect(provider.requestQuotes).not.toHaveBeenCalled();
     });
 });

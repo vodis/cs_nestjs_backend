@@ -3,8 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrivyTokenService } from './privy-token.service';
 
 function base64Url(value: unknown): string {
-    return Buffer.from(JSON.stringify(value))
-        .toString('base64url');
+    return Buffer.from(JSON.stringify(value)).toString('base64url');
 }
 
 function unsignedToken(overrides: Record<string, unknown> = {}): string {
@@ -55,9 +54,7 @@ describe('PrivyTokenService', () => {
             }),
         );
 
-        expect(() => service.verifyAccessToken(unsignedToken({ aud: 'other-app' }))).toThrow(
-            UnauthorizedException,
-        );
+        expect(() => service.verifyAccessToken(unsignedToken({ aud: 'other-app' }))).toThrow(UnauthorizedException);
     });
 
     it('requires a verification key outside explicit dev unsigned mode', () => {

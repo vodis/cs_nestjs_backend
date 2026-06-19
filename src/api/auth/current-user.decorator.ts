@@ -6,9 +6,7 @@ type AuthenticatedRequest = Request & {
     user?: AuthenticatedUser;
 };
 
-export const CurrentUser = createParamDecorator(
-    (_: unknown, ctx: ExecutionContext): AuthenticatedUser | undefined => {
-        const request = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
-        return request.user;
-    },
-);
+export const CurrentUser = createParamDecorator((_: unknown, ctx: ExecutionContext): AuthenticatedUser | undefined => {
+    const request = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
+    return request.user;
+});

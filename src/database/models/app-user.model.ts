@@ -1,12 +1,4 @@
-import {
-    Column,
-    CreatedAt,
-    DataType,
-    HasMany,
-    Model,
-    Table,
-    UpdatedAt,
-} from 'sequelize-typescript';
+import { Column, CreatedAt, DataType, HasMany, Model, Table, UpdatedAt } from 'sequelize-typescript';
 import { WalletLink } from './wallet-link.model';
 
 @Table({ tableName: 'app_users', underscored: true })

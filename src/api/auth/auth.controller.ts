@@ -41,10 +41,7 @@ export class AuthController {
     constructor(private readonly authService: PrivyAuthService) {}
 
     @Post('auth/privy/session')
-    async upsertPrivySession(
-        @Req() request: RequestWithCookies,
-        @Body() body: PrivySessionDto,
-    ) {
+    async upsertPrivySession(@Req() request: RequestWithCookies, @Body() body: PrivySessionDto) {
         const result = await this.authService.upsertSession(extractAccessToken(request), body);
         return {
             user: result.user,

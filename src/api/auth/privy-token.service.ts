@@ -66,12 +66,7 @@ export class PrivyTokenService {
         let isValid = false;
 
         if (header.alg === 'ES256') {
-            isValid = cryptoVerify(
-                'sha256',
-                signedPayload,
-                { key, dsaEncoding: 'ieee-p1363' },
-                signature,
-            );
+            isValid = cryptoVerify('sha256', signedPayload, { key, dsaEncoding: 'ieee-p1363' }, signature);
         } else if (header.alg === 'EdDSA') {
             isValid = cryptoVerify(null, signedPayload, key, signature);
         } else {

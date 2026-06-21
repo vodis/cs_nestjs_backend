@@ -4,11 +4,13 @@ import { AuthController } from './auth.controller';
 import { PrivyAuthGuard } from './privy-auth.guard';
 import { PrivyAuthService } from './privy-auth.service';
 import { PrivyTokenService } from './privy-token.service';
+import { PublicAuthConfigController } from './public-auth-config.controller';
+import { PublicAuthConfigService } from './public-auth-config.service';
 
 @Module({
     imports: [DatabaseModule],
-    controllers: [AuthController],
-    providers: [PrivyAuthGuard, PrivyAuthService, PrivyTokenService],
+    controllers: [AuthController, PublicAuthConfigController],
+    providers: [PrivyAuthGuard, PrivyAuthService, PrivyTokenService, PublicAuthConfigService],
     exports: [PrivyAuthGuard, PrivyAuthService],
 })
 export class AuthModule {}

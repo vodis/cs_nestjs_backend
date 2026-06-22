@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrivySessionDto } from './dto/privy-session.dto';
 import { CurrentUser } from './current-user.decorator';
@@ -53,6 +53,16 @@ export class AuthController {
     @UseGuards(PrivyAuthGuard)
     me(@CurrentUser() user: AuthenticatedUser) {
         return { user };
+    }
+
+    @Delete('me')
+    @UseGuards(PrivyAuthGuard)
+    async requestAccountDeletion(@CurrentUser() user: AuthenticatedUser) {
+        const result = await this.authService.requestAccountDeletion(user);
+        return {
+            status: 'pending_deletion',
+            deletionAvailableAt: result.deletionAvailableAt.toISOString(),
+        };
     }
 
     @Get('wallets')

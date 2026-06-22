@@ -1,6 +1,8 @@
 import { Column, CreatedAt, DataType, HasMany, Model, Table, UpdatedAt } from 'sequelize-typescript';
 import { WalletLink } from './wallet-link.model';
 
+export type AppUserStatus = 'active' | 'pending_deletion' | 'deleted';
+
 @Table({ tableName: 'app_users', underscored: true })
 export class AppUser extends Model<AppUser> {
     @Column({
@@ -20,7 +22,16 @@ export class AppUser extends Model<AppUser> {
     declare authMethod?: string | null;
 
     @Column({ type: DataType.STRING, allowNull: false, defaultValue: 'active' })
-    declare status: 'active' | 'disabled';
+    declare status: AppUserStatus;
+
+    @Column({ type: DataType.DATE, allowNull: true })
+    declare deletedAt?: Date | null;
+
+    @Column({ type: DataType.DATE, allowNull: true })
+    declare deletionRequestedAt?: Date | null;
+
+    @Column({ type: DataType.DATE, allowNull: true })
+    declare deletionAvailableAt?: Date | null;
 
     @CreatedAt
     declare createdAt: Date;

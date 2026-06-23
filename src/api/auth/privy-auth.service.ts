@@ -1,4 +1,11 @@
-import { ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+    BadRequestException,
+    ForbiddenException,
+    Inject,
+    Injectable,
+    NotFoundException,
+    UnauthorizedException,
+} from '@nestjs/common';
 import { Op, Transaction } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { AuthAuditEvent } from '../../database/models/auth-audit-event.model';
@@ -6,6 +13,7 @@ import { AppUser } from '../../database/models/app-user.model';
 import { WalletLink } from '../../database/models/wallet-link.model';
 import { SEQUELIZE } from '../../database/database.tokens';
 import { PrivySessionDto, PrivyWalletDto } from './dto/privy-session.dto';
+import { BindWalletDto, WalletSource, WalletType } from './dto/wallet-binding.dto';
 import { PrivyTokenService } from './privy-token.service';
 import type { AuthenticatedUser } from './types';
 
@@ -101,7 +109,7 @@ export class PrivyAuthService {
             );
 
             const wallets = await WalletLink.findAll({
-                where: { userId: user.id },
+                where: { userId: user.id, status: 'active' },
                 order: [
                     ['isPrimary', 'DESC'],
                     ['createdAt', 'ASC'],
@@ -124,11 +132,112 @@ export class PrivyAuthService {
 
     async walletsForUser(userId: string): Promise<WalletLink[]> {
         return WalletLink.findAll({
-            where: { userId },
+            where: { userId, status: 'active' },
             order: [
                 ['isPrimary', 'DESC'],
                 ['createdAt', 'ASC'],
             ],
+        });
+    }
+
+    async bindWallet(user: AuthenticatedUser, body: BindWalletDto): Promise<WalletLink> {
+        return this.sequelize.transaction(async (transaction) => {
+            await this.assertActiveUser(user.id, transaction);
+
+            const wallet = await this.upsertWallet(user.id, body, transaction);
+            await AuthAuditEvent.create(
+                {
+                    userId: user.id,
+                    privyUserId: user.privyUserId,
+                    eventType: 'wallet.bind',
+                    metadata: {
+                        walletId: wallet.id,
+                        address: wallet.address,
+                        chainType: wallet.chainType,
+                        walletType: wallet.walletType,
+                        source: wallet.source,
+                    },
+                },
+                { transaction },
+            );
+
+            return wallet;
+        });
+    }
+
+    async setPrimaryWallet(user: AuthenticatedUser, walletId: string): Promise<WalletLink> {
+        return this.sequelize.transaction(async (transaction) => {
+            await this.assertActiveUser(user.id, transaction);
+            const wallet = await this.findActiveWallet(user.id, walletId, transaction);
+
+            await this.markPrimaryWallet(user.id, wallet.id, transaction);
+            await AuthAuditEvent.create(
+                {
+                    userId: user.id,
+                    privyUserId: user.privyUserId,
+                    eventType: 'wallet.set_primary',
+                    metadata: {
+                        walletId: wallet.id,
+                        address: wallet.address,
+                    },
+                },
+                { transaction },
+            );
+
+            await wallet.reload({ transaction });
+            return wallet;
+        });
+    }
+
+    async deleteWallet(
+        user: AuthenticatedUser,
+        walletId: string,
+    ): Promise<{ wallet: WalletLink; promotedWallet?: WalletLink }> {
+        return this.sequelize.transaction(async (transaction) => {
+            await this.assertActiveUser(user.id, transaction);
+            const wallet = await this.findActiveWallet(user.id, walletId, transaction);
+            const wasPrimary = wallet.isPrimary;
+            const now = new Date();
+
+            await wallet.update(
+                {
+                    status: 'deleted',
+                    deletedAt: now,
+                    isPrimary: false,
+                },
+                { transaction },
+            );
+
+            let promotedWallet: WalletLink | undefined;
+            if (wasPrimary) {
+                promotedWallet = await WalletLink.findOne({
+                    where: { userId: user.id, status: 'active' },
+                    order: [['createdAt', 'ASC']],
+                    transaction,
+                });
+
+                if (promotedWallet) {
+                    await this.markPrimaryWallet(user.id, promotedWallet.id, transaction);
+                    await promotedWallet.reload({ transaction });
+                }
+            }
+
+            await AuthAuditEvent.create(
+                {
+                    userId: user.id,
+                    privyUserId: user.privyUserId,
+                    eventType: 'wallet.delete',
+                    metadata: {
+                        walletId: wallet.id,
+                        address: wallet.address,
+                        deletedAt: now.toISOString(),
+                        promotedWalletId: promotedWallet?.id,
+                    },
+                },
+                { transaction },
+            );
+
+            return { wallet, promotedWallet };
         });
     }
 
@@ -186,16 +295,26 @@ export class PrivyAuthService {
         return users.length;
     }
 
-    private async upsertWallet(userId: string, wallet: PrivyWalletDto, transaction: Transaction): Promise<void> {
-        const address = wallet.address.toLowerCase();
+    private async upsertWallet(
+        userId: string,
+        wallet: PrivyWalletDto | BindWalletDto,
+        transaction: Transaction,
+    ): Promise<WalletLink> {
+        const chainType = wallet.chainType || 'ethereum';
+        const walletType = wallet.walletType || 'embedded';
+        const source = this.resolveWalletSource(walletType, wallet.source);
+        const address = this.normalizeWalletAddress(wallet.address, chainType);
         const [walletLink] = await WalletLink.findOrCreate({
             where: { userId, address },
             defaults: {
                 userId,
                 address,
                 privyWalletId: wallet.privyWalletId || address,
-                chainType: wallet.chainType || 'ethereum',
-                walletType: wallet.walletType || 'embedded',
+                chainType,
+                walletType,
+                source,
+                status: 'active',
+                deletedAt: null,
                 isPrimary: wallet.isPrimary ?? true,
             },
             transaction,
@@ -204,12 +323,90 @@ export class PrivyAuthService {
         await walletLink.update(
             {
                 privyWalletId: wallet.privyWalletId || walletLink.privyWalletId,
-                chainType: wallet.chainType || walletLink.chainType,
-                walletType: wallet.walletType || walletLink.walletType,
+                chainType,
+                walletType,
+                source,
+                status: 'active',
+                deletedAt: null,
                 isPrimary: wallet.isPrimary ?? walletLink.isPrimary,
             },
             { transaction },
         );
+
+        if (walletLink.isPrimary) {
+            await this.markPrimaryWallet(userId, walletLink.id, transaction);
+            await walletLink.reload({ transaction });
+        }
+
+        return walletLink;
+    }
+
+    private async assertActiveUser(userId: string, transaction: Transaction): Promise<void> {
+        const appUser = await AppUser.findByPk(userId, { transaction });
+        if (!appUser || appUser.status !== 'active') {
+            throw new UnauthorizedException('Authenticated Privy user is not active');
+        }
+    }
+
+    private async findActiveWallet(userId: string, walletId: string, transaction: Transaction): Promise<WalletLink> {
+        const wallet = await WalletLink.findOne({
+            where: {
+                id: walletId,
+                userId,
+                status: 'active',
+            },
+            transaction,
+        });
+
+        if (!wallet) {
+            throw new NotFoundException('Wallet link not found');
+        }
+
+        return wallet;
+    }
+
+    private async markPrimaryWallet(userId: string, walletId: string, transaction: Transaction): Promise<void> {
+        await WalletLink.update({ isPrimary: false }, { where: { userId, status: 'active' }, transaction });
+        await WalletLink.update(
+            { isPrimary: true },
+            { where: { id: walletId, userId, status: 'active' }, transaction },
+        );
+    }
+
+    private normalizeWalletAddress(address: string, chainType: string): string {
+        const value = address.trim();
+        if (!value) {
+            throw new BadRequestException('Wallet address is required');
+        }
+
+        if (chainType === 'ethereum' || chainType === 'evm') {
+            if (!/^0x[a-fA-F0-9]{40}$/.test(value)) {
+                throw new BadRequestException('EVM wallet address must be a 20-byte hex address');
+            }
+            return value.toLowerCase();
+        }
+
+        if (chainType === 'near') {
+            const normalized = value.toLowerCase();
+            if (!/^(([a-z0-9]+[-_])*[a-z0-9]+[.])*([a-z0-9]+[-_])*[a-z0-9]+$/.test(normalized)) {
+                throw new BadRequestException('NEAR wallet address must be a valid account id');
+            }
+            return normalized;
+        }
+
+        throw new BadRequestException('Unsupported wallet chain type');
+    }
+
+    private resolveWalletSource(walletType: WalletType, source?: WalletSource): WalletSource {
+        if (source) {
+            return source;
+        }
+
+        if (walletType === 'embedded') {
+            return 'privy';
+        }
+
+        throw new BadRequestException('External wallet source is required');
     }
 
     private deletionWindowExpired(user: AppUser, now: Date): boolean {

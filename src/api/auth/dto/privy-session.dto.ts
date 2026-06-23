@@ -1,23 +1,36 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEmail, IsOptional, IsString, Matches } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ValidateNested } from 'class-validator';
+import {
+    SUPPORTED_WALLET_CHAIN_TYPES,
+    SUPPORTED_WALLET_SOURCES,
+    SUPPORTED_WALLET_TYPES,
+    WalletChainType,
+    WalletSource,
+    WalletType,
+} from './wallet-binding.dto';
 
 export class PrivyWalletDto {
     @IsOptional()
     @IsString()
+    @MaxLength(128)
     privyWalletId?: string;
 
     @IsString()
-    @Matches(/^0x[a-fA-F0-9]{40}$/)
+    @MaxLength(128)
     address: string;
 
     @IsOptional()
-    @IsString()
-    chainType?: string;
+    @IsIn(SUPPORTED_WALLET_CHAIN_TYPES)
+    chainType?: WalletChainType;
 
     @IsOptional()
-    @IsString()
-    walletType?: string;
+    @IsIn(SUPPORTED_WALLET_TYPES)
+    walletType?: WalletType;
+
+    @IsOptional()
+    @IsIn(SUPPORTED_WALLET_SOURCES)
+    source?: WalletSource;
 
     @IsOptional()
     @IsBoolean()

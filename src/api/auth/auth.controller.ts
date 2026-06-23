@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { PrivySessionDto } from './dto/privy-session.dto';
+import { BindWalletDto } from './dto/wallet-binding.dto';
 import { CurrentUser } from './current-user.decorator';
 import { PrivyAuthGuard } from './privy-auth.guard';
 import { PrivyAuthService } from './privy-auth.service';
@@ -24,7 +25,10 @@ function serializeWallet(wallet: {
     address: string;
     chainType: string;
     walletType: string;
+    source: string;
+    status: string;
     isPrimary: boolean;
+    deletedAt?: Date | null;
 }) {
     return {
         id: wallet.id,
@@ -32,7 +36,10 @@ function serializeWallet(wallet: {
         address: wallet.address,
         chainType: wallet.chainType,
         walletType: wallet.walletType,
+        source: wallet.source,
+        status: wallet.status,
         isPrimary: wallet.isPrimary,
+        deletedAt: wallet.deletedAt?.toISOString() ?? null,
     };
 }
 
@@ -55,10 +62,44 @@ export class AuthController {
         return { user };
     }
 
+    @Delete('me')
+    @UseGuards(PrivyAuthGuard)
+    async requestAccountDeletion(@CurrentUser() user: AuthenticatedUser) {
+        const result = await this.authService.requestAccountDeletion(user);
+        return {
+            status: 'pending_deletion',
+            deletionAvailableAt: result.deletionAvailableAt.toISOString(),
+        };
+    }
+
     @Get('wallets')
     @UseGuards(PrivyAuthGuard)
     async wallets(@CurrentUser() user: AuthenticatedUser) {
         const wallets = await this.authService.walletsForUser(user.id);
         return { wallets: wallets.map(serializeWallet) };
+    }
+
+    @Post('wallets')
+    @UseGuards(PrivyAuthGuard)
+    async bindWallet(@CurrentUser() user: AuthenticatedUser, @Body() body: BindWalletDto) {
+        const wallet = await this.authService.bindWallet(user, body);
+        return { wallet: serializeWallet(wallet) };
+    }
+
+    @Patch('wallets/:walletId/primary')
+    @UseGuards(PrivyAuthGuard)
+    async setPrimaryWallet(@CurrentUser() user: AuthenticatedUser, @Param('walletId') walletId: string) {
+        const wallet = await this.authService.setPrimaryWallet(user, walletId);
+        return { wallet: serializeWallet(wallet) };
+    }
+
+    @Delete('wallets/:walletId')
+    @UseGuards(PrivyAuthGuard)
+    async deleteWallet(@CurrentUser() user: AuthenticatedUser, @Param('walletId') walletId: string) {
+        const result = await this.authService.deleteWallet(user, walletId);
+        return {
+            wallet: serializeWallet(result.wallet),
+            promotedWallet: result.promotedWallet ? serializeWallet(result.promotedWallet) : null,
+        };
     }
 }

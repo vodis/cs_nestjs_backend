@@ -1,6 +1,8 @@
 import { BelongsTo, Column, CreatedAt, DataType, ForeignKey, Model, Table, UpdatedAt } from 'sequelize-typescript';
 import { AppUser } from './app-user.model';
 
+export type WalletLinkStatus = 'active' | 'deleted';
+
 @Table({ tableName: 'wallet_links', underscored: true })
 export class WalletLink extends Model<WalletLink> {
     @Column({
@@ -26,8 +28,17 @@ export class WalletLink extends Model<WalletLink> {
     @Column({ type: DataType.STRING, allowNull: false, defaultValue: 'embedded' })
     declare walletType: string;
 
+    @Column({ type: DataType.STRING, allowNull: false, defaultValue: 'privy' })
+    declare source: string;
+
+    @Column({ type: DataType.STRING, allowNull: false, defaultValue: 'active' })
+    declare status: WalletLinkStatus;
+
     @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: true })
     declare isPrimary: boolean;
+
+    @Column({ type: DataType.DATE, allowNull: true })
+    declare deletedAt?: Date | null;
 
     @CreatedAt
     declare createdAt: Date;

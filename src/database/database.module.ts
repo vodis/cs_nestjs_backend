@@ -3,10 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { Sequelize } from 'sequelize-typescript';
 import { AppUser } from './models/app-user.model';
 import { AuthAuditEvent } from './models/auth-audit-event.model';
+import { BalanceCacheEntry } from './models/balance-cache-entry.model';
 import { WalletLink } from './models/wallet-link.model';
 import { SEQUELIZE } from './database.tokens';
 
-const models = [AppUser, WalletLink, AuthAuditEvent];
+const models = [AppUser, WalletLink, BalanceCacheEntry, AuthAuditEvent];
 
 function databaseUrl(config: ConfigService): string | undefined {
     return config.get<string>('DATABASE_URL') || process.env.DATABASE_URL;

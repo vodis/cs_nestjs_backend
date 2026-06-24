@@ -61,8 +61,21 @@ Each release run: lint/test/build → OCI image digest → Syft/Trivy → `deplo
 
 ## Runtime (orchestrator injects secrets)
 
+Required for production boot:
+
 - `DATABASE_URL`
-- `API_SIGNING_KEY`
+- `CS_I18N_SERVICE_URL`
+- `DEFAULT_LANGUAGE`
+- `COOKIES_DOMAIN`
+
+Required for authenticated user flows:
+
+- `PRIVY_APP_ID`
+- `PRIVY_VERIFICATION_KEY`
+
+Provider/config vars are documented in [.env.example](../.env.example). `API_SIGNING_KEY` is reserved in the environment contract but is not consumed by repository-visible code yet.
+
+Runtime env is applied when the orchestrator creates a new container. Updating service catalog values after a deployment does not mutate the active container. Use the normal branch promotion/deploy path, or a documented orchestrator config-only redeploy mechanism, whenever production env changes must take effect.
 
 | Environment | Public health URL |
 |-------------|-------------------|

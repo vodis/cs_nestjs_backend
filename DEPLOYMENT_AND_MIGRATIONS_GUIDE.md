@@ -93,7 +93,9 @@ Each service repo should have:
 ## Environment and Config Strategy
 
 - Keep `.env` local-only convenience file; never source control secrets.
-- Use secret manager for production (`DB_URL`, API keys, signer keys, etc.).
+- Use secret manager for production (`DATABASE_URL`, API keys, signer keys, etc.).
+- Treat production env changes as deploy events. Docker container env is fixed at container creation; changing orchestrator catalog values does not update already-running containers.
+- Apply runtime config changes through the normal orchestrator deploy path, or through a documented config-only redeploy mechanism when one exists. Do not rely on manual `docker restart` to apply new env.
 - Maintain per-service environment contracts:
   - required vars list
   - defaults for non-sensitive local dev

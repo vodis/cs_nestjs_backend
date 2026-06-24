@@ -227,12 +227,18 @@ Required checks before merge:
 
 ## Security and Compliance Defaults
 
+These defaults are required target behavior. Current implementation gaps and fix order are tracked in [docs/architecture/security-architecture-audit.md](./docs/architecture/security-architecture-audit.md).
+
 - Validate all external inputs; deny unknown fields.
 - Centralize permission checks in guards + policy services.
 - Redact sensitive fields in logs.
 - Persist immutable audit events for financial actions.
 - Rotate secrets and keep them outside the repository.
 - Enforce idempotency keys for all fund-moving and order-mutating endpoints.
+- Protect cookie-authenticated mutations with CSRF tokens or explicit origin validation.
+- Keep production Swagger either disabled by default, edge-protected, or intentionally documented as public API surface.
+- Apply the same production origin allowlist to HTTP and websocket endpoints.
+- Apply request size limits, security headers, and rate limits at the app or edge layer with documented ownership.
 - Use TLS for all network links; apply mTLS for internal service-to-service where feasible.
 - Enforce least-privilege IAM roles and short-lived credentials where possible.
 - Keep API keys/secrets in secret manager only; no hardcoded credentials in repository.
@@ -257,14 +263,18 @@ Schema ownership rules:
 
 ## Suggested Near-Term Implementation Backlog
 
-1. Refactor current module layout into layered feature modules.
-2. Introduce use-case classes for each financial endpoint.
-3. Add idempotency middleware/interceptor for mutating endpoints.
-4. Add outbox table + publisher worker for reliable events.
-5. Build integration contract tests for `solver` and `spot`.
-6. Introduce Temporal workers and ship `WithdrawWorkflow` behind feature flag.
-7. Introduce Redis cache layer for quote/read hot paths with strict TTLs.
-8. Harden security baseline (idempotency enforcement + mTLS + secret rotation checklist).
-9. Create `core-finance` private service boundary and move sensitive logic behind contracts.
-10. Integrate `cs_i18n_service` through typed client contract and resilience policies.
-11. Execute NestJS latest-major migration plan with canary rollout.
+1. Add startup env validation for required production settings.
+2. Gate or explicitly publish Swagger in production.
+3. Align websocket origin checks with HTTP CORS.
+4. Add request size limits, security headers, and public endpoint rate limiting.
+5. Refactor current module layout into layered feature modules.
+6. Introduce use-case classes for each financial endpoint.
+7. Add idempotency middleware/interceptor for mutating endpoints.
+8. Add outbox table + publisher worker for reliable events.
+9. Build integration contract tests for `solver` and `spot`.
+10. Introduce Temporal workers and ship `WithdrawWorkflow` behind feature flag.
+11. Introduce Redis cache layer for quote/read hot paths with strict TTLs.
+12. Harden service-to-service security baseline (mTLS + secret rotation checklist).
+13. Create `core-finance` private service boundary and move sensitive logic behind contracts.
+14. Integrate `cs_i18n_service` through typed client contract and resilience policies.
+15. Execute NestJS latest-major migration plan with canary rollout.

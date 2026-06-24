@@ -10,8 +10,9 @@ Use **this file** as the single anchor when starting a new task or onboarding an
 | [DEVELOPMENT_GUIDE.md](./DEVELOPMENT_GUIDE.md) | Layers, use cases, NestJS upgrade path, Temporal orchestration, CI gates, branching, security/compliance defaults, backlog hints. |
 | [INFRASTRUCTURE_ROADMAP.md](./INFRASTRUCTURE_ROADMAP.md) | Ubuntu/Docker → observability → Kubernetes decision; `craftscript.com` DNS/TLS; resilience and ops maturity. |
 | [DEPLOYMENT_AND_MIGRATIONS_GUIDE.md](./DEPLOYMENT_AND_MIGRATIONS_GUIDE.md) | Multi-service deploys, who runs DB migrations, schema-per-service, rollout order, env/secrets, when *not* to use a global migration repo. |
-| [README.md](./README.md) | Project bootstrap: install, run, test scripts (starter-level; extend as the app grows). |
+| [README.md](./README.md) | Project bootstrap, runtime surface, branch flow, and deploy authority. |
 | [docs/ORCHESTRATOR_INTEGRATION.md](./docs/ORCHESTRATOR_INTEGRATION.md) | GHCR production CI, `deploy-metadata.json`, health endpoint, cutover checklist. |
+| [docs/architecture/security-architecture-audit.md](./docs/architecture/security-architecture-audit.md) | Current-state security/architecture audit, documented gaps, and required fixes before fund-moving endpoints. |
 
 **Related repositories (not in this tree)**
 
@@ -74,6 +75,8 @@ This model optimizes long-term security, maintainability, and team velocity.
   - proprietary risk/scoring/anti-fraud models
 
 ## Architecture Standards Policy
+
+This section is target policy. Before relying on a control, verify it is implemented in code and covered by tests. Current known gaps are tracked in [docs/architecture/security-architecture-audit.md](./docs/architecture/security-architecture-audit.md).
 
 ### 1) Architectural Style
 
@@ -170,6 +173,9 @@ This backend/BFF owns the canonical supported asset/token registry for exchange,
 - Principle of least privilege for service-to-service auth.
 - Secrets only from secret manager or runtime env, never committed.
 - Request signing for high-risk partner integrations where applicable.
+- Cookie-auth mutations require an explicit CSRF/origin policy before they are used for sensitive state changes.
+- Public docs/debug surfaces such as Swagger must be explicitly approved for production or gated by config/edge controls.
+- HTTP and websocket origins must follow the same production allowlist policy.
 
 ## Use Case Architecture (Required Pattern)
 
@@ -284,6 +290,7 @@ Coverage is not a vanity metric; critical risk branches must be explicitly teste
 ## Non-Negotiable Rules
 
 - Never merge code that can move funds without policy + idempotency checks.
+- Never treat target-state architecture docs as proof that a security control is implemented; verify code and tests.
 - Never add business logic directly into transport/infrastructure layers.
 - Never change API contracts without versioning and migration notes.
 - Never ship without automated tests for critical financial paths.

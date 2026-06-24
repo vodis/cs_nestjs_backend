@@ -2,6 +2,7 @@ import { MarketsService } from './markets.service';
 import { HyperliquidApiHttpClient } from '../../http-clients/hyperliquid-api/hyperliquid-api.http-client';
 import { CoinGeckoMarketHistoryClient } from './coingecko-market-history.client';
 import { AssetsService } from '../assets/assets.service';
+import { GeckoTerminalMarketHistoryClient } from './geckoterminal-market-history.client';
 
 describe('MarketsService', () => {
     const hyperliquidApiHttpClient = {
@@ -10,6 +11,9 @@ describe('MarketsService', () => {
     const coinGeckoMarketHistoryClient = {
         getHistory: jest.fn(),
     } as unknown as jest.Mocked<CoinGeckoMarketHistoryClient>;
+    const geckoTerminalMarketHistoryClient = {
+        getHistory: jest.fn(),
+    } as unknown as jest.Mocked<GeckoTerminalMarketHistoryClient>;
     const assetsService = {
         getAssets: jest.fn(),
     } as unknown as jest.Mocked<AssetsService>;
@@ -17,6 +21,8 @@ describe('MarketsService', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        coinGeckoMarketHistoryClient.getHistory.mockResolvedValue([]);
+        geckoTerminalMarketHistoryClient.getHistory.mockResolvedValue([]);
         assetsService.getAssets.mockResolvedValue({
             data: [
                 {
@@ -261,6 +267,7 @@ describe('MarketsService', () => {
             currentPrice: 1,
             changePercent: 1,
             historyAvailable: true,
+            marketDataStatus: 'history',
         });
         expect(result.quoteToken).toMatchObject({
             symbol: 'NEAR',
@@ -268,6 +275,7 @@ describe('MarketsService', () => {
             currentPrice: 2,
             changePercent: 10,
             historyAvailable: true,
+            marketDataStatus: 'history',
         });
         expect(result.relativeStrength).toBe(-9);
         expect(result.series).toEqual([
@@ -309,5 +317,64 @@ describe('MarketsService', () => {
         expect(result.relativeStrength).toBeUndefined();
         expect(coinGeckoMarketHistoryClient.getHistory).toHaveBeenCalledWith('USDC', '1H');
         expect(coinGeckoMarketHistoryClient.getHistory).toHaveBeenCalledWith('REF', '1H');
+    });
+
+    it('falls back to GeckoTerminal asset history after Hyperliquid and CoinGecko miss', async () => {
+        hyperliquidApiHttpClient.getCandles.mockResolvedValue([]);
+        coinGeckoMarketHistoryClient.getHistory.mockResolvedValue([]);
+        geckoTerminalMarketHistoryClient.getHistory
+            .mockResolvedValueOnce([
+                { time: 1764979200, price: 1 },
+                { time: 1764980100, price: 1.01 },
+            ])
+            .mockResolvedValueOnce([
+                { time: 1764979200, price: 2 },
+                { time: 1764980100, price: 2.1 },
+            ]);
+
+        const result = await new MarketsService(
+            hyperliquidApiHttpClient,
+            coinGeckoMarketHistoryClient,
+            assetsService,
+            geckoTerminalMarketHistoryClient,
+        ).getComparison('USDC', 'NEAR', '1D');
+
+        expect(result.status).toBe('ready');
+        expect(result.baseToken.marketDataStatus).toBe('history');
+        expect(result.quoteToken.marketDataStatus).toBe('history');
+        expect(geckoTerminalMarketHistoryClient.getHistory).toHaveBeenCalledWith(
+            expect.objectContaining({ symbol: 'USDC' }),
+            '1D',
+        );
+        expect(geckoTerminalMarketHistoryClient.getHistory).toHaveBeenCalledWith(
+            expect.objectContaining({ symbol: 'NEAR' }),
+            '1D',
+        );
+    });
+
+    it('returns price_only when no history source has data but current prices are available', async () => {
+        hyperliquidApiHttpClient.getCandles.mockResolvedValue([]);
+        coinGeckoMarketHistoryClient.getHistory.mockResolvedValue([]);
+        geckoTerminalMarketHistoryClient.getHistory.mockResolvedValue([]);
+
+        const result = await new MarketsService(
+            hyperliquidApiHttpClient,
+            coinGeckoMarketHistoryClient,
+            assetsService,
+            geckoTerminalMarketHistoryClient,
+        ).getComparison('USDC', 'NEAR', '1D');
+
+        expect(result.status).toBe('price_only');
+        expect(result.baseToken).toMatchObject({
+            currentPrice: 1,
+            historyAvailable: false,
+            marketDataStatus: 'price_only',
+            marketDataReason: 'Current price is available, but no history provider has usable series data.',
+        });
+        expect(result.quoteToken.marketDataStatus).toBe('price_only');
+        expect(result.series).toEqual([
+            { symbol: 'USDC', points: [] },
+            { symbol: 'NEAR', points: [] },
+        ]);
     });
 });

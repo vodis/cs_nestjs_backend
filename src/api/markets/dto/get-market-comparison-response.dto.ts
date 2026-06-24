@@ -1,6 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MarketComparisonTimeframe } from './get-market-comparison-query.dto';
 
+export type MarketComparisonStatus = 'ready' | 'partial' | 'price_only' | 'unsupported' | 'stale';
+
+export type MarketComparisonTokenStatus = 'history' | 'price_only' | 'unsupported' | 'stale';
+
 export class MarketComparisonTokenDto {
     @ApiProperty({ example: 'NEAR' })
     symbol: string;
@@ -19,6 +23,12 @@ export class MarketComparisonTokenDto {
 
     @ApiProperty({ example: true })
     historyAvailable: boolean;
+
+    @ApiProperty({ enum: ['history', 'price_only', 'unsupported', 'stale'] })
+    marketDataStatus: MarketComparisonTokenStatus;
+
+    @ApiPropertyOptional({ example: 'Current price is available, but no history provider has usable series data.' })
+    marketDataReason?: string;
 }
 
 export class MarketComparisonPointDto {
@@ -47,8 +57,8 @@ export class GetMarketComparisonResponseDto {
     @ApiProperty({ example: '1D', enum: ['1H', '1D', '1W'] })
     timeframe: MarketComparisonTimeframe;
 
-    @ApiProperty({ enum: ['ready', 'partial', 'unavailable'] })
-    status: 'ready' | 'partial' | 'unavailable';
+    @ApiProperty({ enum: ['ready', 'partial', 'price_only', 'unsupported', 'stale'] })
+    status: MarketComparisonStatus;
 
     @ApiProperty({ type: MarketComparisonTokenDto })
     baseToken: MarketComparisonTokenDto;

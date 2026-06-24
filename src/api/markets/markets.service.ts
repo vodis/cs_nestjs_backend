@@ -6,8 +6,10 @@ import { CoinGeckoMarketHistoryClient } from './coingecko-market-history.client'
 import { MarketComparisonTimeframe } from './dto/get-market-comparison-query.dto';
 import {
     GetMarketComparisonResponseDto,
+    MarketComparisonStatus,
     MarketComparisonPointDto,
     MarketComparisonTokenDto,
+    MarketComparisonTokenStatus,
 } from './dto/get-market-comparison-response.dto';
 import {
     HyperliquidApiHttpClient,
@@ -18,6 +20,7 @@ import { GetMarketChartResponseDto } from './dto/get-market-chart-response.dto';
 import { HyperliquidCandleDto } from '../../http-clients/hyperliquid-api/dto/hyperliquid-candle.dto';
 import { MarketHistoryPoint } from './market-history.types';
 import { MarketAssetContext, resolveChartWindow } from './chart-window.config';
+import { GeckoTerminalMarketHistoryClient } from './geckoterminal-market-history.client';
 
 const intervalMs: Record<HyperliquidCandleInterval, number> = {
     '1m': 60_000,
@@ -27,6 +30,8 @@ const intervalMs: Record<HyperliquidCandleInterval, number> = {
     '4h': 4 * 60 * 60_000,
     '1d': 24 * 60 * 60_000,
 };
+
+const priceStaleMs = 24 * 60 * 60_000;
 
 type SimpleWebSocketEvent = { data?: unknown };
 
@@ -54,6 +59,7 @@ export class MarketsService {
         private readonly hyperliquidApiHttpClient: HyperliquidApiHttpClient,
         private readonly coinGeckoMarketHistoryClient: CoinGeckoMarketHistoryClient,
         private readonly assetsService: AssetsService,
+        private readonly geckoTerminalMarketHistoryClient?: GeckoTerminalMarketHistoryClient,
     ) {}
 
     async getCandles(
@@ -130,23 +136,24 @@ export class MarketsService {
         const baseSymbol = normalizeSymbol(base);
         const quoteSymbol = normalizeSymbol(quote);
         const assets = await this.getAssetsBySymbol();
+        const baseAsset = assets.get(baseSymbol);
+        const quoteAsset = assets.get(quoteSymbol);
         const [baseHistory, quoteHistory] = await Promise.all([
-            this.getComparisonHistory(baseSymbol, timeframe),
-            this.getComparisonHistory(quoteSymbol, timeframe),
+            this.getComparisonHistory(baseSymbol, baseAsset, timeframe),
+            this.getComparisonHistory(quoteSymbol, quoteAsset, timeframe),
         ]);
         const baseSeries = normalizeHistory(baseHistory);
         const quoteSeries = normalizeHistory(quoteHistory);
         const baseChange = calculateChangePercent(baseHistory);
         const quoteChange = calculateChangePercent(quoteHistory);
-        const baseToken = toComparisonToken(baseSymbol, assets.get(baseSymbol), baseChange, baseSeries.length > 0);
-        const quoteToken = toComparisonToken(quoteSymbol, assets.get(quoteSymbol), quoteChange, quoteSeries.length > 0);
-        const availableCount = [baseToken, quoteToken].filter((token) => token.historyAvailable).length;
+        const baseToken = toComparisonToken(baseSymbol, baseAsset, baseChange, baseSeries.length > 0);
+        const quoteToken = toComparisonToken(quoteSymbol, quoteAsset, quoteChange, quoteSeries.length > 0);
 
         return {
             base: baseSymbol,
             quote: quoteSymbol,
             timeframe,
-            status: availableCount === 2 ? 'ready' : availableCount === 1 ? 'partial' : 'unavailable',
+            status: comparisonStatus(baseToken, quoteToken),
             baseToken,
             quoteToken,
             relativeStrength:
@@ -227,6 +234,7 @@ export class MarketsService {
 
     private async getComparisonHistory(
         symbol: string,
+        asset: AssetDto | undefined,
         timeframe: MarketComparisonTimeframe,
     ): Promise<MarketHistoryPoint[]> {
         const hyperliquid = await this.tryHyperliquidHistory(symbol, timeframe);
@@ -235,10 +243,15 @@ export class MarketsService {
         }
 
         try {
-            return await this.coinGeckoMarketHistoryClient.getHistory(symbol, timeframe);
+            const coingecko = await this.coinGeckoMarketHistoryClient.getHistory(symbol, timeframe);
+            if (coingecko.length > 0) {
+                return coingecko;
+            }
         } catch {
-            return [];
+            // Continue to the on-chain fallback below.
         }
+
+        return this.geckoTerminalMarketHistoryClient?.getHistory(asset, timeframe) || [];
     }
 
     private async tryHyperliquidHistory(
@@ -351,14 +364,86 @@ function toComparisonToken(
     changePercent: number | undefined,
     historyAvailable: boolean,
 ): MarketComparisonTokenDto {
+    const currentPrice = toNumber(asset?.price);
+    const marketDataStatus = tokenStatus(asset, historyAvailable, currentPrice);
+
     return {
         symbol,
         name: asset?.name,
         icon: asset?.icon,
-        currentPrice: toNumber(asset?.price),
+        currentPrice,
         changePercent,
         historyAvailable,
+        marketDataStatus,
+        marketDataReason: tokenReason(marketDataStatus),
     };
+}
+
+function comparisonStatus(
+    baseToken: MarketComparisonTokenDto,
+    quoteToken: MarketComparisonTokenDto,
+): MarketComparisonStatus {
+    const statuses = [baseToken.marketDataStatus, quoteToken.marketDataStatus];
+    const historyCount = statuses.filter((status) => status === 'history').length;
+
+    if (historyCount === 2) {
+        return 'ready';
+    }
+
+    if (historyCount === 1) {
+        return 'partial';
+    }
+
+    if (statuses.includes('stale')) {
+        return 'stale';
+    }
+
+    if (statuses.includes('price_only')) {
+        return 'price_only';
+    }
+
+    return 'unsupported';
+}
+
+function tokenStatus(
+    asset: AssetDto | undefined,
+    historyAvailable: boolean,
+    currentPrice: number | undefined,
+): MarketComparisonTokenStatus {
+    if (historyAvailable) {
+        return 'history';
+    }
+
+    if (currentPrice === undefined) {
+        return 'unsupported';
+    }
+
+    return isStalePrice(asset?.priceUpdatedAt) ? 'stale' : 'price_only';
+}
+
+function tokenReason(status: MarketComparisonTokenStatus): string | undefined {
+    if (status === 'price_only') {
+        return 'Current price is available, but no history provider has usable series data.';
+    }
+
+    if (status === 'unsupported') {
+        return 'No current price or history provider data is available for this asset.';
+    }
+
+    if (status === 'stale') {
+        return 'Current price exists, but it is older than the accepted freshness window and no history is available.';
+    }
+
+    return undefined;
+}
+
+function isStalePrice(priceUpdatedAt?: string): boolean {
+    if (!priceUpdatedAt) {
+        return false;
+    }
+
+    const updatedAt = Date.parse(priceUpdatedAt);
+    return Number.isFinite(updatedAt) && Date.now() - updatedAt > priceStaleMs;
 }
 
 function toNumber(value: string | number | undefined): number | undefined {

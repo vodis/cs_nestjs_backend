@@ -6,6 +6,9 @@ const SUPPORTED_LOGIN_METHODS = ['email', 'google', 'apple', 'passkey'] as const
 export type PublicAuthLoginMethod = (typeof SUPPORTED_LOGIN_METHODS)[number];
 
 export type PublicAuthConfig = {
+    version: 1;
+    enabled: boolean;
+    provider: 'privy';
     privyAppId: string | null;
     loginMethods: PublicAuthLoginMethod[];
     walletOnboarding: {
@@ -23,6 +26,9 @@ export class PublicAuthConfigService {
         const privyEnabled = Boolean(privyAppId);
 
         return {
+            version: 1,
+            enabled: privyEnabled,
+            provider: 'privy',
             privyAppId: privyAppId ?? null,
             loginMethods: privyEnabled ? this.loginMethods() : [],
             walletOnboarding: {

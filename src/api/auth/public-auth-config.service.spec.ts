@@ -8,6 +8,9 @@ function service(values: Record<string, string | undefined>) {
 describe('PublicAuthConfigService', () => {
     it('returns disabled public config when Privy app id is not configured', () => {
         expect(service({}).getConfig()).toEqual({
+            version: 1,
+            enabled: false,
+            provider: 'privy',
             privyAppId: null,
             loginMethods: [],
             walletOnboarding: {
@@ -19,6 +22,9 @@ describe('PublicAuthConfigService', () => {
 
     it('returns default public auth capabilities when Privy app id is configured', () => {
         expect(service({ PRIVY_APP_ID: 'privy-app-id' }).getConfig()).toEqual({
+            version: 1,
+            enabled: true,
+            provider: 'privy',
             privyAppId: 'privy-app-id',
             loginMethods: ['email', 'google', 'apple', 'passkey'],
             walletOnboarding: {

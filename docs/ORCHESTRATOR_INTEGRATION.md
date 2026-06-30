@@ -80,6 +80,27 @@ authoritative Privy user record before persistence.
 
 Provider/config vars are documented in [.env.example](../.env.example). `API_SIGNING_KEY` is reserved in the environment contract but is not consumed by repository-visible code yet.
 
+## Privy wallet ownership boundary
+
+The cross-repository decision is canonical in
+[`cs_orchestrator/docs/architecture/privy-wallet-ownership.md`](https://github.com/vodis/cs_orchestrator/blob/main/docs/architecture/privy-wallet-ownership.md).
+
+- `cs_mfe-wallets` owns the Privy browser SDK/provider, connect/sign/send,
+  `WalletIdentity` production, and provider session coordination.
+- `cs_ng_app_client` mounts the MFE and consumes only generic auth/session and
+  wallet events; it contains no Privy-specific code.
+- This backend publishes public runtime provider configuration, verifies Privy
+  access tokens against the configured app, verifies embedded-wallet ownership
+  against Privy's authoritative user record, and owns account/wallet
+  persistence.
+- External wallet binding remains disabled until a signed ownership-challenge
+  protocol is implemented. A bearer token plus browser-supplied address is not
+  proof of external wallet ownership.
+
+Provider-neutral API responses use `providerUserId` and `providerWalletId`.
+Internal database/model names may remain Privy-specific until separately
+migrated; they must not leak into the public host contract.
+
 Runtime env is applied when the orchestrator creates a new container. Updating service catalog values after a deployment does not mutate the active container. Use the normal branch promotion/deploy path, or a documented orchestrator config-only redeploy mechanism, whenever production env changes must take effect.
 
 | Environment | Public health URL                            |

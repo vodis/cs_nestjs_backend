@@ -6,6 +6,12 @@ Last reviewed: 2026-06-24
 
 This audit compares the documented backend architecture with the current NestJS runtime surface. It is intentionally limited to repository-visible code and docs; orchestrator host policy, cloud firewall rules, and provider consoles must be reviewed in their owning systems.
 
+Cross-repository Privy authentication and wallet ownership is governed by
+[`cs_orchestrator/docs/architecture/privy-wallet-ownership.md`](https://github.com/vodis/cs_orchestrator/blob/main/docs/architecture/privy-wallet-ownership.md).
+This backend is authoritative for token and embedded-wallet ownership
+verification and for account/wallet persistence; browser provider lifecycle
+belongs to `cs_mfe-wallets`, never the Angular host.
+
 ## Current Runtime Shape
 
 - Public API base: `/api/v1`.

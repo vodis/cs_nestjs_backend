@@ -6,6 +6,9 @@ const SUPPORTED_LOGIN_METHODS = ['email', 'google', 'apple', 'passkey'] as const
 export type PublicAuthLoginMethod = (typeof SUPPORTED_LOGIN_METHODS)[number];
 
 export type PublicAuthConfig = {
+    version: 1;
+    enabled: boolean;
+    provider: 'privy';
     privyAppId: string | null;
     loginMethods: PublicAuthLoginMethod[];
     walletOnboarding: {
@@ -21,13 +24,20 @@ export class PublicAuthConfigService {
     getConfig(): PublicAuthConfig {
         const privyAppId = this.optionalString('PRIVY_APP_ID');
         const privyEnabled = Boolean(privyAppId);
+        const embeddedWalletVerificationEnabled = Boolean(this.optionalString('PRIVY_APP_SECRET'));
 
         return {
+            version: 1,
+            enabled: privyEnabled,
+            provider: 'privy',
             privyAppId: privyAppId ?? null,
             loginMethods: privyEnabled ? this.loginMethods() : [],
             walletOnboarding: {
-                embeddedWallet: privyEnabled && this.booleanFlag('PRIVY_EMBEDDED_WALLET_ENABLED', true),
-                externalWalletBinding: privyEnabled && this.booleanFlag('EXTERNAL_WALLET_BINDING_ENABLED', true),
+                embeddedWallet:
+                    privyEnabled &&
+                    embeddedWalletVerificationEnabled &&
+                    this.booleanFlag('PRIVY_EMBEDDED_WALLET_ENABLED', true),
+                externalWalletBinding: privyEnabled && this.booleanFlag('EXTERNAL_WALLET_BINDING_ENABLED', false),
             },
         };
     }

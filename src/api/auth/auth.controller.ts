@@ -32,14 +32,24 @@ function serializeWallet(wallet: {
 }) {
     return {
         id: wallet.id,
-        privyWalletId: wallet.privyWalletId,
+        providerWalletId: wallet.privyWalletId,
         address: wallet.address,
         chainType: wallet.chainType,
         walletType: wallet.walletType,
-        source: wallet.source,
+        source: wallet.source === 'privy' ? 'provider' : wallet.source,
         status: wallet.status,
         isPrimary: wallet.isPrimary,
         deletedAt: wallet.deletedAt?.toISOString() ?? null,
+    };
+}
+
+function serializeUser(user: AuthenticatedUser) {
+    return {
+        id: user.id,
+        providerUserId: user.privyUserId,
+        sessionId: user.sessionId,
+        email: user.email,
+        authMethod: user.authMethod,
     };
 }
 
@@ -51,7 +61,7 @@ export class AuthController {
     async upsertPrivySession(@Req() request: RequestWithCookies, @Body() body: PrivySessionDto) {
         const result = await this.authService.upsertSession(extractAccessToken(request), body);
         return {
-            user: result.user,
+            user: serializeUser(result.user),
             wallets: result.wallets.map(serializeWallet),
         };
     }
@@ -59,7 +69,7 @@ export class AuthController {
     @Get('me')
     @UseGuards(PrivyAuthGuard)
     me(@CurrentUser() user: AuthenticatedUser) {
-        return { user };
+        return { user: serializeUser(user) };
     }
 
     @Delete('me')

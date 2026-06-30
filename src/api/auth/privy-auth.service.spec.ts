@@ -4,6 +4,7 @@ import { AppUser } from '../../database/models/app-user.model';
 import { WalletLink } from '../../database/models/wallet-link.model';
 import { PrivyAuthService } from './privy-auth.service';
 import { PrivyTokenService } from './privy-token.service';
+import { PrivyWalletOwnershipService } from './privy-wallet-ownership.service';
 
 function tokenService() {
     return {
@@ -19,6 +20,7 @@ describe('PrivyAuthService account lifecycle', () => {
     let sequelize: Sequelize;
     let service: PrivyAuthService;
     let tokens: jest.Mocked<PrivyTokenService>;
+    let walletOwnership: jest.Mocked<PrivyWalletOwnershipService>;
 
     beforeEach(async () => {
         sequelize = new Sequelize({
@@ -29,7 +31,10 @@ describe('PrivyAuthService account lifecycle', () => {
         });
         await sequelize.sync({ force: true });
         tokens = tokenService();
-        service = new PrivyAuthService(sequelize, tokens);
+        walletOwnership = {
+            assertOwned: jest.fn().mockResolvedValue(undefined),
+        } as unknown as jest.Mocked<PrivyWalletOwnershipService>;
+        service = new PrivyAuthService(sequelize, tokens, walletOwnership);
     });
 
     afterEach(async () => {
@@ -149,6 +154,10 @@ describe('PrivyAuthService account lifecycle', () => {
         expect(wallet.address).toBe('0xa000000000000000000000000000000000000001');
         expect(wallet.status).toBe('active');
         expect(wallet.isPrimary).toBe(true);
+        expect(walletOwnership.assertOwned).toHaveBeenCalledWith(
+            'did:privy:user-1',
+            expect.objectContaining({ address: '0xA000000000000000000000000000000000000001' }),
+        );
 
         const event = await AuthAuditEvent.findOne({ where: { eventType: 'wallet.bind' } });
         expect(event?.userId).toBe(user.id);

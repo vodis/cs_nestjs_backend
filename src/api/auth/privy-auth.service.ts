@@ -15,6 +15,7 @@ import { SEQUELIZE } from '../../database/database.tokens';
 import { PrivySessionDto, PrivyWalletDto } from './dto/privy-session.dto';
 import { BindWalletDto, WalletSource, WalletType } from './dto/wallet-binding.dto';
 import { PrivyTokenService } from './privy-token.service';
+import { PrivyWalletOwnershipService } from './privy-wallet-ownership.service';
 import type { AuthenticatedUser } from './types';
 
 const SOFT_DELETE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -24,10 +25,11 @@ export class PrivyAuthService {
     constructor(
         @Inject(SEQUELIZE) private readonly sequelize: Sequelize,
         private readonly tokenService: PrivyTokenService,
+        private readonly walletOwnership: PrivyWalletOwnershipService,
     ) {}
 
     async authenticateToken(accessToken: string): Promise<AuthenticatedUser> {
-        const claims = this.tokenService.verifyAccessToken(accessToken);
+        const claims = await this.tokenService.verifyAccessToken(accessToken);
         const user = await AppUser.findOne({ where: { privyUserId: claims.sub } });
 
         if (!user || user.status !== 'active') {
@@ -47,7 +49,10 @@ export class PrivyAuthService {
         accessToken: string,
         body: PrivySessionDto,
     ): Promise<{ user: AuthenticatedUser; wallets: WalletLink[] }> {
-        const claims = this.tokenService.verifyAccessToken(accessToken);
+        const claims = await this.tokenService.verifyAccessToken(accessToken);
+        if (body.wallet) {
+            await this.walletOwnership.assertOwned(claims.sub, body.wallet);
+        }
 
         return this.sequelize.transaction(async (transaction) => {
             const now = new Date();
@@ -141,6 +146,7 @@ export class PrivyAuthService {
     }
 
     async bindWallet(user: AuthenticatedUser, body: BindWalletDto): Promise<WalletLink> {
+        await this.walletOwnership.assertOwned(user.privyUserId, body);
         return this.sequelize.transaction(async (transaction) => {
             await this.assertActiveUser(user.id, transaction);
 

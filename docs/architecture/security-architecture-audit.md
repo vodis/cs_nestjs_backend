@@ -6,6 +6,12 @@ Last reviewed: 2026-06-24
 
 This audit compares the documented backend architecture with the current NestJS runtime surface. It is intentionally limited to repository-visible code and docs; orchestrator host policy, cloud firewall rules, and provider consoles must be reviewed in their owning systems.
 
+Cross-repository Privy authentication and wallet ownership is governed by
+[`cs_orchestrator/docs/architecture/privy-wallet-ownership.md`](https://github.com/vodis/cs_orchestrator/blob/main/docs/architecture/privy-wallet-ownership.md).
+This backend is authoritative for token and embedded-wallet ownership
+verification and for account/wallet persistence; browser provider lifecycle
+belongs to `cs_mfe-wallets`, never the Angular host.
+
 ## Current Runtime Shape
 
 - Public API base: `/api/v1`.
@@ -88,7 +94,7 @@ Some controls may already exist at Nginx/WAF/orchestrator level. If so, document
 
 ### Medium: Required Env Contract Is Not Enforced at Startup
 
-The app reads required values such as `CS_I18N_SERVICE_URL`, `DEFAULT_LANGUAGE`, `COOKIES_DOMAIN`, `PRIVY_APP_ID`, and `PRIVY_VERIFICATION_KEY` at feature execution time. `DATABASE_URL` is strongly expected for production, but the database module can fall back to discrete local-style DB settings.
+The app reads required values such as `CS_I18N_SERVICE_URL`, `DEFAULT_LANGUAGE`, `COOKIES_DOMAIN`, `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, and `PRIVY_VERIFICATION_KEY` at feature execution time. `DATABASE_URL` is strongly expected for production, but the database module can fall back to discrete local-style DB settings.
 
 Risk: a container can boot successfully and then fail only when a specific endpoint or auth path is exercised.
 

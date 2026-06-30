@@ -21,7 +21,7 @@ describe('PublicAuthConfigService', () => {
     });
 
     it('returns default public auth capabilities when Privy app id is configured', () => {
-        expect(service({ PRIVY_APP_ID: 'privy-app-id' }).getConfig()).toEqual({
+        expect(service({ PRIVY_APP_ID: 'privy-app-id', PRIVY_APP_SECRET: 'server-secret' }).getConfig()).toEqual({
             version: 1,
             enabled: true,
             provider: 'privy',
@@ -29,9 +29,13 @@ describe('PublicAuthConfigService', () => {
             loginMethods: ['email', 'google', 'apple', 'passkey'],
             walletOnboarding: {
                 embeddedWallet: true,
-                externalWalletBinding: true,
+                externalWalletBinding: false,
             },
         });
+    });
+
+    it('disables embedded wallets when authoritative ownership verification is unavailable', () => {
+        expect(service({ PRIVY_APP_ID: 'privy-app-id' }).getConfig().walletOnboarding.embeddedWallet).toBe(false);
     });
 
     it('filters configured login methods to supported public methods', () => {

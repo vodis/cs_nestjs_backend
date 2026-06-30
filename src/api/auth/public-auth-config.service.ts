@@ -24,6 +24,7 @@ export class PublicAuthConfigService {
     getConfig(): PublicAuthConfig {
         const privyAppId = this.optionalString('PRIVY_APP_ID');
         const privyEnabled = Boolean(privyAppId);
+        const embeddedWalletVerificationEnabled = Boolean(this.optionalString('PRIVY_APP_SECRET'));
 
         return {
             version: 1,
@@ -32,8 +33,11 @@ export class PublicAuthConfigService {
             privyAppId: privyAppId ?? null,
             loginMethods: privyEnabled ? this.loginMethods() : [],
             walletOnboarding: {
-                embeddedWallet: privyEnabled && this.booleanFlag('PRIVY_EMBEDDED_WALLET_ENABLED', true),
-                externalWalletBinding: privyEnabled && this.booleanFlag('EXTERNAL_WALLET_BINDING_ENABLED', true),
+                embeddedWallet:
+                    privyEnabled &&
+                    embeddedWalletVerificationEnabled &&
+                    this.booleanFlag('PRIVY_EMBEDDED_WALLET_ENABLED', true),
+                externalWalletBinding: privyEnabled && this.booleanFlag('EXTERNAL_WALLET_BINDING_ENABLED', false),
             },
         };
     }

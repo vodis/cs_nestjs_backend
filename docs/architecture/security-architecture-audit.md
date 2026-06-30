@@ -88,7 +88,7 @@ Some controls may already exist at Nginx/WAF/orchestrator level. If so, document
 
 ### Medium: Required Env Contract Is Not Enforced at Startup
 
-The app reads required values such as `CS_I18N_SERVICE_URL`, `DEFAULT_LANGUAGE`, `COOKIES_DOMAIN`, `PRIVY_APP_ID`, and `PRIVY_VERIFICATION_KEY` at feature execution time. `DATABASE_URL` is strongly expected for production, but the database module can fall back to discrete local-style DB settings.
+The app reads required values such as `CS_I18N_SERVICE_URL`, `DEFAULT_LANGUAGE`, `COOKIES_DOMAIN`, `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, and `PRIVY_VERIFICATION_KEY` at feature execution time. `DATABASE_URL` is strongly expected for production, but the database module can fall back to discrete local-style DB settings.
 
 Risk: a container can boot successfully and then fail only when a specific endpoint or auth path is exercised.
 

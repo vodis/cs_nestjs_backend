@@ -64,7 +64,7 @@ describe('PublicAuthConfigService', () => {
         expect(
             service({
                 PRIVY_APP_ID: 'privy-app-id',
-                PRIVY_VERIFICATION_KEY: 'server-only-key',
+                PRIVY_JWKS_URL: 'https://auth.privy.io/example/jwks.json',
             }).getConfig(),
         ).not.toHaveProperty('privyVerificationKey');
     });

@@ -47,6 +47,20 @@ Pattern:
 5. Deploy application version.
 6. Verify health/readiness and smoke tests.
 
+For this service's production image, inspect and apply migrations explicitly:
+
+```sh
+npm run db:migrate:status
+npm run db:migrate
+```
+
+Run these commands as a one-shot job from the exact candidate image, with the
+same `DATABASE_URL` and Docker network as the application. Take and verify a
+backup first. Do not run migrations from the application startup command and
+do not switch traffic until a database-backed smoke check succeeds. Production
+execution remains owned by `cs_orchestrator`; application CI must not connect
+to production or deploy directly.
+
 ## Migration Safety Requirements
 
 All migrations must be:

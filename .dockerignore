@@ -9,4 +9,3 @@ coverage
 docker-compose.yaml
 .docker
 test
-db

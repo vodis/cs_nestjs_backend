@@ -23,7 +23,11 @@ RUN addgroup --system --gid 1001 nodejs \
 
 COPY --from=deps --chown=nestjs:nodejs /code/node_modules ./node_modules
 COPY --from=build --chown=nestjs:nodejs /code/dist ./dist
+COPY --chown=nestjs:nodejs db ./db
 COPY --chown=nestjs:nodejs package.json ./
+
+RUN test -f db/migrations/20260619000100-create-auth-onboarding-tables.js \
+  && ./node_modules/.bin/sequelize-cli --version
 
 USER nestjs
 EXPOSE 3000

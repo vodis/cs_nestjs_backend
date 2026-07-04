@@ -3,7 +3,7 @@ import { DatabaseModule } from '../../database/database.module';
 import { AuthController } from './auth.controller';
 import { PrivyAuthGuard } from './privy-auth.guard';
 import { PrivyAuthService } from './privy-auth.service';
-import { PRIVY_ACCESS_TOKEN_VERIFIER, PrivyTokenService, verifyWithPrivyNodeSdk } from './privy-token.service';
+import { PrivyTokenService } from './privy-token.service';
 import { PublicAuthConfigController } from './public-auth-config.controller';
 import { PublicAuthConfigService } from './public-auth-config.service';
 import {
@@ -21,10 +21,6 @@ import {
         PrivyTokenService,
         PrivyWalletOwnershipService,
         PublicAuthConfigService,
-        {
-            provide: PRIVY_ACCESS_TOKEN_VERIFIER,
-            useValue: verifyWithPrivyNodeSdk,
-        },
         {
             provide: PRIVY_EMBEDDED_WALLET_LOOKUP,
             useValue: lookupPrivyEmbeddedWallets,

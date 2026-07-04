@@ -1,6 +1,8 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PrivyAccessTokenVerifier, PrivyTokenService } from './privy-token.service';
+import { createServer } from 'http';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { PrivyTokenService } from './privy-token.service';
 
 function base64Url(value: unknown): string {
     return Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -30,10 +32,45 @@ function config(values: Record<string, string>): ConfigService {
 }
 
 describe('PrivyTokenService', () => {
-    let verifyAccessTokenMock: jest.MockedFunction<PrivyAccessTokenVerifier>;
+    it('verifies a signed access token using the configured JWKS endpoint', async () => {
+        const { publicKey, privateKey } = await generateKeyPair('ES256');
+        const publicJwk = await exportJWK(publicKey);
+        const server = createServer((_request, response) => {
+            response.setHeader('Content-Type', 'application/json');
+            response.end(JSON.stringify({ keys: [{ ...publicJwk, alg: 'ES256', kid: 'key-1' }] }));
+        });
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+            server.close();
+            throw new Error('test JWKS server did not bind to a TCP port');
+        }
 
-    beforeEach(() => {
-        verifyAccessTokenMock = jest.fn();
+        try {
+            const now = Math.floor(Date.now() / 1000);
+            const token = await new SignJWT({ sid: 'session-1' })
+                .setProtectedHeader({ alg: 'ES256', kid: 'key-1' })
+                .setSubject('did:privy:user-1')
+                .setIssuer('privy.io')
+                .setAudience('privy-app-id')
+                .setIssuedAt(now)
+                .setExpirationTime(now + 3600)
+                .sign(privateKey);
+            const service = new PrivyTokenService(
+                config({
+                    NODE_ENV: 'test',
+                    PRIVY_APP_ID: 'privy-app-id',
+                    PRIVY_JWKS_URL: `http://127.0.0.1:${address.port}/jwks.json`,
+                }),
+            );
+
+            const claims = await service.verifyAccessToken(token);
+
+            expect(claims.sub).toBe('did:privy:user-1');
+            expect(claims.sid).toBe('session-1');
+        } finally {
+            await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+        }
     });
 
     it('accepts unsigned local tokens only when explicit dev mode is enabled', async () => {
@@ -43,7 +80,6 @@ describe('PrivyTokenService', () => {
                 PRIVY_APP_ID: 'privy-app-id',
                 PRIVY_AUTH_DEV_ALLOW_UNSIGNED: 'true',
             }),
-            verifyAccessTokenMock,
         );
 
         const claims = await service.verifyAccessToken(unsignedToken());
@@ -59,7 +95,6 @@ describe('PrivyTokenService', () => {
                 PRIVY_APP_ID: 'privy-app-id',
                 PRIVY_AUTH_DEV_ALLOW_UNSIGNED: 'true',
             }),
-            verifyAccessTokenMock,
         );
 
         await expect(service.verifyAccessToken(unsignedToken({ aud: 'other-app' }))).rejects.toThrow(
@@ -67,62 +102,26 @@ describe('PrivyTokenService', () => {
         );
     });
 
-    it('requires a verification key outside explicit dev unsigned mode', async () => {
+    it('requires a JWKS URL outside explicit dev unsigned mode', async () => {
         const service = new PrivyTokenService(
             config({
                 NODE_ENV: 'production',
                 PRIVY_APP_ID: 'privy-app-id',
             }),
-            verifyAccessTokenMock,
         );
 
-        await expect(service.verifyAccessToken(unsignedToken())).rejects.toThrow(UnauthorizedException);
+        await expect(service.verifyAccessToken(unsignedToken())).rejects.toThrow('Privy JWKS URL is not configured');
     });
 
-    it('verifies production access tokens through the official Privy SDK', async () => {
-        verifyAccessTokenMock.mockResolvedValue({
-            app_id: 'privy-app-id',
-            issuer: 'privy.io',
-            issued_at: 100,
-            expiration: 200,
-            session_id: 'session-1',
-            user_id: 'did:privy:user-1',
-        });
+    it('requires HTTPS JWKS in production', async () => {
         const service = new PrivyTokenService(
             config({
                 NODE_ENV: 'production',
                 PRIVY_APP_ID: 'privy-app-id',
-                PRIVY_VERIFICATION_KEY: 'public\\nkey',
+                PRIVY_JWKS_URL: 'http://privy.example.test/.well-known/jwks.json',
             }),
-            verifyAccessTokenMock,
         );
 
-        await expect(service.verifyAccessToken('signed-token')).resolves.toEqual({
-            sid: 'session-1',
-            sub: 'did:privy:user-1',
-            iss: 'privy.io',
-            aud: 'privy-app-id',
-            iat: 100,
-            exp: 200,
-        });
-        expect(verifyAccessTokenMock).toHaveBeenCalledWith({
-            access_token: 'signed-token',
-            app_id: 'privy-app-id',
-            verification_key: 'public\nkey',
-        });
-    });
-
-    it('maps SDK verification failures to the backend auth boundary', async () => {
-        verifyAccessTokenMock.mockRejectedValue(new Error('invalid token'));
-        const service = new PrivyTokenService(
-            config({
-                NODE_ENV: 'production',
-                PRIVY_APP_ID: 'privy-app-id',
-                PRIVY_VERIFICATION_KEY: 'verification-key',
-            }),
-            verifyAccessTokenMock,
-        );
-
-        await expect(service.verifyAccessToken('invalid-token')).rejects.toThrow(UnauthorizedException);
+        await expect(service.verifyAccessToken(unsignedToken())).rejects.toThrow('Privy JWKS URL must use HTTPS');
     });
 });

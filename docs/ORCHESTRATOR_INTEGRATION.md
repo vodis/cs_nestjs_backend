@@ -72,7 +72,7 @@ Required for authenticated user flows:
 
 -   `PRIVY_APP_ID`
 -   `PRIVY_APP_SECRET`
--   `PRIVY_VERIFICATION_KEY`
+-   `PRIVY_JWKS_URL`
 
 Keep `EXTERNAL_WALLET_BINDING_ENABLED=false` until the signed ownership-challenge
 flow is deployed. Embedded Privy wallets are verified server-side against the

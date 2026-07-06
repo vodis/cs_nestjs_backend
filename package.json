@@ -20,7 +20,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:migrate": "sequelize-cli db:migrate --config db/config.js --migrations-path db/migrations",
-    "db:migrate:status": "sequelize-cli db:migrate:status --config db/config.js --migrations-path db/migrations"
+    "db:migrate:status": "sequelize-cli db:migrate:status --config db/config.js --migrations-path db/migrations",
+    "db:smoke": "node db/smoke.js"
   },
   "dependencies": {
     "@nestjs/axios": "^3.0.1",

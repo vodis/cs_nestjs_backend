@@ -21,6 +21,9 @@ export class AppUser extends Model<AppUser> {
     @Column({ type: DataType.STRING, allowNull: true })
     declare authMethod?: string | null;
 
+    @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
+    declare passkeyEnabled: boolean;
+
     @Column({ type: DataType.STRING, allowNull: false, defaultValue: 'active' })
     declare status: AppUserStatus;
 

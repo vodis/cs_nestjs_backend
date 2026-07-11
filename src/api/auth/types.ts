@@ -4,4 +4,5 @@ export type AuthenticatedUser = {
     sessionId: string;
     email?: string | null;
     authMethod?: string | null;
+    passkeyEnabled: boolean;
 };

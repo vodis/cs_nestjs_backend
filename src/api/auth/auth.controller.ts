@@ -50,6 +50,7 @@ function serializeUser(user: AuthenticatedUser) {
         sessionId: user.sessionId,
         email: user.email,
         authMethod: user.authMethod,
+        passkeyEnabled: user.passkeyEnabled,
     };
 }
 
@@ -79,6 +80,16 @@ export class AuthController {
         return {
             status: 'pending_deletion',
             deletionAvailableAt: result.deletionAvailableAt.toISOString(),
+        };
+    }
+
+    @Post('me/passkey')
+    @UseGuards(PrivyAuthGuard)
+    async enablePasskey(@CurrentUser() user: AuthenticatedUser) {
+        const result = await this.authService.enablePasskey(user);
+        return {
+            user: serializeUser(result.user),
+            wallets: result.wallets.map(serializeWallet),
         };
     }
 

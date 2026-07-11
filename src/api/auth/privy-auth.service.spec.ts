@@ -51,6 +51,7 @@ describe('PrivyAuthService account lifecycle', () => {
             id: user.id,
             privyUserId: user.privyUserId,
             sessionId: 'session-1',
+            passkeyEnabled: false,
         });
 
         await user.reload();
@@ -78,6 +79,7 @@ describe('PrivyAuthService account lifecycle', () => {
 
         await user.reload();
         expect(result.user.id).toBe(user.id);
+        expect(result.user.passkeyEnabled).toBe(false);
         expect(user.status).toBe('active');
         expect(user.deletionRequestedAt).toBeNull();
         expect(user.deletionAvailableAt).toBeNull();
@@ -103,9 +105,47 @@ describe('PrivyAuthService account lifecycle', () => {
         expect(oldUser.privyUserId).toBe(`deleted:${oldUser.id}:did:privy:user-1`);
         expect(result.user.id).not.toBe(oldUser.id);
         expect(result.user.privyUserId).toBe('did:privy:user-1');
+        expect(result.user.passkeyEnabled).toBe(false);
 
         const events = await AuthAuditEvent.findAll({ order: [['createdAt', 'ASC']] });
         expect(events.map((event) => event.eventType)).toEqual(['account.final_purge', 'account.signup']);
+    });
+
+    it('preserves passkey-enabled state when the user signs in again', async () => {
+        const user = await AppUser.create({
+            privyUserId: 'did:privy:user-1',
+            status: 'active',
+            passkeyEnabled: true,
+        });
+
+        const result = await service.upsertSession('token', { authMethod: 'email' });
+
+        await user.reload();
+        expect(result.user.id).toBe(user.id);
+        expect(result.user.passkeyEnabled).toBe(true);
+        expect(user.passkeyEnabled).toBe(true);
+    });
+
+    it('marks passkey enabled for an active account and records an audit event', async () => {
+        const user = await AppUser.create({
+            privyUserId: 'did:privy:user-1',
+            status: 'active',
+        });
+
+        const result = await service.enablePasskey({
+            id: user.id,
+            privyUserId: user.privyUserId,
+            sessionId: 'session-1',
+            passkeyEnabled: false,
+        });
+
+        await user.reload();
+        expect(result.user.passkeyEnabled).toBe(true);
+        expect(user.passkeyEnabled).toBe(true);
+
+        const event = await AuthAuditEvent.findOne({ where: { eventType: 'account.passkey_enabled' } });
+        expect(event?.userId).toBe(user.id);
+        expect(event?.metadata).toMatchObject({ sessionId: 'session-1' });
     });
 
     it('purges pending-deletion accounts whose retention window has elapsed', async () => {
@@ -142,6 +182,7 @@ describe('PrivyAuthService account lifecycle', () => {
                 id: user.id,
                 privyUserId: user.privyUserId,
                 sessionId: 'session-1',
+                passkeyEnabled: false,
             },
             {
                 address: '0xA000000000000000000000000000000000000001',
@@ -179,6 +220,7 @@ describe('PrivyAuthService account lifecycle', () => {
                     id: user.id,
                     privyUserId: user.privyUserId,
                     sessionId: 'session-1',
+                    passkeyEnabled: false,
                 },
                 {
                     address: '0xA000000000000000000000000000000000000001',
@@ -220,6 +262,7 @@ describe('PrivyAuthService account lifecycle', () => {
                 id: user.id,
                 privyUserId: user.privyUserId,
                 sessionId: 'session-1',
+                passkeyEnabled: false,
             },
             second.id,
         );
@@ -262,6 +305,7 @@ describe('PrivyAuthService account lifecycle', () => {
                 id: user.id,
                 privyUserId: user.privyUserId,
                 sessionId: 'session-1',
+                passkeyEnabled: false,
             },
             first.id,
         );
@@ -301,6 +345,7 @@ describe('PrivyAuthService account lifecycle', () => {
                 id: user.id,
                 privyUserId: user.privyUserId,
                 sessionId: 'session-1',
+                passkeyEnabled: false,
             },
             {
                 address: '0xA000000000000000000000000000000000000001',

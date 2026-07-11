@@ -71,7 +71,7 @@ describe('BalancesService', () => {
         });
 
         const result = await service.getBalances(
-            { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1' },
+            { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
             {},
         );
 
@@ -121,7 +121,7 @@ describe('BalancesService', () => {
         });
 
         const result = await service.getBalances(
-            { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1' },
+            { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
             {},
         );
 
@@ -144,7 +144,7 @@ describe('BalancesService', () => {
 
         await expect(
             service.getBalances(
-                { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1' },
+                { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
                 { walletId: otherWallet.id },
             ),
         ).rejects.toBeInstanceOf(NotFoundException);
@@ -155,7 +155,7 @@ describe('BalancesService', () => {
 
         await expect(
             service.getBalances(
-                { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1' },
+                { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
                 { assetId: 'unsupported' },
             ),
         ).rejects.toBeInstanceOf(BadRequestException);

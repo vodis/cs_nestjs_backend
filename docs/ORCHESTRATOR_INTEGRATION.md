@@ -93,6 +93,10 @@ The cross-repository decision is canonical in
   access tokens against the configured app, verifies embedded-wallet ownership
   against Privy's authoritative user record, and owns account/wallet
   persistence.
+- Passkey enablement is exposed as provider-neutral account state
+  (`POST /api/v1/me/passkey`, `passkeyEnabled`). The current guard is Privy
+  because Privy is the active auth provider, but the backend does not persist
+  Privy passkey credential IDs or linked-account payloads.
 - External wallet binding remains disabled until a signed ownership-challenge
   protocol is implemented. A bearer token plus browser-supplied address is not
   proof of external wallet ownership.

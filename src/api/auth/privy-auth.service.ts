@@ -42,6 +42,7 @@ export class PrivyAuthService {
             sessionId: claims.sid,
             email: user.email,
             authMethod: user.authMethod,
+            passkeyEnabled: user.passkeyEnabled,
         };
     }
 
@@ -77,6 +78,7 @@ export class PrivyAuthService {
                     privyUserId: claims.sub,
                     email: body.email || claims.email || null,
                     authMethod: body.authMethod || null,
+                    passkeyEnabled: false,
                     status: 'active',
                 },
                 transaction,
@@ -129,6 +131,50 @@ export class PrivyAuthService {
                     sessionId: claims.sid,
                     email: user.email,
                     authMethod: user.authMethod,
+                    passkeyEnabled: user.passkeyEnabled,
+                },
+                wallets,
+            };
+        });
+    }
+
+    async enablePasskey(user: AuthenticatedUser): Promise<{ user: AuthenticatedUser; wallets: WalletLink[] }> {
+        return this.sequelize.transaction(async (transaction) => {
+            const appUser = await AppUser.findByPk(user.id, { transaction });
+            if (!appUser || appUser.status !== 'active') {
+                throw new UnauthorizedException('Authenticated Privy user is not active');
+            }
+
+            await appUser.update({ passkeyEnabled: true }, { transaction });
+            await AuthAuditEvent.create(
+                {
+                    userId: appUser.id,
+                    privyUserId: appUser.privyUserId,
+                    eventType: 'account.passkey_enabled',
+                    metadata: {
+                        sessionId: user.sessionId,
+                    },
+                },
+                { transaction },
+            );
+
+            const wallets = await WalletLink.findAll({
+                where: { userId: appUser.id, status: 'active' },
+                order: [
+                    ['isPrimary', 'DESC'],
+                    ['createdAt', 'ASC'],
+                ],
+                transaction,
+            });
+
+            return {
+                user: {
+                    id: appUser.id,
+                    privyUserId: appUser.privyUserId,
+                    sessionId: user.sessionId,
+                    email: appUser.email,
+                    authMethod: appUser.authMethod,
+                    passkeyEnabled: appUser.passkeyEnabled,
                 },
                 wallets,
             };

@@ -1,5 +1,6 @@
 import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ProductEventsService } from '../../../../api/product-events/product-events.service';
 import { ApprovedPreparePackage } from '../../domain/models/approved-prepare-package';
 import { SwapQuoteCommand } from '../../domain/models/swap-quote-request';
 import { SwapRequestValidationService } from '../../domain/services/swap-request-validation.service';
@@ -22,6 +23,7 @@ export class PrepareSwapUseCase {
         @Inject(QUOTE_PROVIDERS)
         private readonly quoteProviders: QuoteProviderPort[],
         private readonly configService: ConfigService,
+        private readonly productEvents: ProductEventsService,
     ) {}
 
     async execute(command: SwapQuoteCommand): Promise<ApprovedPreparePackage> {
@@ -35,9 +37,23 @@ export class PrepareSwapUseCase {
         this.validationService.assertAssetSupported(command.originAsset, originAsset);
         this.validationService.assertAssetSupported(command.destinationAsset, destinationAsset);
 
+        await this.productEvents.recordBestEffort({
+            eventName: 'swap.quote',
+            source: 'backend',
+            status: 'attempted',
+            metadata: this.swapMetadata(command),
+        });
+
         const quotes = await this.collectQuotes(command);
 
         if (!quotes.length) {
+            await this.productEvents.recordBestEffort({
+                eventName: 'swap.quote',
+                source: 'backend',
+                status: 'failed',
+                reasonCode: 'providers_unavailable',
+                metadata: this.swapMetadata(command),
+            });
             throw new ServiceUnavailableException('All quote providers are temporarily unavailable');
         }
 
@@ -49,7 +65,19 @@ export class PrepareSwapUseCase {
             command.slippageTolerance,
         );
 
-        return this.preparePackageBuilder.build(command, bestQuote);
+        const packageResult = this.preparePackageBuilder.build(command, bestQuote);
+        await this.productEvents.recordBestEffort({
+            eventName: 'swap.quote',
+            source: 'backend',
+            status: 'succeeded',
+            metadata: {
+                ...this.swapMetadata(command),
+                providerId: bestQuote.providerId,
+                executionMode: bestQuote.executionMode,
+            },
+        });
+
+        return packageResult;
     }
 
     private async collectQuotes(command: SwapQuoteCommand) {
@@ -69,5 +97,15 @@ export class PrepareSwapUseCase {
     private getMaxSlippageBps(): number {
         const configured = Number(this.configService.get('SWAP_MAX_SLIPPAGE_BPS') || 1000);
         return Number.isFinite(configured) && configured > 0 ? configured : 1000;
+    }
+
+    private swapMetadata(command: SwapQuoteCommand): Record<string, unknown> {
+        return {
+            originAsset: command.originAsset,
+            destinationAsset: command.destinationAsset,
+            swapType: command.swapType,
+            authMethod: command.authMethod,
+            slippageTolerance: command.slippageTolerance,
+        };
     }
 }

@@ -5,6 +5,7 @@ import { WalletLink } from '../../database/models/wallet-link.model';
 import { PrivyAuthService } from './privy-auth.service';
 import { PrivyTokenService } from './privy-token.service';
 import { PrivyWalletOwnershipService } from './privy-wallet-ownership.service';
+import { ProductEventsService } from '../product-events/product-events.service';
 
 function tokenService() {
     return {
@@ -21,6 +22,7 @@ describe('PrivyAuthService account lifecycle', () => {
     let service: PrivyAuthService;
     let tokens: jest.Mocked<PrivyTokenService>;
     let walletOwnership: jest.Mocked<PrivyWalletOwnershipService>;
+    let productEvents: jest.Mocked<ProductEventsService>;
 
     beforeEach(async () => {
         sequelize = new Sequelize({
@@ -34,7 +36,10 @@ describe('PrivyAuthService account lifecycle', () => {
         walletOwnership = {
             assertOwned: jest.fn().mockResolvedValue(undefined),
         } as unknown as jest.Mocked<PrivyWalletOwnershipService>;
-        service = new PrivyAuthService(sequelize, tokens, walletOwnership);
+        productEvents = {
+            recordBestEffort: jest.fn().mockResolvedValue(undefined),
+        } as unknown as jest.Mocked<ProductEventsService>;
+        service = new PrivyAuthService(sequelize, tokens, walletOwnership, productEvents);
     });
 
     afterEach(async () => {

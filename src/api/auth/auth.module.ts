@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../database/database.module';
+import { ProductEventsModule } from '../product-events/product-events.module';
 import { AuthController } from './auth.controller';
 import { PrivyAuthGuard } from './privy-auth.guard';
 import { PrivyAuthService } from './privy-auth.service';
@@ -13,7 +14,7 @@ import {
 } from './privy-wallet-ownership.service';
 
 @Module({
-    imports: [DatabaseModule],
+    imports: [DatabaseModule, ProductEventsModule],
     controllers: [AuthController, PublicAuthConfigController],
     providers: [
         PrivyAuthGuard,

@@ -5,6 +5,7 @@ import { AssetRegistryPort } from '../ports/asset-registry.port';
 import { QuoteProviderPort } from '../ports/quote-provider.port';
 import { SwapQuoteCommand } from '../../domain/models/swap-quote-request';
 import { SwapValidationError } from '../../domain/errors/swap-validation.error';
+import { ProductEventsService } from '../../../../api/product-events/product-events.service';
 
 describe('PrepareSwapUseCase', () => {
     const command: SwapQuoteCommand = {
@@ -33,8 +34,12 @@ describe('PrepareSwapUseCase', () => {
         get: jest.fn((key: string) => (key === 'SWAP_MAX_SLIPPAGE_BPS' ? 1000 : undefined)),
     } as unknown as ConfigService;
 
+    const productEvents = {
+        recordBestEffort: jest.fn().mockResolvedValue(undefined),
+    } as unknown as ProductEventsService;
+
     const createUseCase = (providers: QuoteProviderPort[]) =>
-        new PrepareSwapUseCase(assetRegistry, providers, configService);
+        new PrepareSwapUseCase(assetRegistry, providers, configService, productEvents);
 
     beforeEach(() => {
         jest.clearAllMocks();

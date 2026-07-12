@@ -12,6 +12,7 @@ import { AuthAuditEvent } from '../../database/models/auth-audit-event.model';
 import { AppUser } from '../../database/models/app-user.model';
 import { WalletLink } from '../../database/models/wallet-link.model';
 import { SEQUELIZE } from '../../database/database.tokens';
+import { ProductEventsService } from '../product-events/product-events.service';
 import { PrivySessionDto, PrivyWalletDto } from './dto/privy-session.dto';
 import { BindWalletDto, WalletSource, WalletType } from './dto/wallet-binding.dto';
 import { PrivyTokenService } from './privy-token.service';
@@ -26,6 +27,7 @@ export class PrivyAuthService {
         @Inject(SEQUELIZE) private readonly sequelize: Sequelize,
         private readonly tokenService: PrivyTokenService,
         private readonly walletOwnership: PrivyWalletOwnershipService,
+        private readonly productEvents: ProductEventsService,
     ) {}
 
     async authenticateToken(accessToken: string): Promise<AuthenticatedUser> {
@@ -114,6 +116,29 @@ export class PrivyAuthService {
                 },
                 { transaction },
             );
+            await this.productEvents.recordBestEffort({
+                eventName: created ? 'account.created' : 'account.login',
+                source: 'backend',
+                status: 'succeeded',
+                userId: user.id,
+                sessionId: claims.sid,
+                metadata: {
+                    authMethod: body.authMethod,
+                    walletAttached: Boolean(body.wallet),
+                },
+            });
+            if (body.authMethod === 'passkey') {
+                await this.productEvents.recordBestEffort({
+                    eventName: 'account.login.passkey',
+                    source: 'backend',
+                    status: 'succeeded',
+                    userId: user.id,
+                    sessionId: claims.sid,
+                    metadata: {
+                        accountCreated: created,
+                    },
+                });
+            }
 
             const wallets = await WalletLink.findAll({
                 where: { userId: user.id, status: 'active' },
@@ -157,6 +182,13 @@ export class PrivyAuthService {
                 },
                 { transaction },
             );
+            await this.productEvents.recordBestEffort({
+                eventName: 'account.passkey.enabled',
+                source: 'backend',
+                status: 'succeeded',
+                userId: appUser.id,
+                sessionId: user.sessionId,
+            });
 
             const wallets = await WalletLink.findAll({
                 where: { userId: appUser.id, status: 'active' },
@@ -212,6 +244,17 @@ export class PrivyAuthService {
                 },
                 { transaction },
             );
+            await this.productEvents.recordBestEffort({
+                eventName: 'wallet.bind',
+                source: 'backend',
+                status: 'succeeded',
+                userId: user.id,
+                metadata: {
+                    chainType: wallet.chainType,
+                    walletType: wallet.walletType,
+                    source: wallet.source,
+                },
+            });
 
             return wallet;
         });

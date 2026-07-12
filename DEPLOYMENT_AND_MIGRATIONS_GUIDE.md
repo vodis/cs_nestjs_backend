@@ -50,9 +50,9 @@ Pattern:
 For this service's production image, inspect and apply migrations explicitly:
 
 ```sh
-npm run db:migrate:status
-npm run db:migrate
-npm run db:smoke
+pnpm run db:migrate:status
+pnpm run db:migrate
+pnpm run db:smoke
 ```
 
 Run these commands as a one-shot job from the exact candidate image, with the

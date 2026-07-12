@@ -30,6 +30,18 @@ Use **this file** as the single anchor when starting a new task or onboarding an
   commit there, push it, and open the PR back to `develop`.
 - Do not open service task-branch PRs directly to `main`/`master`.
 
+## Package Manager Policy
+
+- Use `pnpm` for dependency installation, lockfile generation, audits, and
+  security-update work.
+- Do not use `npm install`, `npm audit fix`, or mixed package-manager lockfile
+  changes unless the task explicitly requires npm compatibility.
+- Keep dependency/security PRs on a clean branch from `develop` and avoid mixing
+  them with feature or bug-fix changes.
+- Prefer non-breaking dependency updates first. Treat forced/major upgrades as a
+  separate migration unless the user explicitly asks to include them and the full
+  test/build/lint suite passes.
+
 ## Mission
 
 This repository is the first-class backend gateway for our financial platform with crypto exchange capabilities:

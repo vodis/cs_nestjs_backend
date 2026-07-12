@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AssetsModule } from '../../api/assets/assets.module';
+import { ProductEventsModule } from '../../api/product-events/product-events.module';
 import { OneClickApiModule } from '../../http-clients/one-click-api/one-click-api.module';
 import { SolverRelayApiModule } from '../../http-clients/solver-relay-api/solver-relay-api.module';
 import { ASSET_REGISTRY_PORT } from './application/ports/asset-registry.port';
@@ -11,7 +12,7 @@ import { SolverRelayQuoteProvider } from './infrastructure/providers/solver-rela
 import { SwapsController } from './presentation/swaps.controller';
 
 @Module({
-    imports: [AssetsModule, OneClickApiModule, SolverRelayApiModule],
+    imports: [AssetsModule, OneClickApiModule, SolverRelayApiModule, ProductEventsModule],
     controllers: [SwapsController],
     providers: [
         PrepareSwapUseCase,

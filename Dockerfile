@@ -3,20 +3,23 @@
 
 FROM node:20-alpine AS deps
 WORKDIR /code
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --prod
 
 FROM node:20-alpine AS build
 WORKDIR /code
-COPY package.json package-lock.json ./
-RUN npm ci
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 FROM node:20-alpine AS production
 WORKDIR /code
 ENV NODE_ENV=production
 ENV PORT=3000
+RUN corepack enable
 
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nestjs
@@ -25,6 +28,7 @@ COPY --from=deps --chown=nestjs:nodejs /code/node_modules ./node_modules
 COPY --from=build --chown=nestjs:nodejs /code/dist ./dist
 COPY --chown=nestjs:nodejs db ./db
 COPY --chown=nestjs:nodejs package.json ./
+COPY --chown=nestjs:nodejs pnpm-lock.yaml ./
 
 RUN test -f db/migrations/20260619000100-create-auth-onboarding-tables.js \
   && ./node_modules/.bin/sequelize-cli --version

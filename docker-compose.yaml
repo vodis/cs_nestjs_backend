@@ -29,7 +29,7 @@ services:
     volumes:
       - './src:/code/src'
       - './package.json:/code/package.json'
-      - './package-lock.json:/code/package-lock.json'
+      - './pnpm-lock.yaml:/code/pnpm-lock.yaml'
     ports:
       - ${SERVER_PORT}:${SERVER_PORT}
     depends_on:

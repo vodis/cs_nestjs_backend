@@ -26,7 +26,9 @@ export class ProductEventsService {
         try {
             await this.record(input);
         } catch (error) {
-            this.logger.warn(`product telemetry write failed: ${error instanceof Error ? error.message : String(error)}`);
+            this.logger.warn(
+                `product telemetry write failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
         }
     }
 

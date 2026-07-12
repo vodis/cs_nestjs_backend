@@ -1,14 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-    IsIn,
-    IsISO8601,
-    IsObject,
-    IsOptional,
-    IsString,
-    IsUUID,
-    MaxLength,
-    ValidateNested,
-} from 'class-validator';
+import { IsIn, IsISO8601, IsObject, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
 
 export const PRODUCT_EVENT_SOURCES = ['backend', 'mfe-wallets', 'app-client'] as const;
 export const PRODUCT_EVENT_STATUSES = ['attempted', 'succeeded', 'failed', 'cancelled'] as const;

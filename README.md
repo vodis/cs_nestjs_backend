@@ -7,18 +7,18 @@ Start with [AGENT_GUIDE.md](./AGENT_GUIDE.md) for architecture policy and [docs/
 ## Local Setup
 
 ```bash
-npm install
+pnpm install
 cp .env.example .env
-npm run start:dev
+pnpm run start:dev
 ```
 
 ## Checks
 
 ```bash
-npm test
-npm run test:e2e
-npm run lint
-npm run build
+pnpm test
+pnpm run test:e2e
+pnpm run lint
+pnpm run build
 ```
 
 ## Runtime

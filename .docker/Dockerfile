@@ -3,11 +3,12 @@ FROM nginx:latest AS base
 RUN rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/
 
-FROM node:16-alpine as base
+FROM node:20-alpine as base
 
 WORKDIR "/code"
 COPY . .
 
+RUN corepack enable
 RUN apk update && apk add openrc busybox-openrc busybox-extras-openrc busybox-mdev-openrc supervisor --no-cache
 RUN mkdir /run/openrc/ && touch /run/openrc/softlevel
 
@@ -26,18 +27,18 @@ RUN chmod a+x /code/docker_scripts/run* \
     && cp ./docker_scripts/runProcessOperationsFromQueueDaemon /etc/periodic/2min/
 
 FROM base AS dependencies
-RUN npm ci --only=production
+RUN pnpm install --frozen-lockfile --prod
 RUN cp -R node_modules prod_node_modules
-RUN npm i
+RUN pnpm install --frozen-lockfile
 
 FROM base AS build
 COPY --from=dependencies code/node_modules ./node_modules
-RUN npm run build
+RUN pnpm run build
 
 FROM base as develop
 COPY --from=dependencies code/node_modules ./node_modules
 COPY --from=build code/dist ./dist
-CMD ["npm", "run", "start:dev"]
+CMD ["pnpm", "run", "start:dev"]
 
 FROM base AS release
 COPY --from=dependencies code/prod_node_modules ./node_modules

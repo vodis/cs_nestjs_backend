@@ -21,26 +21,29 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Enable pnpm
+        run: corepack enable
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build check
-        run: npm run build
+        run: pnpm run build
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: pnpm exec tsc --noEmit
 
       - name: Format check
-        run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
+        run: pnpm exec prettier --check "src/**/*.ts" "test/**/*.ts"
 
       - name: Lint check
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Detect migration changes
         id: migration_changes
@@ -106,4 +109,4 @@ jobs:
           echo "Migration safety check passed."
 
       - name: Unit tests
-        run: npm run test -- --ci --runInBand
+        run: pnpm run test --ci --runInBand

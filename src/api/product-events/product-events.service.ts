@@ -7,6 +7,28 @@ export type ProductEventInput = Omit<RecordProductEventDto, 'occurredAt'> & {
     occurredAt?: Date | string;
 };
 
+export type MetricRatio = {
+    numerator: number;
+    denominator: number;
+    percent: number | null;
+};
+
+export type DailyProductMetricsSummary = {
+    window: {
+        from: string;
+        to: string;
+    };
+    headline: {
+        accountsCreated: number;
+        swapQuoteToConfirmed: MetricRatio;
+        depositSuccess: MetricRatio;
+        withdrawalSuccess: MetricRatio;
+        walletConnectFailure: MetricRatio;
+        passkeyLoginRealFailure: MetricRatio;
+        passkeyLoginRawFailure: MetricRatio;
+    };
+};
+
 @Injectable()
 export class ProductEventsService {
     private readonly logger = new Logger(ProductEventsService.name);
@@ -117,28 +139,6 @@ export class ProductEventsService {
         };
     }
 }
-
-export type MetricRatio = {
-    numerator: number;
-    denominator: number;
-    percent: number | null;
-};
-
-export type DailyProductMetricsSummary = {
-    window: {
-        from: string;
-        to: string;
-    };
-    headline: {
-        accountsCreated: number;
-        swapQuoteToConfirmed: MetricRatio;
-        depositSuccess: MetricRatio;
-        withdrawalSuccess: MetricRatio;
-        walletConnectFailure: MetricRatio;
-        passkeyLoginRealFailure: MetricRatio;
-        passkeyLoginRawFailure: MetricRatio;
-    };
-};
 
 function ratio(numerator: number, denominator: number): MetricRatio {
     return {

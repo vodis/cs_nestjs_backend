@@ -109,4 +109,4 @@ jobs:
           echo "Migration safety check passed."
 
       - name: Unit tests
-        run: pnpm run test -- --ci --runInBand
+        run: pnpm run test --ci --runInBand

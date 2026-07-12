@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../database/database.module';
+import { ProductMetricsKeyGuard } from './product-metrics-key.guard';
 import { ProductEventsController } from './product-events.controller';
 import { ProductEventsService } from './product-events.service';
 
 @Module({
     imports: [DatabaseModule],
     controllers: [ProductEventsController],
-    providers: [ProductEventsService],
+    providers: [ProductEventsService, ProductMetricsKeyGuard],
     exports: [ProductEventsService],
 })
 export class ProductEventsModule {}

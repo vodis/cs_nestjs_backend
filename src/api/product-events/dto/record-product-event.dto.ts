@@ -1,8 +1,20 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsISO8601, IsObject, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
+import {
+    ArrayMaxSize,
+    IsArray,
+    IsIn,
+    IsISO8601,
+    IsObject,
+    IsOptional,
+    IsString,
+    IsUUID,
+    MaxLength,
+    ValidateNested,
+} from 'class-validator';
 
 export const PRODUCT_EVENT_SOURCES = ['backend', 'mfe-wallets', 'app-client'] as const;
 export const PRODUCT_EVENT_STATUSES = ['attempted', 'succeeded', 'failed', 'cancelled'] as const;
+export const PRODUCT_EVENTS_BATCH_LIMIT = 50;
 
 export class RecordProductEventDto {
     @IsString()
@@ -49,6 +61,8 @@ export class RecordProductEventDto {
 }
 
 export class RecordProductEventsDto {
+    @IsArray()
+    @ArrayMaxSize(PRODUCT_EVENTS_BATCH_LIMIT)
     @ValidateNested({ each: true })
     @Type(() => RecordProductEventDto)
     events: RecordProductEventDto[];

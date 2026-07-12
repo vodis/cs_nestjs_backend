@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { ProductMetricsKeyGuard } from './product-metrics-key.guard';
 import { RecordProductEventDto, RecordProductEventsDto } from './dto/record-product-event.dto';
 import { ProductEventsService } from './product-events.service';
 
@@ -16,11 +17,12 @@ export class ProductEventsController {
     @Post('batch')
     @HttpCode(202)
     async recordBatch(@Body() body: RecordProductEventsDto): Promise<{ accepted: true; count: number }> {
-        await this.productEvents.recordMany(body.events ?? []);
-        return { accepted: true, count: body.events?.length ?? 0 };
+        const count = await this.productEvents.recordMany(body.events);
+        return { accepted: true, count };
     }
 
     @Get('daily-summary')
+    @UseGuards(ProductMetricsKeyGuard)
     async dailySummary() {
         return this.productEvents.dailySummary();
     }

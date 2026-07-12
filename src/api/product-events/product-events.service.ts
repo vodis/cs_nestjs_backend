@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Op } from 'sequelize';
 import { ProductEvent } from '../../database/models/product-event.model';
-import { RecordProductEventDto } from './dto/record-product-event.dto';
+import { PRODUCT_EVENTS_BATCH_LIMIT, RecordProductEventDto } from './dto/record-product-event.dto';
 
 export type ProductEventInput = Omit<RecordProductEventDto, 'occurredAt'> & {
     occurredAt?: Date | string;
@@ -37,11 +37,17 @@ export class ProductEventsService {
         await ProductEvent.create(this.toModelInput(input));
     }
 
-    async recordMany(inputs: ProductEventInput[]): Promise<void> {
+    async recordMany(inputs: ProductEventInput[]): Promise<number> {
         if (inputs.length === 0) {
-            return;
+            return 0;
         }
-        await ProductEvent.bulkCreate(inputs.slice(0, 50).map((input) => this.toModelInput(input)));
+        if (inputs.length > PRODUCT_EVENTS_BATCH_LIMIT) {
+            throw new BadRequestException(
+                `Product event batches may include at most ${PRODUCT_EVENTS_BATCH_LIMIT} events`,
+            );
+        }
+        await ProductEvent.bulkCreate(inputs.map((input) => this.toModelInput(input)));
+        return inputs.length;
     }
 
     async recordBestEffort(input: ProductEventInput): Promise<void> {

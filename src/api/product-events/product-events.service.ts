@@ -68,6 +68,14 @@ export class ProductEventsService {
         const accountsCreated = await this.count('account.created', 'succeeded', from, to);
         const passkeySuccess = this.value(counts, 'account.login.passkey', 'succeeded', 'backend');
         const passkeyFailure = this.value(counts, 'account.login.passkey', 'failed', 'mfe-wallets');
+        const passkeySignupPolicyFailure = this.value(
+            counts,
+            'account.login.passkey',
+            'failed',
+            'mfe-wallets',
+            'signup_with_passkey_not_allowed',
+        );
+        const passkeyRealFailure = Math.max(0, passkeyFailure - passkeySignupPolicyFailure);
         const passkeyRawFailure =
             passkeyFailure + this.value(counts, 'account.login.passkey', 'cancelled', 'mfe-wallets');
         const passkeyTotal = passkeySuccess + passkeyRawFailure;
@@ -92,7 +100,7 @@ export class ProductEventsService {
                 depositSuccess: ratio(depositSuccess, depositStarted),
                 withdrawalSuccess: ratio(withdrawalSuccess, withdrawalStarted),
                 walletConnectFailure: ratio(walletConnectFailure, walletConnectTotal),
-                passkeyLoginRealFailure: ratio(passkeyFailure, passkeyTotal),
+                passkeyLoginRealFailure: ratio(passkeyRealFailure, passkeyTotal),
                 passkeyLoginRawFailure: ratio(passkeyRawFailure, passkeyTotal),
             },
         };
@@ -114,20 +122,43 @@ export class ProductEventsService {
                 'eventName',
                 'source',
                 'status',
+                'reasonCode',
                 [ProductEvent.sequelize!.fn('COUNT', ProductEvent.sequelize!.col('id')), 'count'],
             ],
             where: { createdAt: { [Op.gte]: from, [Op.lt]: to } },
-            group: ['eventName', 'source', 'status'],
+            group: ['eventName', 'source', 'status', 'reasonCode'],
             raw: true,
-        })) as unknown as Array<{ eventName: string; source: string; status: string; count: string | number }>;
+        })) as unknown as Array<{
+            eventName: string;
+            source: string;
+            status: string;
+            reasonCode: string | null;
+            count: string | number;
+        }>;
 
         const out = new Map<string, number>();
-        rows.forEach((row) => out.set(`${row.eventName}:${row.source}:${row.status}`, Number(row.count)));
+        rows.forEach((row) => {
+            const aggregateKey = this.key(row.eventName, row.source, row.status);
+            out.set(aggregateKey, (out.get(aggregateKey) ?? 0) + Number(row.count));
+            if (row.reasonCode) {
+                out.set(this.key(row.eventName, row.source, row.status, row.reasonCode), Number(row.count));
+            }
+        });
         return out;
     }
 
-    private value(counts: Map<string, number>, eventName: string, status: string, source: string): number {
-        return counts.get(`${eventName}:${source}:${status}`) ?? 0;
+    private value(
+        counts: Map<string, number>,
+        eventName: string,
+        status: string,
+        source: string,
+        reasonCode?: string,
+    ): number {
+        return counts.get(this.key(eventName, source, status, reasonCode)) ?? 0;
+    }
+
+    private key(eventName: string, source: string, status: string, reasonCode?: string): string {
+        return reasonCode ? `${eventName}:${source}:${status}:${reasonCode}` : `${eventName}:${source}:${status}`;
     }
 
     private toModelInput(input: ProductEventInput) {

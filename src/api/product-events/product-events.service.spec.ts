@@ -38,4 +38,51 @@ describe('ProductEventsService', () => {
         await expect(service.recordMany(events)).rejects.toBeInstanceOf(BadRequestException);
         expect(bulkCreate).not.toHaveBeenCalled();
     });
+
+    it('excludes passkey signup policy failures from real passkey login failures', async () => {
+        Object.defineProperty(ProductEvent, 'sequelize', {
+            configurable: true,
+            value: {
+                fn: jest.fn((name: string, value: unknown) => ({ name, value })),
+                col: jest.fn((name: string) => name),
+            },
+        });
+        jest.spyOn(ProductEvent, 'count').mockResolvedValue(0);
+        jest.spyOn(ProductEvent, 'findAll').mockResolvedValue([
+            {
+                eventName: 'account.login.passkey',
+                source: 'backend',
+                status: 'succeeded',
+                reasonCode: null,
+                count: '2',
+            },
+            {
+                eventName: 'account.login.passkey',
+                source: 'mfe-wallets',
+                status: 'failed',
+                reasonCode: 'invalid_authenticator_response',
+                count: '1',
+            },
+            {
+                eventName: 'account.login.passkey',
+                source: 'mfe-wallets',
+                status: 'failed',
+                reasonCode: 'signup_with_passkey_not_allowed',
+                count: '1',
+            },
+        ] as never);
+
+        const summary = await service.dailySummary(new Date('2026-07-13T12:00:00.000Z'));
+
+        expect(summary.headline.passkeyLoginRealFailure).toEqual({
+            numerator: 1,
+            denominator: 4,
+            percent: 25,
+        });
+        expect(summary.headline.passkeyLoginRawFailure).toEqual({
+            numerator: 2,
+            denominator: 4,
+            percent: 50,
+        });
+    });
 });

@@ -39,6 +39,37 @@ describe('ProductEventsService', () => {
         expect(bulkCreate).not.toHaveBeenCalled();
     });
 
+    it('logs sanitized operational auth telemetry failures after persistence', async () => {
+        jest.spyOn(ProductEvent, 'create').mockResolvedValue({} as ProductEvent);
+        const warn = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+        await service.record({
+            eventName: 'account.login.passkey',
+            source: 'mfe-wallets',
+            status: 'failed',
+            reasonCode: 'invalid_authenticator_response',
+            metadata: { message: 'Invalid authenticator response', token: 'secret-token' },
+        });
+
+        expect(warn).toHaveBeenCalledWith(
+            'product telemetry auth signal event=account.login.passkey source=mfe-wallets status=failed reason=invalid_authenticator_response message=Invalid authenticator response',
+        );
+        expect(warn.mock.calls[0][0]).not.toContain('secret-token');
+    });
+
+    it('does not log successful product telemetry as an operational auth signal', async () => {
+        jest.spyOn(ProductEvent, 'create').mockResolvedValue({} as ProductEvent);
+        const warn = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+        await service.record({
+            eventName: 'account.login.passkey',
+            source: 'backend',
+            status: 'succeeded',
+        });
+
+        expect(warn).not.toHaveBeenCalled();
+    });
+
     it('excludes passkey signup policy failures from real passkey login failures', async () => {
         Object.defineProperty(ProductEvent, 'sequelize', {
             configurable: true,

@@ -34,7 +34,9 @@ export class ProductEventsService {
     private readonly logger = new Logger(ProductEventsService.name);
 
     async record(input: ProductEventInput): Promise<void> {
-        await ProductEvent.create(this.toModelInput(input));
+        const modelInput = this.toModelInput(input);
+        await ProductEvent.create(modelInput);
+        this.logOperationalAuthSignal(modelInput);
     }
 
     async recordMany(inputs: ProductEventInput[]): Promise<number> {
@@ -46,7 +48,9 @@ export class ProductEventsService {
                 `Product event batches may include at most ${PRODUCT_EVENTS_BATCH_LIMIT} events`,
             );
         }
-        await ProductEvent.bulkCreate(inputs.map((input) => this.toModelInput(input)));
+        const modelInputs = inputs.map((input) => this.toModelInput(input));
+        await ProductEvent.bulkCreate(modelInputs);
+        modelInputs.forEach((input) => this.logOperationalAuthSignal(input));
         return inputs.length;
     }
 
@@ -175,6 +179,33 @@ export class ProductEventsService {
             createdAt: input.occurredAt ? new Date(input.occurredAt) : new Date(),
         };
     }
+
+    private logOperationalAuthSignal(input: ReturnType<ProductEventsService['toModelInput']>): void {
+        if (!isOperationalAuthSignal(input.eventName, input.status)) {
+            return;
+        }
+
+        const message = typeof input.metadata.message === 'string' ? input.metadata.message.slice(0, 160) : undefined;
+        this.logger.warn(
+            [
+                'product telemetry auth signal',
+                `event=${input.eventName}`,
+                `source=${input.source}`,
+                `status=${input.status}`,
+                `reason=${input.reasonCode ?? 'none'}`,
+                message ? `message=${message}` : undefined,
+            ]
+                .filter(Boolean)
+                .join(' '),
+        );
+    }
+}
+
+function isOperationalAuthSignal(eventName: string, status: string): boolean {
+    return (
+        (status === 'failed' || status === 'cancelled') &&
+        (eventName === 'auth.login' || eventName === 'account.login.passkey' || eventName === 'account.passkey.link')
+    );
 }
 
 function ratio(numerator: number, denominator: number): MetricRatio {

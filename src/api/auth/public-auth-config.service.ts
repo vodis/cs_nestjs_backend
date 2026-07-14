@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-const SUPPORTED_LOGIN_METHODS = ['email', 'google', 'apple', 'passkey'] as const;
-const DEFAULT_LOGIN_METHODS: PublicAuthLoginMethod[] = ['email', 'google', 'apple'];
+const PUBLIC_AUTH_LOGIN_METHODS = ['email', 'google', 'apple', 'passkey'] as const;
 
-export type PublicAuthLoginMethod = (typeof SUPPORTED_LOGIN_METHODS)[number];
+export type PublicAuthLoginMethod = (typeof PUBLIC_AUTH_LOGIN_METHODS)[number];
+
+const DEFAULT_PUBLIC_AUTH_LOGIN_METHODS: PublicAuthLoginMethod[] = ['email', 'google', 'apple'];
 
 export type PublicAuthConfig = {
     version: 1;
@@ -46,8 +47,7 @@ export class PublicAuthConfigService {
             privyAppId: privyAppId ?? null,
             loginMethods,
             passkeyLoginEnabled,
-            passkeySignupEnabled:
-                passkeyLoginEnabled && this.booleanFlag('PRIVY_PASSKEY_SIGNUP_ENABLED', false),
+            passkeySignupEnabled: passkeyLoginEnabled && this.booleanFlag('PRIVY_PASSKEY_SIGNUP_ENABLED', false),
             passkeyLinkEnabled,
             walletOnboarding: {
                 embeddedWallet:
@@ -62,7 +62,7 @@ export class PublicAuthConfigService {
     private loginMethods(): PublicAuthLoginMethod[] {
         const configured = this.optionalString('PRIVY_LOGIN_METHODS');
         if (!configured) {
-            return [...DEFAULT_LOGIN_METHODS];
+            return [...DEFAULT_PUBLIC_AUTH_LOGIN_METHODS];
         }
 
         const configuredMethods = configured
@@ -70,7 +70,7 @@ export class PublicAuthConfigService {
             .map((method) => method.trim().toLowerCase())
             .filter(isSupportedLoginMethod);
 
-        return configuredMethods.length > 0 ? configuredMethods : [...DEFAULT_LOGIN_METHODS];
+        return configuredMethods.length > 0 ? configuredMethods : [...DEFAULT_PUBLIC_AUTH_LOGIN_METHODS];
     }
 
     private booleanFlag(name: string, defaultValue: boolean): boolean {
@@ -89,5 +89,5 @@ export class PublicAuthConfigService {
 }
 
 function isSupportedLoginMethod(value: string): value is PublicAuthLoginMethod {
-    return SUPPORTED_LOGIN_METHODS.some((method) => method === value);
+    return PUBLIC_AUTH_LOGIN_METHODS.some((method) => method === value);
 }

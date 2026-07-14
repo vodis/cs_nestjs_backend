@@ -131,6 +131,21 @@ describe('PrivyAuthService account lifecycle', () => {
         expect(user.passkeyEnabled).toBe(true);
     });
 
+    it('repairs passkey-enabled state after a successful passkey login', async () => {
+        const user = await AppUser.create({
+            privyUserId: 'did:privy:user-1',
+            status: 'active',
+            passkeyEnabled: false,
+        });
+
+        const result = await service.upsertSession('token', { authMethod: 'passkey' });
+
+        await user.reload();
+        expect(result.user.id).toBe(user.id);
+        expect(result.user.passkeyEnabled).toBe(true);
+        expect(user.passkeyEnabled).toBe(true);
+    });
+
     it('marks passkey enabled for an active account and records an audit event', async () => {
         const user = await AppUser.create({
             privyUserId: 'did:privy:user-1',

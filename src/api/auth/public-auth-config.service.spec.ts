@@ -68,17 +68,16 @@ describe('PublicAuthConfigService', () => {
         });
     });
 
-    it('keeps passkey signup disabled unless explicitly enabled with passkey login', () => {
+    it('keeps passkey signup disabled even when passkey login is configured', () => {
         expect(
             service({
                 PRIVY_APP_ID: 'privy-app-id',
                 PRIVY_LOGIN_METHODS: 'email, passkey',
-                PRIVY_PASSKEY_SIGNUP_ENABLED: 'true',
             }).getConfig(),
         ).toMatchObject({
             loginMethods: ['email', 'passkey'],
             passkeyLoginEnabled: true,
-            passkeySignupEnabled: true,
+            passkeySignupEnabled: false,
             passkeyLinkEnabled: true,
         });
     });

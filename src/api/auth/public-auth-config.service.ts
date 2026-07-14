@@ -47,7 +47,7 @@ export class PublicAuthConfigService {
             privyAppId: privyAppId ?? null,
             loginMethods,
             passkeyLoginEnabled,
-            passkeySignupEnabled: passkeyLoginEnabled && this.booleanFlag('PRIVY_PASSKEY_SIGNUP_ENABLED', false),
+            passkeySignupEnabled: false,
             passkeyLinkEnabled,
             walletOnboarding: {
                 embeddedWallet:

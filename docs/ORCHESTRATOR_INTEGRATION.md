@@ -87,10 +87,11 @@ enable a passkey on the authenticated account. Keep
 configuration has been verified for the deployed host and passkey login is
 ready to be offered for already-enrolled accounts.
 
-Enabling passkey login requires `passkey` in `PRIVY_LOGIN_METHODS` and
-`PRIVY_PASSKEY_LOGIN_ENABLED` not set to false. `PRIVY_PASSKEY_LINK_ENABLED`
+Enabling passkey login requires `passkey` in `PRIVY_LOGIN_METHODS`.
+`PRIVY_PASSKEY_LOGIN_ENABLED` is an emergency kill switch for passkey login
+when `PRIVY_LOGIN_METHODS` already includes `passkey`. `PRIVY_PASSKEY_LINK_ENABLED`
 controls authenticated account passkey enrollment independently from login
-methods. `PRIVY_PASSKEY_SIGNUP_ENABLED` remains false by default so passkey
+methods. Passkey signup is not configurable and remains disabled so passkey
 authentication does not silently create a new account.
 
 ## Privy wallet ownership boundary

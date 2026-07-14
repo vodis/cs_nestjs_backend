@@ -13,6 +13,9 @@ describe('PublicAuthConfigService', () => {
             provider: 'privy',
             privyAppId: null,
             loginMethods: [],
+            passkeyLoginEnabled: false,
+            passkeySignupEnabled: false,
+            passkeyLinkEnabled: false,
             walletOnboarding: {
                 embeddedWallet: false,
                 externalWalletBinding: false,
@@ -26,7 +29,10 @@ describe('PublicAuthConfigService', () => {
             enabled: true,
             provider: 'privy',
             privyAppId: 'privy-app-id',
-            loginMethods: ['email', 'google', 'apple', 'passkey'],
+            loginMethods: ['email', 'google', 'apple'],
+            passkeyLoginEnabled: false,
+            passkeySignupEnabled: false,
+            passkeyLinkEnabled: true,
             walletOnboarding: {
                 embeddedWallet: true,
                 externalWalletBinding: false,
@@ -45,6 +51,45 @@ describe('PublicAuthConfigService', () => {
                 PRIVY_LOGIN_METHODS: 'email, google, unsupported, passkey',
             }).getConfig().loginMethods,
         ).toEqual(['email', 'google', 'passkey']);
+    });
+
+    it('can disable configured passkey login without disabling passkey linking', () => {
+        expect(
+            service({
+                PRIVY_APP_ID: 'privy-app-id',
+                PRIVY_LOGIN_METHODS: 'email, passkey',
+                PRIVY_PASSKEY_LOGIN_ENABLED: 'false',
+            }).getConfig(),
+        ).toMatchObject({
+            loginMethods: ['email'],
+            passkeyLoginEnabled: false,
+            passkeySignupEnabled: false,
+            passkeyLinkEnabled: true,
+        });
+    });
+
+    it('keeps passkey signup disabled unless explicitly enabled with passkey login', () => {
+        expect(
+            service({
+                PRIVY_APP_ID: 'privy-app-id',
+                PRIVY_LOGIN_METHODS: 'email, passkey',
+                PRIVY_PASSKEY_SIGNUP_ENABLED: 'true',
+            }).getConfig(),
+        ).toMatchObject({
+            loginMethods: ['email', 'passkey'],
+            passkeyLoginEnabled: true,
+            passkeySignupEnabled: true,
+            passkeyLinkEnabled: true,
+        });
+    });
+
+    it('supports disabling passkey linking independently from login methods', () => {
+        expect(
+            service({
+                PRIVY_APP_ID: 'privy-app-id',
+                PRIVY_PASSKEY_LINK_ENABLED: 'false',
+            }).getConfig().passkeyLinkEnabled,
+        ).toBe(false);
     });
 
     it('supports disabling wallet onboarding capabilities independently', () => {

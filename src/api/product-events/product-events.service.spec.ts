@@ -52,7 +52,8 @@ describe('ProductEventsService', () => {
         });
 
         expect(warn).toHaveBeenCalledWith(
-            'product telemetry auth signal event=account.login.passkey source=mfe-wallets status=failed reason=invalid_authenticator_response message=Invalid authenticator response',
+            'product telemetry auth signal event=account.login.passkey source=mfe-wallets ' +
+                'status=failed reason=invalid_authenticator_response message=Invalid authenticator response',
         );
         expect(warn.mock.calls[0][0]).not.toContain('secret-token');
     });

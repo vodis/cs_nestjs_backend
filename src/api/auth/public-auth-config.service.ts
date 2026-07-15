@@ -5,7 +5,7 @@ const PUBLIC_AUTH_LOGIN_METHODS = ['email', 'google', 'apple', 'passkey'] as con
 
 export type PublicAuthLoginMethod = (typeof PUBLIC_AUTH_LOGIN_METHODS)[number];
 
-const DEFAULT_PUBLIC_AUTH_LOGIN_METHODS: PublicAuthLoginMethod[] = ['email', 'google', 'apple'];
+const DEFAULT_PUBLIC_AUTH_LOGIN_METHODS: PublicAuthLoginMethod[] = ['email', 'google', 'apple', 'passkey'];
 
 export type PublicAuthConfig = {
     version: 1;

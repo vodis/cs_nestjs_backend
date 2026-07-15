@@ -82,17 +82,16 @@ Provider/config vars are documented in [.env.example](../.env.example). `API_SIG
 
 Passkey enrollment and passkey login are separate capabilities. Users first
 authenticate with an existing CCO method such as email, Google, or Apple, then
-enable a passkey on the authenticated account. Keep
-`PRIVY_LOGIN_METHODS=email,google,apple` unless passkey WebAuthn relying-party
-configuration has been verified for the deployed host and passkey login is
-ready to be offered for already-enrolled accounts.
+enable a passkey on the authenticated account. The backend default public auth
+config now includes passkey login when Privy is enabled.
 
-Enabling passkey login requires `passkey` in `PRIVY_LOGIN_METHODS`.
-`PRIVY_PASSKEY_LOGIN_ENABLED` is an emergency kill switch for passkey login
-when `PRIVY_LOGIN_METHODS` already includes `passkey`. `PRIVY_PASSKEY_LINK_ENABLED`
-controls authenticated account passkey enrollment independently from login
-methods. Passkey signup is not configurable and remains disabled so passkey
-authentication does not silently create a new account.
+Enabling passkey login requires `passkey` in `PRIVY_LOGIN_METHODS` (included in
+the backend default and `.env.example`). `PRIVY_PASSKEY_LOGIN_ENABLED` is an
+emergency kill switch for passkey login when `PRIVY_LOGIN_METHODS` already
+includes `passkey`. `PRIVY_PASSKEY_LINK_ENABLED` controls authenticated account
+passkey enrollment independently from login methods. Passkey signup is not
+configurable and remains disabled so passkey authentication does not silently
+create a new account.
 
 ## Privy wallet ownership boundary
 

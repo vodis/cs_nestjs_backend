@@ -29,8 +29,8 @@ describe('PublicAuthConfigService', () => {
             enabled: true,
             provider: 'privy',
             privyAppId: 'privy-app-id',
-            loginMethods: ['email', 'google', 'apple'],
-            passkeyLoginEnabled: false,
+            loginMethods: ['email', 'google', 'apple', 'passkey'],
+            passkeyLoginEnabled: true,
             passkeySignupEnabled: false,
             passkeyLinkEnabled: true,
             walletOnboarding: {

@@ -59,7 +59,6 @@ export class PrivyAuthService {
 
         return this.sequelize.transaction(async (transaction) => {
             const now = new Date();
-            const passkeyAuthenticated = body.authMethod === 'passkey';
             let user = await AppUser.findOne({ where: { privyUserId: claims.sub }, transaction });
 
             if (user?.status === 'deleted') {
@@ -81,7 +80,7 @@ export class PrivyAuthService {
                     privyUserId: claims.sub,
                     email: body.email || claims.email || null,
                     authMethod: body.authMethod || null,
-                    passkeyEnabled: passkeyAuthenticated,
+                    passkeyEnabled: false,
                     status: 'active',
                 },
                 transaction,
@@ -93,7 +92,7 @@ export class PrivyAuthService {
                     email: body.email || claims.email || user.email || null,
                     authMethod: body.authMethod || user.authMethod || null,
                     status: 'active',
-                    passkeyEnabled: passkeyAuthenticated || user.passkeyEnabled,
+                    passkeyEnabled: user.passkeyEnabled,
                     deletedAt: null,
                     deletionRequestedAt: null,
                     deletionAvailableAt: null,
@@ -129,18 +128,6 @@ export class PrivyAuthService {
                     walletAttached: Boolean(body.wallet),
                 },
             });
-            if (passkeyAuthenticated) {
-                await this.productEvents.recordBestEffort({
-                    eventName: 'account.login.passkey',
-                    source: 'backend',
-                    status: 'succeeded',
-                    userId: user.id,
-                    sessionId: claims.sid,
-                    metadata: {
-                        accountCreated: created,
-                    },
-                });
-            }
 
             const wallets = await WalletLink.findAll({
                 where: { userId: user.id, status: 'active' },

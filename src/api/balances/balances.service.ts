@@ -44,7 +44,7 @@ export class BalancesService {
 
         const cachedBalances = entries.map((entry) => this.toDto(entry));
         const cachedKeys = new Set(cachedBalances.map((balance) => `${balance.walletId}|${balance.assetId}`));
-        const refreshedNearBalances = await this.getMissingNearBalances(user.id, wallets, asset, cachedKeys);
+        const refreshedNearBalances = await this.refreshUncachedNearNativeBalances(user.id, wallets, asset, cachedKeys);
 
         return this.toResponse([...refreshedNearBalances, ...cachedBalances], now, refreshedNearBalances.length > 0);
     }
@@ -106,7 +106,7 @@ export class BalancesService {
         };
     }
 
-    private async getMissingNearBalances(
+    private async refreshUncachedNearNativeBalances(
         userId: string,
         wallets: WalletLink[],
         asset: AssetDto | undefined,

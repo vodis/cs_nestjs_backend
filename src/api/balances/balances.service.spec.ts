@@ -139,6 +139,52 @@ describe('BalancesService', () => {
         expect(result.meta.cached).toBe(false);
     });
 
+    it('returns valid cached native NEAR without calling RPC', async () => {
+        const user = await AppUser.create({ privyUserId: 'did:privy:user-1', status: 'active' });
+        const wallet = await WalletLink.create({
+            userId: user.id,
+            privyWalletId: 'wallet-1',
+            address: 'alice.near',
+            chainType: 'near',
+            walletType: 'embedded',
+            source: 'privy',
+            status: 'active',
+            isPrimary: true,
+        });
+        await BalanceCacheEntry.create({
+            userId: user.id,
+            walletId: wallet.id,
+            walletAddress: wallet.address,
+            chainType: wallet.chainType,
+            assetId: 'near:native',
+            symbol: 'NEAR',
+            decimals: 24,
+            balanceRaw: '2000000000000000000000000',
+            balanceDecimal: '2',
+            source: 'postgres_cache',
+            fetchedAt: new Date(Date.now() - 1000),
+            expiresAt: new Date(Date.now() + 60000),
+        });
+
+        const result = await service.getBalances(
+            { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
+            { walletAddress: wallet.address, network: 'near:mainnet' },
+        );
+
+        expect(result.data).toEqual([
+            expect.objectContaining({
+                walletId: wallet.id,
+                walletAddress: wallet.address,
+                assetId: 'near:native',
+                balanceRaw: '2000000000000000000000000',
+                balanceDecimal: '2',
+            }),
+        ]);
+        expect(result.meta.source).toBe('postgres_cache');
+        expect(result.meta.cached).toBe(true);
+        expect(nearRpc.getNativeBalance).not.toHaveBeenCalled();
+    });
+
     it('returns live native NEAR balance for wallet address and network body filters', async () => {
         const user = await AppUser.create({ privyUserId: 'did:privy:user-1', status: 'active' });
         const wallet = await WalletLink.create({

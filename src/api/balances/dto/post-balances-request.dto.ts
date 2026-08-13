@@ -7,7 +7,9 @@ export class PostBalancesRequestDto {
     @IsUUID()
     walletId?: string;
 
-    @ApiPropertyOptional({ description: 'Restrict balances to one active wallet address owned by the authenticated user.' })
+    @ApiPropertyOptional({
+        description: 'Restrict balances to one active wallet address owned by the authenticated user.',
+    })
     @IsOptional()
     @IsString()
     @MaxLength(128)

@@ -116,9 +116,13 @@ export class BalancesService {
             return [];
         }
 
-        const nearWallets = wallets.filter((wallet) => wallet.chainType === 'near' && this.isNearAccount(wallet.address));
+        const nearWallets = wallets.filter(
+            (wallet) => wallet.chainType === 'near' && this.isNearAccount(wallet.address),
+        );
         const missingNearWallets = nearWallets.filter((wallet) => !cachedKeys.has(`${wallet.id}|near:native`));
-        const balances = await Promise.all(missingNearWallets.map(async (wallet) => this.refreshNearBalance(userId, wallet)));
+        const balances = await Promise.all(
+            missingNearWallets.map(async (wallet) => this.refreshNearBalance(userId, wallet)),
+        );
 
         return balances;
     }

@@ -1,9 +1,5 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import {
-    EXECUTION_PROVIDERS,
-    ExecuteSwapCommand,
-    ExecutionProviderPort,
-} from '../ports/execution-provider.port';
+import { EXECUTION_PROVIDERS, ExecuteSwapCommand, ExecutionProviderPort } from '../ports/execution-provider.port';
 
 @Injectable()
 export class ExecuteSwapUseCase {
@@ -15,9 +11,7 @@ export class ExecuteSwapUseCase {
     async execute(command: ExecuteSwapCommand): Promise<{ intentHash: string }> {
         this.validate(command);
 
-        const provider = this.executionProviders.find(
-            (candidate) => candidate.providerId === command.providerId,
-        );
+        const provider = this.executionProviders.find((candidate) => candidate.providerId === command.providerId);
 
         if (!provider) {
             throw new BadRequestException({

@@ -23,6 +23,7 @@ describe('OneClickQuoteProvider', () => {
                     deadline: command.deadline,
                     quoteId: 'quote-1',
                     signature: 'sig-1',
+                    depositAddress: 'one-click-deposit.near',
                 },
             }),
         } as unknown as OneClickApiHttpClient;
@@ -45,11 +46,23 @@ describe('OneClickQuoteProvider', () => {
                 executionMode: 'deposit_address',
                 amountIn: '1000000',
                 amountOut: '999000',
-                providerMeta: {
+                executionPackage: {
+                    providerId: 'one-click',
+                    mode: 'deposit_address',
+                    protocol: '1click',
+                    requiredAction: 'deposit',
+                    payload: {
+                        quoteId: 'quote-1',
+                        depositAddress: 'one-click-deposit.near',
+                        expiresAt: command.deadline,
+                    },
+                },
+                providerMeta: expect.objectContaining({
+                    protocol: '1click',
                     quoteId: 'quote-1',
                     signature: 'sig-1',
-                    depositAddress: undefined,
-                },
+                    depositAddress: 'one-click-deposit.near',
+                }),
             }),
         ]);
     });

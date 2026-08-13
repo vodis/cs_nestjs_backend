@@ -50,6 +50,14 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
         const depositAddress = quote.depositAddress ?? quote.deposit_address;
         const executionMode = quoteHashes.length > 0 ? 'intent_sign' : 'deposit_address';
 
+        const expirationTime = quote.deadline ?? quote.expiration_time ?? command.deadline;
+        const providerMeta = {
+            protocol: '1click',
+            quoteId: quote.quoteId ?? quote.quote_id,
+            signature: quote.signature,
+            depositAddress,
+        };
+
         return [
             {
                 providerId: this.providerId,
@@ -59,12 +67,22 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
                 destinationAsset: command.destinationAsset,
                 amountIn,
                 amountOut,
-                expirationTime: quote.deadline ?? quote.expiration_time ?? command.deadline,
-                providerMeta: {
-                    quoteId: quote.quoteId ?? quote.quote_id,
-                    signature: quote.signature,
-                    depositAddress,
-                },
+                expirationTime,
+                executionPackage:
+                    executionMode === 'deposit_address' && depositAddress
+                        ? {
+                              providerId: this.providerId,
+                              mode: 'deposit_address',
+                              protocol: '1click',
+                              requiredAction: 'deposit',
+                              payload: {
+                                  quoteId: providerMeta.quoteId,
+                                  depositAddress,
+                                  expiresAt: expirationTime,
+                              },
+                          }
+                        : undefined,
+                providerMeta,
             },
         ];
     }

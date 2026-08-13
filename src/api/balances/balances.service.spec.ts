@@ -7,6 +7,12 @@ import { BalanceCacheEntry } from '../../database/models/balance-cache-entry.mod
 import { WalletLink } from '../../database/models/wallet-link.model';
 import { BalancesService } from './balances.service';
 import { NearRpcBalanceService } from './near-rpc-balance.service';
+import {
+    NEAR_BALANCE_SOURCE,
+    NEAR_NATIVE_ASSET_ID,
+    NEAR_NATIVE_DECIMALS,
+    NEAR_NATIVE_SYMBOL,
+} from './near-balance.constants';
 
 const asset: AssetDto = {
     assetId: 'nep141:usdc.near',
@@ -39,15 +45,19 @@ function assetsService(): jest.Mocked<Pick<AssetsService, 'findAssetById'>> {
 
 function nearRpcBalanceService(): jest.Mocked<Pick<NearRpcBalanceService, 'getNativeBalance'>> {
     return {
-        getNativeBalance: jest.fn(async (_accountId: string) => ({
-            assetId: 'near:native',
-            symbol: 'NEAR',
-            decimals: 24,
-            balanceRaw: '1250000000000000000000000',
-            balanceDecimal: '1.25',
-            fetchedAt: new Date('2026-08-12T12:00:00.000Z'),
-            expiresAt: new Date('2026-08-12T12:00:15.000Z'),
-        })),
+        getNativeBalance: jest.fn(async (accountId: string) => {
+            void accountId;
+
+            return {
+                assetId: NEAR_NATIVE_ASSET_ID,
+                symbol: NEAR_NATIVE_SYMBOL,
+                decimals: NEAR_NATIVE_DECIMALS,
+                balanceRaw: '1250000000000000000000000',
+                balanceDecimal: '1.25',
+                fetchedAt: new Date('2026-08-12T12:00:00.000Z'),
+                expiresAt: new Date('2026-08-12T12:00:15.000Z'),
+            };
+        }),
     };
 }
 
@@ -112,12 +122,12 @@ describe('BalancesService', () => {
                 walletId: wallet.id,
                 walletAddress: wallet.address,
                 chainType: 'near',
-                assetId: 'near:native',
-                symbol: 'NEAR',
-                decimals: 24,
+                assetId: NEAR_NATIVE_ASSET_ID,
+                symbol: NEAR_NATIVE_SYMBOL,
+                decimals: NEAR_NATIVE_DECIMALS,
                 balanceRaw: '1250000000000000000000000',
                 balanceDecimal: '1.25',
-                source: 'near_rpc',
+                source: NEAR_BALANCE_SOURCE,
                 fetchedAt: '2026-08-12T12:00:00.000Z',
                 expiresAt: '2026-08-12T12:00:15.000Z',
             },
@@ -156,9 +166,9 @@ describe('BalancesService', () => {
             walletId: wallet.id,
             walletAddress: wallet.address,
             chainType: wallet.chainType,
-            assetId: 'near:native',
-            symbol: 'NEAR',
-            decimals: 24,
+            assetId: NEAR_NATIVE_ASSET_ID,
+            symbol: NEAR_NATIVE_SYMBOL,
+            decimals: NEAR_NATIVE_DECIMALS,
             balanceRaw: '2000000000000000000000000',
             balanceDecimal: '2',
             source: 'postgres_cache',
@@ -175,7 +185,7 @@ describe('BalancesService', () => {
             expect.objectContaining({
                 walletId: wallet.id,
                 walletAddress: wallet.address,
-                assetId: 'near:native',
+                assetId: NEAR_NATIVE_ASSET_ID,
                 balanceRaw: '2000000000000000000000000',
                 balanceDecimal: '2',
             }),
@@ -206,12 +216,56 @@ describe('BalancesService', () => {
         expect(result.data).toEqual([
             expect.objectContaining({
                 walletId: wallet.id,
-                assetId: 'near:native',
-                symbol: 'NEAR',
+                assetId: NEAR_NATIVE_ASSET_ID,
+                symbol: NEAR_NATIVE_SYMBOL,
                 balanceRaw: '1250000000000000000000000',
             }),
         ]);
         expect(nearRpc.getNativeBalance).toHaveBeenCalledWith('alice.near');
+    });
+
+    it('returns cached balances when native NEAR live refresh fails', async () => {
+        const user = await AppUser.create({ privyUserId: 'did:privy:user-1', status: 'active' });
+        const wallet = await WalletLink.create({
+            userId: user.id,
+            privyWalletId: 'wallet-1',
+            address: 'alice.near',
+            chainType: 'near',
+            walletType: 'embedded',
+            source: 'privy',
+            status: 'active',
+            isPrimary: true,
+        });
+        await BalanceCacheEntry.create({
+            userId: user.id,
+            walletId: wallet.id,
+            walletAddress: wallet.address,
+            chainType: wallet.chainType,
+            assetId: asset.assetId,
+            symbol: asset.symbol,
+            decimals: asset.decimals,
+            balanceRaw: '1250000',
+            balanceDecimal: '1.25',
+            source: NEAR_BALANCE_SOURCE,
+            fetchedAt: new Date(Date.now() - 1000),
+            expiresAt: new Date(Date.now() + 60000),
+        });
+        nearRpc.getNativeBalance.mockRejectedValueOnce(new Error('RPC unavailable'));
+
+        const result = await service.getBalances(
+            { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
+            {},
+        );
+
+        expect(result.data).toEqual([
+            expect.objectContaining({
+                walletId: wallet.id,
+                assetId: asset.assetId,
+                balanceRaw: '1250000',
+            }),
+        ]);
+        expect(result.meta.source).toBe('postgres_cache');
+        expect(result.meta.cached).toBe(true);
     });
 
     it('does not return expired cache entries', async () => {

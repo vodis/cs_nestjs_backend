@@ -31,13 +31,6 @@ export class ExecuteSwapUseCase {
             });
         }
 
-        if (command.quoteHashes.length === 0) {
-            throw new BadRequestException({
-                code: 'MISSING_QUOTE_HASHES',
-                message: 'At least one quote hash is required',
-            });
-        }
-
         if (command.userChainType === 'near' && !/^[a-z0-9._-]+\.(?:near|testnet|tg)$/i.test(command.userAddress)) {
             throw new BadRequestException({
                 code: 'INVALID_NEAR_SIGNER',

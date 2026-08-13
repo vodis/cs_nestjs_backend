@@ -1,9 +1,13 @@
+import { SwapExecutionMode } from '../../domain/models/swap-quote';
+
 export const EXECUTION_PROVIDERS = Symbol('EXECUTION_PROVIDERS');
 
 export type ExecuteSwapCommand = {
     providerId: string;
-    signature: Record<string, unknown>;
-    quoteHashes: string[];
+    executionMode?: SwapExecutionMode;
+    executionPayload?: Record<string, unknown>;
+    signature?: Record<string, unknown>;
+    quoteHashes?: string[];
     userAddress: string;
     userChainType: 'evm' | 'near';
     traceId: string;

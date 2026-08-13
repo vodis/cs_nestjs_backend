@@ -30,7 +30,26 @@ describe('SwapQuoteSelectionPolicy', () => {
         expect(selected.quoteHashes).toEqual(['hash-better']);
     });
 
-    it('rejects when no provider returns executable quote hashes', () => {
+    it('selects deposit-address quotes when they are the best executable option', () => {
+        const selected = policy.selectBestExecutableQuote(
+            [
+                baseQuote({
+                    providerId: 'one-click',
+                    executionMode: 'deposit_address',
+                    quoteHashes: [],
+                    amountOut: '990',
+                    providerMeta: { depositAddress: 'one-click-deposit.near' },
+                }),
+                baseQuote({ providerId: 'solver-relay', amountOut: '980', quoteHashes: ['hash-better'] }),
+            ],
+            'EXACT_INPUT',
+        );
+
+        expect(selected.providerId).toBe('one-click');
+        expect(selected.executionMode).toBe('deposit_address');
+    });
+
+    it('rejects when no provider returns an executable package', () => {
         expect(() =>
             policy.selectBestExecutableQuote(
                 [baseQuote({ executionMode: 'deposit_address', quoteHashes: [] })],

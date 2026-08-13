@@ -37,6 +37,7 @@ export class PrepareSwapMapper {
             slippageTolerance: packageResult.slippageTolerance,
             quoteExpiration: packageResult.quoteExpiration,
             providerId: packageResult.providerId,
+            executionPackage: packageResult.executionPackage,
         };
     }
 }

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Op } from 'sequelize';
 import { AssetDto } from '../assets/dto/get-assets-response.dto';
 import { AssetsService } from '../assets/assets.service';
@@ -9,12 +9,21 @@ import { GetBalancesQueryDto } from './dto/get-balances-query.dto';
 import { BalanceDto, GetBalancesResponseDto } from './dto/get-balances-response.dto';
 import { NearNativeBalance, NearRpcBalanceService } from './near-rpc-balance.service';
 import { PostBalancesRequestDto } from './dto/post-balances-request.dto';
+import {
+    NEAR_BALANCE_SOURCE,
+    NEAR_NATIVE_ASSET_ID,
+    NEAR_NATIVE_SYMBOL,
+    WRAPPED_NEAR_ASSET_ID,
+    WRAPPED_NEAR_SYMBOL,
+} from './near-balance.constants';
 
-const NEAR_NATIVE_ASSET_IDS = new Set(['near:native', 'nep141:wrap.near']);
+const NEAR_NATIVE_ASSET_IDS = new Set([NEAR_NATIVE_ASSET_ID, WRAPPED_NEAR_ASSET_ID]);
 type BalancesRequest = GetBalancesQueryDto | PostBalancesRequestDto;
 
 @Injectable()
 export class BalancesService {
+    private readonly logger = new Logger(BalancesService.name);
+
     constructor(
         private readonly assetsService: AssetsService,
         private readonly nearRpcBalanceService: NearRpcBalanceService,
@@ -119,12 +128,25 @@ export class BalancesService {
         const nearWallets = wallets.filter(
             (wallet) => wallet.chainType === 'near' && this.isNearAccount(wallet.address),
         );
-        const missingNearWallets = nearWallets.filter((wallet) => !cachedKeys.has(`${wallet.id}|near:native`));
-        const balances = await Promise.all(
+        const missingNearWallets = nearWallets.filter(
+            (wallet) => !cachedKeys.has(`${wallet.id}|${NEAR_NATIVE_ASSET_ID}`),
+        );
+        const balances = await Promise.allSettled(
             missingNearWallets.map(async (wallet) => this.refreshNearBalance(userId, wallet)),
         );
 
-        return balances;
+        return balances.flatMap((result, index) => {
+            if (result.status === 'fulfilled') {
+                return [result.value];
+            }
+
+            this.logger.warn(
+                `Skipping live NEAR balance for wallet ${missingNearWallets[index].id}: ${
+                    result.reason?.message ?? result.reason
+                }`,
+            );
+            return [];
+        });
     }
 
     private async refreshNearBalance(userId: string, wallet: WalletLink): Promise<BalanceDto> {
@@ -150,7 +172,11 @@ export class BalancesService {
     }
 
     private isNearNativeAsset(asset: AssetDto): boolean {
-        return asset.symbol === 'NEAR' || asset.symbol === 'wNEAR' || NEAR_NATIVE_ASSET_IDS.has(asset.assetId);
+        return (
+            asset.symbol === NEAR_NATIVE_SYMBOL ||
+            asset.symbol === WRAPPED_NEAR_SYMBOL ||
+            NEAR_NATIVE_ASSET_IDS.has(asset.assetId)
+        );
     }
 
     private isNearAccount(address: string): boolean {
@@ -179,7 +205,7 @@ export class BalancesService {
             decimals: balance.decimals,
             balanceRaw: balance.balanceRaw,
             balanceDecimal: balance.balanceDecimal,
-            source: 'near_rpc',
+            source: NEAR_BALANCE_SOURCE,
             fetchedAt: balance.fetchedAt.toISOString(),
             expiresAt: balance.expiresAt.toISOString(),
         };

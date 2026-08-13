@@ -1,10 +1,28 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayNotEmpty, IsArray, IsIn, IsObject, IsString } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsIn, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class ExecuteSwapRequestDto {
     @ApiProperty({ example: 'solver-relay' })
     @IsString()
     providerId: string;
+
+    @ApiProperty({
+        example: 'intent_sign',
+        enum: ['intent_sign', 'deposit_address', 'evm_transaction', 'external_redirect'],
+    })
+    @IsOptional()
+    @IsIn(['intent_sign', 'deposit_address', 'evm_transaction', 'external_redirect'])
+    executionMode?: 'intent_sign' | 'deposit_address' | 'evm_transaction' | 'external_redirect';
+
+    @ApiProperty({
+        required: false,
+        example: {
+            quoteHashes: ['0xabc123'],
+        },
+    })
+    @IsOptional()
+    @IsObject()
+    executionPayload?: Record<string, unknown>;
 
     @ApiProperty({
         example: {
@@ -18,14 +36,16 @@ export class ExecuteSwapRequestDto {
             public_key: 'ed25519:...',
         },
     })
+    @IsOptional()
     @IsObject()
-    signature: Record<string, unknown>;
+    signature?: Record<string, unknown>;
 
-    @ApiProperty({ type: [String], example: ['0xabc123'] })
+    @ApiProperty({ type: [String], example: ['0xabc123'], required: false })
+    @IsOptional()
     @IsArray()
     @ArrayNotEmpty()
     @IsString({ each: true })
-    quoteHashes: string[];
+    quoteHashes?: string[];
 
     @ApiProperty({ example: 'alice.near' })
     @IsString()

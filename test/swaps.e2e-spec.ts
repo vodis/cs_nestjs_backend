@@ -144,6 +144,17 @@ describe('Swaps (e2e)', () => {
                 kind: 'swap',
                 providerId: 'solver-relay',
                 quoteHashes: ['0xquote-hash'],
+                executionPackage: {
+                    providerId: 'solver-relay',
+                    mode: 'intent_sign',
+                    protocol: 'near-intents',
+                    requiredAction: 'sign',
+                    payload: {
+                        quoteHashes: ['0xquote-hash'],
+                        signerId: EVM_SIGNER,
+                        signatureStandard: 'erc191',
+                    },
+                },
                 signatureStandard: 'erc191',
                 authMethod: 'evm',
                 signerId: EVM_SIGNER,
@@ -227,7 +238,7 @@ describe('Swaps (e2e)', () => {
             });
         });
 
-        it('ignores deposit-only provider quotes when an executable provider is available', async () => {
+        it('returns deposit-address execution packages when they are the best executable quote', async () => {
             app = await createSwapsApp({
                 providers: [
                     {
@@ -242,6 +253,9 @@ describe('Swaps (e2e)', () => {
                                 amountIn: '1000000',
                                 amountOut: '9999999',
                                 expirationTime: futureDeadline(),
+                                providerMeta: {
+                                    depositAddress: 'one-click-deposit.near',
+                                },
                             },
                         ]),
                     },
@@ -257,8 +271,16 @@ describe('Swaps (e2e)', () => {
                 .send(validPreparePayload())
                 .expect(201);
 
-            expect(response.body.data.providerId).toBe('solver-relay');
-            expect(response.body.data.amountOut).toBe('999000');
+            expect(response.body.data.providerId).toBe('one-click');
+            expect(response.body.data.amountOut).toBe('9999999');
+            expect(response.body.data.executionPackage).toMatchObject({
+                providerId: 'one-click',
+                mode: 'deposit_address',
+                requiredAction: 'deposit',
+                payload: {
+                    depositAddress: 'one-click-deposit.near',
+                },
+            });
         });
 
         it('succeeds when one provider fails but another returns executable quotes', async () => {
@@ -324,6 +346,21 @@ describe('Swaps (e2e)', () => {
                 .post('/api/v1/swaps/execute')
                 .send({
                     providerId: 'solver-relay',
+                    executionMode: 'intent_sign',
+                    executionPayload: {
+                        quoteHashes: ['quote-hash-1'],
+                        signature: {
+                            standard: 'nep413',
+                            payload: {
+                                message:
+                                    '{"signer_id":"alice.near","deadline":"2026-06-11T12:00:00.000Z","intents":[]}',
+                                nonce: 'nonce',
+                                recipient: 'intents.near',
+                            },
+                            signature: 'ed25519:sig',
+                            public_key: 'ed25519:key',
+                        },
+                    },
                     signature: {
                         standard: 'nep413',
                         payload: {
@@ -573,7 +610,7 @@ describe('Swaps (e2e)', () => {
             }
         });
 
-        it('returns 400 when no provider returns executable quote hashes', async () => {
+        it('returns 400 when no provider returns an executable package', async () => {
             app = await createSwapsApp({
                 providers: [
                     {

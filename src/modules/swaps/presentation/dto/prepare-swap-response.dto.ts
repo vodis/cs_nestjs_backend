@@ -21,6 +21,33 @@ export class NearIntentsTokenDeltaDto {
     amount: string;
 }
 
+export class SwapExecutionPackageDto {
+    @ApiProperty({ example: 'solver-relay' })
+    providerId: string;
+
+    @ApiProperty({
+        example: 'intent_sign',
+        enum: ['intent_sign', 'deposit_address', 'evm_transaction', 'external_redirect'],
+    })
+    mode: 'intent_sign' | 'deposit_address' | 'evm_transaction' | 'external_redirect';
+
+    @ApiProperty({ example: 'near-intents' })
+    protocol: string;
+
+    @ApiProperty({ example: 'sign', enum: ['sign', 'deposit', 'submit_transaction', 'redirect'] })
+    requiredAction: 'sign' | 'deposit' | 'submit_transaction' | 'redirect';
+
+    @ApiProperty({
+        example: {
+            quoteHashes: ['0xabc123'],
+            signerId: 'alice.near',
+            deadline: '2026-06-11T12:00:00.000Z',
+            signatureStandard: 'nep413',
+        },
+    })
+    payload: Record<string, unknown>;
+}
+
 export class ApprovedPreparePackageDto {
     @ApiProperty({ example: 'near-intents' })
     protocol: 'near-intents';
@@ -72,6 +99,9 @@ export class ApprovedPreparePackageDto {
 
     @ApiProperty({ example: 'solver-relay' })
     providerId: string;
+
+    @ApiProperty({ type: SwapExecutionPackageDto })
+    executionPackage: SwapExecutionPackageDto;
 }
 
 export class PrepareSwapResponseDto {

@@ -1,38 +1,42 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { SolverRelayApiHttpClient } from '../../../../http-clients/solver-relay-api/solver-relay-api.http-client';
-
-export type ExecuteSwapCommand = {
-    signature: Record<string, unknown>;
-    quoteHashes: string[];
-    userAddress: string;
-    userChainType: 'evm' | 'near';
-    traceId: string;
-};
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import {
+    EXECUTION_PROVIDERS,
+    ExecuteSwapCommand,
+    ExecutionProviderPort,
+} from '../ports/execution-provider.port';
 
 @Injectable()
 export class ExecuteSwapUseCase {
-    private readonly logger = new Logger(ExecuteSwapUseCase.name);
-
-    constructor(private readonly solverRelayApiHttpClient: SolverRelayApiHttpClient) {}
+    constructor(
+        @Inject(EXECUTION_PROVIDERS)
+        private readonly executionProviders: ExecutionProviderPort[],
+    ) {}
 
     async execute(command: ExecuteSwapCommand): Promise<{ intentHash: string }> {
         this.validate(command);
 
-        this.logger.log('Publishing signed swap intent', {
-            traceId: command.traceId,
-            userChainType: command.userChainType,
-            quoteHashCount: command.quoteHashes.length,
-        });
+        const provider = this.executionProviders.find(
+            (candidate) => candidate.providerId === command.providerId,
+        );
 
-        const result = await this.solverRelayApiHttpClient.publishIntent({
-            quoteHashes: command.quoteHashes,
-            signedData: command.signature,
-        });
+        if (!provider) {
+            throw new BadRequestException({
+                code: 'UNSUPPORTED_SWAP_EXECUTION_PROVIDER',
+                message: `Unsupported swap execution provider: ${command.providerId}`,
+            });
+        }
 
-        return { intentHash: result.intent_hash };
+        return provider.execute(command);
     }
 
     private validate(command: ExecuteSwapCommand): void {
+        if (!command.providerId) {
+            throw new BadRequestException({
+                code: 'MISSING_PROVIDER_ID',
+                message: 'Swap execution requires the providerId returned by prepare',
+            });
+        }
+
         if (command.quoteHashes.length === 0) {
             throw new BadRequestException({
                 code: 'MISSING_QUOTE_HASHES',

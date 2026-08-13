@@ -323,6 +323,7 @@ describe('Swaps (e2e)', () => {
             await request(app.getHttpServer())
                 .post('/api/v1/swaps/execute')
                 .send({
+                    providerId: 'solver-relay',
                     signature: {
                         standard: 'nep413',
                         payload: {

@@ -2,6 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ArrayNotEmpty, IsArray, IsIn, IsObject, IsString } from 'class-validator';
 
 export class ExecuteSwapRequestDto {
+    @ApiProperty({ example: 'solver-relay' })
+    @IsString()
+    providerId: string;
+
     @ApiProperty({
         example: {
             standard: 'nep413',

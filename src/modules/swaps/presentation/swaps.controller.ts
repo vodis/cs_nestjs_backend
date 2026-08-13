@@ -46,7 +46,7 @@ export class SwapsController {
     @Post('execute')
     @ApiResponse({
         status: 201,
-        description: 'Publish a signed NEAR intents swap to the solver relay',
+        description: 'Submit a signed swap package to the provider selected during prepare',
         type: ExecuteSwapResponseDto,
     })
     async executeSwap(@Body() dto: ExecuteSwapRequestDto): Promise<ExecuteSwapResponseDto> {

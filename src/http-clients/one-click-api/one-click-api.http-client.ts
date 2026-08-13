@@ -31,7 +31,9 @@ export class OneClickApiHttpClient {
     }
 
     async createQuote(payload: OneClickQuoteRequest): Promise<unknown> {
-        const token = this.configService.get<string>('ONE_CLICK_API_JWT');
+        const token =
+            this.configService.get<string>('ONE_CLICK_API_KEY') ||
+            this.configService.get<string>('ONE_CLICK_API_JWT');
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
         const { data } = await this.httpServer.axiosRef.post('v0/quote', payload, { headers });
         return data;

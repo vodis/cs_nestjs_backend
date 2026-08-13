@@ -91,7 +91,9 @@ export class SolverRelayApiHttpClient {
     }
 
     private authOptions(): { headers?: Record<string, string> } {
-        const apiKey = this.configService.get<string>('SOLVER_RELAY_API_KEY');
+        const apiKey =
+            this.configService.get<string>('INTENTS_MESSAGE_BUS_API_KEY') ||
+            this.configService.get<string>('SOLVER_RELAY_API_KEY');
 
         return apiKey
             ? {

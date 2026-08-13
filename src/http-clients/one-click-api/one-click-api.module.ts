@@ -9,7 +9,10 @@ import { OneClickApiHttpClient } from './one-click-api.http-client';
         HttpModule.registerAsync({
             imports: [ConfigModule],
             useFactory: async (configService: ConfigService) => ({
-                baseURL: configService.get('ONE_CLICK_API_URL') || 'https://1click.chaindefuser.com',
+                baseURL:
+                    configService.get('ONE_CLICK_URL') ||
+                    configService.get('ONE_CLICK_API_URL') ||
+                    'https://1click.chaindefuser.com',
                 headers: {
                     'Content-Type': 'application/json',
                 },

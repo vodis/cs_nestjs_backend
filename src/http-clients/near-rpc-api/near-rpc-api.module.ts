@@ -2,29 +2,26 @@ import { Module, OnModuleInit } from '@nestjs/common';
 import { HttpModule, HttpService } from '@nestjs/axios';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { onHttpModuleInit } from '../http-clients.interceptor';
-import { OneClickApiHttpClient } from './one-click-api.http-client';
+import { NearRpcApiHttpClient } from './near-rpc-api.http-client';
 
 @Module({
     imports: [
         HttpModule.registerAsync({
             imports: [ConfigModule],
             useFactory: async (configService: ConfigService) => ({
-                baseURL:
-                    configService.get('ONE_CLICK_URL') ||
-                    configService.get('ONE_CLICK_API_URL') ||
-                    'https://1click.chaindefuser.com',
+                baseURL: configService.get('NEAR_RPC_URL') || 'https://rpc.mainnet.near.org',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                timeout: 5000,
+                timeout: Number(configService.get('NEAR_RPC_TIMEOUT_MS') || 5000),
             }),
             inject: [ConfigService],
         }),
     ],
-    providers: [OneClickApiHttpClient],
-    exports: [OneClickApiHttpClient],
+    providers: [NearRpcApiHttpClient],
+    exports: [NearRpcApiHttpClient],
 })
-export class OneClickApiModule implements OnModuleInit {
+export class NearRpcApiModule implements OnModuleInit {
     constructor(private readonly httpService: HttpService) {}
 
     onModuleInit = () => onHttpModuleInit(this.httpService);

@@ -4,9 +4,7 @@ import { SwapType } from '../../domain/models/swap-quote-request';
 
 export class SwapQuoteSelectionPolicy {
     selectBestExecutableQuote(quotes: SwapQuote[], swapType: SwapType): SwapQuote {
-        const executableQuotes = quotes.filter(
-            (quote) => quote.executionMode === 'intent_sign' && quote.quoteHashes.length > 0,
-        );
+        const executableQuotes = quotes.filter((quote) => this.isExecutable(quote));
 
         if (!executableQuotes.length) {
             throw new SwapValidationError(
@@ -25,5 +23,23 @@ export class SwapQuoteSelectionPolicy {
         });
 
         return sorted[0];
+    }
+
+    private isExecutable(quote: SwapQuote): boolean {
+        if (quote.executionPackage) {
+            return Boolean(quote.executionPackage.requiredAction && quote.executionPackage.payload);
+        }
+
+        if (quote.executionMode === 'intent_sign') {
+            return quote.quoteHashes.length > 0;
+        }
+
+        if (quote.executionMode === 'deposit_address') {
+            return (
+                typeof quote.providerMeta?.depositAddress === 'string' && quote.providerMeta.depositAddress.length > 0
+            );
+        }
+
+        return false;
     }
 }

@@ -83,6 +83,17 @@ describe('PrepareSwapUseCase', () => {
 
         expect(result.providerId).toBe('solver-relay');
         expect(result.quoteHashes).toEqual(['0xquote-hash']);
+        expect(result.executionPackage).toMatchObject({
+            providerId: 'solver-relay',
+            mode: 'intent_sign',
+            protocol: 'near-intents',
+            requiredAction: 'sign',
+            payload: {
+                quoteHashes: ['0xquote-hash'],
+                signerId: command.signerId,
+                signatureStandard: 'erc191',
+            },
+        });
         expect(result.tokenDeltas).toEqual({
             [command.originAsset]: '-1000000',
             [command.destinationAsset]: '2500000000000000000000000',

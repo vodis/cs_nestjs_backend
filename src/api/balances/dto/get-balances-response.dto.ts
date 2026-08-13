@@ -36,8 +36,8 @@ export class BalanceDto {
 }
 
 export class BalancesMetaDto {
-    @ApiProperty({ enum: ['postgres_cache'] })
-    source: 'postgres_cache';
+    @ApiProperty({ enum: ['postgres_cache', 'near_rpc', 'mixed'] })
+    source: 'postgres_cache' | 'near_rpc' | 'mixed';
 
     @ApiProperty()
     cached: boolean;

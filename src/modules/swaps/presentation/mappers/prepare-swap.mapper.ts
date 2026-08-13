@@ -20,11 +20,14 @@ export class PrepareSwapMapper {
 
     static toResponseDto(packageResult: ApprovedPreparePackage): ApprovedPreparePackageDto {
         return {
+            protocol: 'near-intents',
+            kind: 'swap',
             quoteHashes: packageResult.quoteHashes,
-            tokenDeltas: packageResult.tokenDeltas,
+            tokenDeltas: Object.entries(packageResult.tokenDeltas).map(([assetId, amount]) => ({ assetId, amount })),
             intents: packageResult.intents,
             signerId: packageResult.signerId,
             deadline: packageResult.deadline,
+            deadlineTimestamp: new Date(packageResult.deadline).getTime(),
             authMethod: packageResult.authMethod,
             signatureStandard: packageResult.signatureStandard,
             originAsset: packageResult.originAsset,

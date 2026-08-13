@@ -5,6 +5,7 @@ import { OneClickApiModule } from '../../http-clients/one-click-api/one-click-ap
 import { SolverRelayApiModule } from '../../http-clients/solver-relay-api/solver-relay-api.module';
 import { ASSET_REGISTRY_PORT } from './application/ports/asset-registry.port';
 import { QUOTE_PROVIDERS } from './application/ports/quote-provider.port';
+import { ExecuteSwapUseCase } from './application/use-cases/execute-swap.use-case';
 import { PrepareSwapUseCase } from './application/use-cases/prepare-swap.use-case';
 import { AssetRegistryAdapter } from './infrastructure/adapters/asset-registry.adapter';
 import { OneClickQuoteProvider } from './infrastructure/providers/one-click-quote.provider';
@@ -16,6 +17,7 @@ import { SwapsController } from './presentation/swaps.controller';
     controllers: [SwapsController],
     providers: [
         PrepareSwapUseCase,
+        ExecuteSwapUseCase,
         AssetRegistryAdapter,
         SolverRelayQuoteProvider,
         OneClickQuoteProvider,

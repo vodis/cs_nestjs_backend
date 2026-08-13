@@ -1,0 +1,61 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { ArrayNotEmpty, IsArray, IsIn, IsObject, IsOptional, IsString } from 'class-validator';
+
+export class ExecuteSwapRequestDto {
+    @ApiProperty({ example: 'solver-relay' })
+    @IsString()
+    providerId: string;
+
+    @ApiProperty({
+        example: 'intent_sign',
+        enum: ['intent_sign', 'deposit_address', 'evm_transaction', 'external_redirect'],
+    })
+    @IsOptional()
+    @IsIn(['intent_sign', 'deposit_address', 'evm_transaction', 'external_redirect'])
+    executionMode?: 'intent_sign' | 'deposit_address' | 'evm_transaction' | 'external_redirect';
+
+    @ApiProperty({
+        required: false,
+        example: {
+            quoteHashes: ['0xabc123'],
+        },
+    })
+    @IsOptional()
+    @IsObject()
+    executionPayload?: Record<string, unknown>;
+
+    @ApiProperty({
+        example: {
+            standard: 'nep413',
+            payload: {
+                message: '{"signer_id":"alice.near","deadline":"2026-06-11T12:00:00.000Z","intents":[]}',
+                nonce: 'Vij2xgAlKBKzAEiS6N1S/hfrNi8/We0ieTmcMBti1YE=',
+                recipient: 'intents.near',
+            },
+            signature: 'ed25519:...',
+            public_key: 'ed25519:...',
+        },
+    })
+    @IsOptional()
+    @IsObject()
+    signature?: Record<string, unknown>;
+
+    @ApiProperty({ type: [String], example: ['0xabc123'], required: false })
+    @IsOptional()
+    @IsArray()
+    @ArrayNotEmpty()
+    @IsString({ each: true })
+    quoteHashes?: string[];
+
+    @ApiProperty({ example: 'alice.near' })
+    @IsString()
+    userAddress: string;
+
+    @ApiProperty({ example: 'near', enum: ['evm', 'near'] })
+    @IsIn(['evm', 'near'])
+    userChainType: 'evm' | 'near';
+
+    @ApiProperty({ example: 'trace-123' })
+    @IsString()
+    traceId: string;
+}

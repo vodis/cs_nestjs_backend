@@ -1,4 +1,5 @@
 import { SwapAuthMethod } from './swap-quote-request';
+import type { SwapExecutionPackage } from './swap-quote';
 
 export type SwapIntent = {
     intent: 'token_diff';
@@ -22,4 +23,5 @@ export type ApprovedPreparePackage = {
     slippageTolerance: number;
     quoteExpiration: string;
     providerId: string;
+    executionPackage: SwapExecutionPackage;
 };

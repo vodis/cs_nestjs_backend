@@ -16,6 +16,8 @@ describe('PrepareSwapUseCase', () => {
         slippageTolerance: 100,
         deadline: new Date(Date.now() + 60_000).toISOString(),
         signerId: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9',
+        recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9',
+        recipientType: 'DESTINATION_CHAIN',
         authMethod: 'evm',
     };
 
@@ -99,6 +101,47 @@ describe('PrepareSwapUseCase', () => {
             [command.destinationAsset]: '2500000000000000000000000',
         });
         expect(result.signatureStandard).toBe('erc191');
+    });
+
+    it('uses only recipient-capable providers for a foreign destination address', async () => {
+        const internalProvider: QuoteProviderPort = {
+            providerId: 'solver-relay',
+            requestQuotes: jest.fn().mockResolvedValue([]),
+        };
+        const recipientProvider: QuoteProviderPort = {
+            providerId: 'one-click',
+            supportsExternalRecipient: true,
+            requestQuotes: jest.fn().mockResolvedValue([
+                {
+                    providerId: 'one-click',
+                    executionMode: 'deposit_address',
+                    quoteHashes: [],
+                    originAsset: command.originAsset,
+                    destinationAsset: command.destinationAsset,
+                    amountIn: '1000000',
+                    amountOut: '400000000000000000000000',
+                    expirationTime: command.deadline,
+                    executionPackage: {
+                        providerId: 'one-click',
+                        mode: 'deposit_address',
+                        protocol: '1click',
+                        requiredAction: 'deposit',
+                        payload: { depositAddress: 'deposit-address' },
+                    },
+                },
+            ]),
+        };
+        const useCase = createUseCase([internalProvider, recipientProvider]);
+
+        const result = await useCase.execute({
+            ...command,
+            recipient: 'BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z',
+            recipientType: 'DESTINATION_CHAIN',
+        });
+
+        expect(internalProvider.requestQuotes).not.toHaveBeenCalled();
+        expect(recipientProvider.requestQuotes).toHaveBeenCalled();
+        expect(result.providerId).toBe('one-click');
     });
 
     it('continues when one provider fails and another succeeds', async () => {

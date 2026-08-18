@@ -13,6 +13,8 @@ export class PrepareSwapMapper {
             slippageTolerance: dto.slippageTolerance,
             deadline: dto.deadline,
             signerId: dto.signerId,
+            recipient: dto.recipient ?? dto.signerId,
+            recipientType: dto.recipientType ?? (dto.authMethod === 'near' ? 'INTENTS' : 'DESTINATION_CHAIN'),
             authMethod: dto.authMethod,
             minDeadlineMs: dto.minDeadlineMs,
         };

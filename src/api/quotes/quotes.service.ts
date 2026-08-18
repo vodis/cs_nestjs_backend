@@ -40,7 +40,7 @@ export class QuotesService {
         this.addressValidationService.assertRefundAddress(dto.authMethod, dto.userAddress);
 
         const userAddressType = dto.authMethod === 'near' ? 'INTENTS' : 'ORIGIN_CHAIN';
-        const recipientType = dto.authMethod === 'near' ? 'INTENTS' : 'DESTINATION_CHAIN';
+        const recipientType = dto.recipientType ?? (dto.authMethod === 'near' ? 'INTENTS' : 'DESTINATION_CHAIN');
 
         return {
             dry: dto.dry,
@@ -50,7 +50,7 @@ export class QuotesService {
             depositType: 'ORIGIN_CHAIN',
             destinationAsset: dto.destinationAsset,
             amount: dto.amount,
-            recipient: dto.userAddress,
+            recipient: dto.recipient?.trim() || dto.userAddress,
             recipientType,
             refundTo: dto.userAddress,
             refundType: userAddressType,

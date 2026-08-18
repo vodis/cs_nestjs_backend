@@ -11,6 +11,8 @@ describe('OneClickQuoteProvider', () => {
         slippageTolerance: 100,
         deadline: new Date(Date.now() + 60_000).toISOString(),
         signerId: 'alice.near',
+        recipient: 'alice.near',
+        recipientType: 'INTENTS',
         authMethod: 'near',
     };
 
@@ -38,6 +40,7 @@ describe('OneClickQuoteProvider', () => {
                 destinationAsset: command.destinationAsset,
                 depositType: 'INTENTS',
                 recipientType: 'INTENTS',
+                recipient: command.recipient,
             }),
         );
         expect(quotes).toEqual([
@@ -65,6 +68,28 @@ describe('OneClickQuoteProvider', () => {
                 }),
             }),
         ]);
+    });
+
+    it('keeps a foreign destination recipient separate from the signer refund address', async () => {
+        const client = {
+            createQuote: jest.fn().mockResolvedValue({ amountIn: '1000000', amountOut: '900000' }),
+        } as unknown as OneClickApiHttpClient;
+        const provider = new OneClickQuoteProvider(client);
+
+        await provider.requestQuotes({
+            ...command,
+            recipient: 'BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z',
+            recipientType: 'DESTINATION_CHAIN',
+        });
+
+        expect(client.createQuote).toHaveBeenCalledWith(
+            expect.objectContaining({
+                recipient: 'BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z',
+                recipientType: 'DESTINATION_CHAIN',
+                refundTo: 'alice.near',
+                refundType: 'INTENTS',
+            }),
+        );
     });
 
     it('maps quote hashes when 1Click exposes them for intent-sign execution', async () => {

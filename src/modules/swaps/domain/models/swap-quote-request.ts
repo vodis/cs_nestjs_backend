@@ -10,6 +10,8 @@ export type SwapQuoteCommand = {
     slippageTolerance: number;
     deadline: string;
     signerId: string;
+    recipient: string;
+    recipientType: 'DESTINATION_CHAIN' | 'INTENTS';
     authMethod: SwapAuthMethod;
     minDeadlineMs?: number;
 };

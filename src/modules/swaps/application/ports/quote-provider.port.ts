@@ -5,6 +5,7 @@ export const QUOTE_PROVIDERS = Symbol('QUOTE_PROVIDERS');
 
 export interface QuoteProviderPort {
     readonly providerId: string;
+    readonly supportsExternalRecipient?: boolean;
 
     requestQuotes(command: SwapQuoteCommand): Promise<SwapQuote[]>;
 }

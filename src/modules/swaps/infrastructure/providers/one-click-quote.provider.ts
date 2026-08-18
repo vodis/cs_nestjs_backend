@@ -30,6 +30,7 @@ type OneClickQuoteResponse = {
 @Injectable()
 export class OneClickQuoteProvider implements QuoteProviderPort {
     readonly providerId = 'one-click';
+    readonly supportsExternalRecipient = true;
 
     constructor(private readonly oneClickApiHttpClient: OneClickApiHttpClient) {}
 
@@ -89,7 +90,6 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
 
     private toOneClickQuoteRequest(command: SwapQuoteCommand): OneClickQuoteRequest {
         const userAddressType = command.authMethod === 'near' ? 'INTENTS' : 'ORIGIN_CHAIN';
-        const recipientType = command.authMethod === 'near' ? 'INTENTS' : 'DESTINATION_CHAIN';
 
         return {
             dry: true,
@@ -99,8 +99,8 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
             depositType: command.authMethod === 'near' ? 'INTENTS' : 'ORIGIN_CHAIN',
             destinationAsset: command.destinationAsset,
             amount: command.amount,
-            recipient: command.signerId,
-            recipientType,
+            recipient: command.recipient,
+            recipientType: command.recipientType,
             refundTo: command.signerId,
             refundType: userAddressType,
             deadline: command.deadline,

@@ -81,9 +81,11 @@ export class PrepareSwapUseCase {
     }
 
     private async collectQuotes(command: SwapQuoteCommand) {
-        const settled = await Promise.allSettled(
-            this.quoteProviders.map((provider) => provider.requestQuotes(command)),
-        );
+        const providers =
+            command.recipient !== command.signerId
+                ? this.quoteProviders.filter((provider) => provider.supportsExternalRecipient)
+                : this.quoteProviders;
+        const settled = await Promise.allSettled(providers.map((provider) => provider.requestQuotes(command)));
 
         return settled
             .filter(

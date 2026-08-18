@@ -47,6 +47,8 @@ function validPreparePayload(overrides: Record<string, unknown> = {}) {
         slippageTolerance: 100,
         deadline: futureDeadline(),
         signerId: EVM_SIGNER,
+        recipient: EVM_SIGNER,
+        recipientType: 'DESTINATION_CHAIN',
         authMethod: 'evm',
         ...overrides,
     };

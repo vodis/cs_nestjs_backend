@@ -7,8 +7,22 @@ import { BalanceCacheEntry } from './models/balance-cache-entry.model';
 import { ProductEvent } from './models/product-event.model';
 import { WalletLink } from './models/wallet-link.model';
 import { SEQUELIZE } from './database.tokens';
+import { InvestmentProfile } from './models/investment-profile.model';
+import { AgentConnection } from './models/agent-connection.model';
+import { AgentCredential } from './models/agent-credential.model';
+import { AgentAuthorization } from './models/agent-authorization.model';
 
-const models = [AppUser, WalletLink, BalanceCacheEntry, AuthAuditEvent, ProductEvent];
+const models = [
+    AppUser,
+    WalletLink,
+    BalanceCacheEntry,
+    AuthAuditEvent,
+    ProductEvent,
+    InvestmentProfile,
+    AgentConnection,
+    AgentCredential,
+    AgentAuthorization,
+];
 
 function databaseUrl(config: ConfigService): string | undefined {
     return config.get<string>('DATABASE_URL') || process.env.DATABASE_URL;

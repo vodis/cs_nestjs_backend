@@ -1,5 +1,6 @@
 import { SwapValidationError } from '../errors/swap-validation.error';
 import { SwapQuoteCommand } from '../models/swap-quote-request';
+import { AssetRegistryEntry } from '../models/asset-registry-entry';
 import { SwapAddressValidationService } from './swap-address-validation.service';
 
 export type SwapValidationPolicy = {
@@ -26,6 +27,22 @@ export class SwapRequestValidationService {
         if (!asset) {
             throw new SwapValidationError('UNSUPPORTED_ASSET', 'Asset is not in the server allowlist', { assetId });
         }
+    }
+
+    assertExternalRecipientSupported(command: SwapQuoteCommand, destinationAsset: AssetRegistryEntry): void {
+        if (this.addressValidationService.areEquivalent(command.authMethod, command.recipient, command.signerId)) {
+            return;
+        }
+
+        this.addressValidationService.assertExternalRecipient(
+            command.recipient,
+            command.recipientType,
+            destinationAsset.blockchain,
+        );
+    }
+
+    isExternalRecipient(command: SwapQuoteCommand): boolean {
+        return !this.addressValidationService.areEquivalent(command.authMethod, command.recipient, command.signerId);
     }
 
     private assertDeadline(deadline: string): void {

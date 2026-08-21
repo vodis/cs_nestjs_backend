@@ -16,6 +16,8 @@ describe('PrepareSwapUseCase', () => {
         slippageTolerance: 100,
         deadline: new Date(Date.now() + 60_000).toISOString(),
         signerId: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9',
+        recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9',
+        recipientType: 'DESTINATION_CHAIN',
         authMethod: 'evm',
     };
 
@@ -25,7 +27,7 @@ describe('PrepareSwapUseCase', () => {
             defuseAssetId: assetId,
             symbol: assetId.includes('wrap') ? 'wNEAR' : 'USDC',
             decimals: assetId.includes('wrap') ? 24 : 6,
-            blockchain: assetId.includes('wrap') ? 'near' : 'eth',
+            blockchain: assetId.includes('wrap') ? 'near' : assetId.includes('sol-') ? 'sol' : 'eth',
             price: assetId.includes('wrap') ? '2.5' : '1',
         })),
     };
@@ -99,6 +101,92 @@ describe('PrepareSwapUseCase', () => {
             [command.destinationAsset]: '2500000000000000000000000',
         });
         expect(result.signatureStandard).toBe('erc191');
+    });
+
+    it('uses only recipient-capable providers for a foreign destination address', async () => {
+        const destinationAsset = 'nep141:sol-usdc.omft.near';
+        const internalProvider: QuoteProviderPort = {
+            providerId: 'solver-relay',
+            requestQuotes: jest.fn().mockResolvedValue([]),
+        };
+        const recipientProvider: QuoteProviderPort = {
+            providerId: 'one-click',
+            supportsExternalRecipient: true,
+            requestQuotes: jest.fn().mockResolvedValue([
+                {
+                    providerId: 'one-click',
+                    executionMode: 'deposit_address',
+                    quoteHashes: [],
+                    originAsset: command.originAsset,
+                    destinationAsset,
+                    amountIn: '1000000',
+                    amountOut: '400000000000000000000000',
+                    expirationTime: command.deadline,
+                    executionPackage: {
+                        providerId: 'one-click',
+                        mode: 'deposit_address',
+                        protocol: '1click',
+                        requiredAction: 'deposit',
+                        payload: { depositAddress: 'deposit-address' },
+                    },
+                },
+            ]),
+        };
+        const useCase = createUseCase([internalProvider, recipientProvider]);
+
+        const result = await useCase.execute({
+            ...command,
+            destinationAsset,
+            recipient: 'BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z',
+            recipientType: 'DESTINATION_CHAIN',
+        });
+
+        expect(internalProvider.requestQuotes).not.toHaveBeenCalled();
+        expect(recipientProvider.requestQuotes).toHaveBeenCalled();
+        expect(result.providerId).toBe('one-click');
+    });
+
+    it('rejects a foreign recipient that is invalid for the destination network', async () => {
+        const provider: QuoteProviderPort = {
+            providerId: 'one-click',
+            supportsExternalRecipient: true,
+            requestQuotes: jest.fn(),
+        };
+
+        await expect(
+            createUseCase([provider]).execute({
+                ...command,
+                destinationAsset: 'nep141:sol-usdc.omft.near',
+                recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b8',
+            }),
+        ).rejects.toMatchObject({ code: 'INVALID_RECIPIENT' } satisfies Partial<SwapValidationError>);
+
+        expect(provider.requestQuotes).not.toHaveBeenCalled();
+    });
+
+    it('does not classify equivalent EVM address casing as an external recipient', async () => {
+        const internalProvider: QuoteProviderPort = {
+            providerId: 'solver-relay',
+            requestQuotes: jest.fn().mockResolvedValue([
+                {
+                    providerId: 'solver-relay',
+                    executionMode: 'intent_sign',
+                    quoteHashes: ['0xquote-hash'],
+                    originAsset: command.originAsset,
+                    destinationAsset: command.destinationAsset,
+                    amountIn: '1000000',
+                    amountOut: '2500000000000000000000000',
+                    expirationTime: command.deadline,
+                },
+            ]),
+        };
+
+        await createUseCase([internalProvider]).execute({
+            ...command,
+            signerId: command.signerId.toUpperCase().replace('0X', '0x'),
+        });
+
+        expect(internalProvider.requestQuotes).toHaveBeenCalled();
     });
 
     it('continues when one provider fails and another succeeds', async () => {

@@ -34,6 +34,20 @@ export class PrepareSwapRequestDto {
     @IsString()
     signerId: string;
 
+    @ApiPropertyOptional({
+        example: 'BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z',
+        description: 'Destination-chain recipient. Defaults to signerId for backward compatibility.',
+    })
+    @IsOptional()
+    @IsString()
+    @Matches(/^\S+$/, { message: 'recipient must not contain whitespace' })
+    recipient?: string;
+
+    @ApiPropertyOptional({ enum: ['DESTINATION_CHAIN', 'INTENTS'] })
+    @IsOptional()
+    @IsIn(['DESTINATION_CHAIN', 'INTENTS'])
+    recipientType?: 'DESTINATION_CHAIN' | 'INTENTS';
+
     @ApiProperty({ example: 'evm' })
     @IsIn(['evm', 'near'])
     authMethod: 'evm' | 'near';

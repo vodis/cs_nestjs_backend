@@ -74,16 +74,21 @@ export class AgentAccessService {
         const clientName = this.validateClient(input.clientId, input.redirectUri);
         if (!/^[A-Za-z0-9_-]{43,128}$/.test(input.codeChallenge))
             throw this.oauthError('invalid_request', 'Invalid PKCE challenge');
-        const authorization = await this.repository.createAuthorization({
-            clientId: input.clientId,
-            clientName,
-            redirectUri: input.redirectUri,
-            state: input.state,
-            resource: input.resource,
-            scopes: this.validateScopes(input.scopes),
-            codeChallenge: input.codeChallenge,
-            status: 'pending',
-            expiresAt: new Date(Date.now() + AUTHORIZATION_LIFETIME_MS),
+        const scopes = this.validateScopes(input.scopes);
+        const authorization = await this.repository.transaction(async (repository) => {
+            const created = await repository.createAuthorization({
+                clientId: input.clientId,
+                clientName,
+                redirectUri: input.redirectUri,
+                state: input.state,
+                resource: input.resource,
+                scopes,
+                codeChallenge: input.codeChallenge,
+                status: 'pending',
+                expiresAt: new Date(Date.now() + AUTHORIZATION_LIFETIME_MS),
+            });
+            await this.audit(repository, 'agent.authorization.requested', created, { flow: 'authorization_code' });
+            return created;
         });
         return `${this.appOrigin()}/en/portfolio/agent/authorize?transaction=${encodeURIComponent(authorization.id)}`;
     }
@@ -94,15 +99,19 @@ export class AgentAccessService {
         const clientName = this.validateDeviceClient(input.clientId);
         const deviceCode = this.secret();
         const userCode = this.userCode();
-        await this.repository.createAuthorization({
-            clientId: input.clientId,
-            clientName,
-            resource: input.resource,
-            scopes: this.validateScopes(input.scopes),
-            deviceCodeHash: this.hash(deviceCode),
-            userCode,
-            status: 'pending',
-            expiresAt: new Date(Date.now() + AUTHORIZATION_LIFETIME_MS),
+        const scopes = this.validateScopes(input.scopes);
+        await this.repository.transaction(async (repository) => {
+            const authorization = await repository.createAuthorization({
+                clientId: input.clientId,
+                clientName,
+                resource: input.resource,
+                scopes,
+                deviceCodeHash: this.hash(deviceCode),
+                userCode,
+                status: 'pending',
+                expiresAt: new Date(Date.now() + AUTHORIZATION_LIFETIME_MS),
+            });
+            await this.audit(repository, 'agent.authorization.requested', authorization, { flow: 'device_code' });
         });
         return {
             device_code: deviceCode,
@@ -118,10 +127,6 @@ export class AgentAccessService {
         this.requireEnabled();
         const authorization = await this.pendingAuthorization(id);
         if (authorization.userId && authorization.userId !== userId) throw new ForbiddenException();
-        if (!authorization.userId) {
-            authorization.userId = userId;
-            await this.repository.saveAuthorization(authorization);
-        }
         return this.toAuthorizationResponse(authorization);
     }
 
@@ -131,58 +136,70 @@ export class AgentAccessService {
             .toUpperCase()
             .replace(/[^A-Z0-9]/g, '')
             .replace(/^(.{4})(.{4})$/, '$1-$2');
-        const authorization = await this.repository.authorizationByUserCode(normalized);
-        if (!authorization) throw new NotFoundException('Device code is invalid or expired');
-        const pending = await this.pendingAuthorization(authorization.id);
-        if (pending.userId && pending.userId !== userId) throw new ForbiddenException();
-        if (!pending.userId) {
-            pending.userId = userId;
-            await this.repository.saveAuthorization(pending);
-        }
-        return this.toAuthorizationResponse(pending);
+        return this.repository.transaction(async (repository) => {
+            const authorization = await repository.authorizationByUserCode(normalized, true);
+            if (!authorization) throw new NotFoundException('Device code is invalid or expired');
+            const pending = await this.pendingAuthorization(authorization.id, repository, true);
+            if (pending.userId && pending.userId !== userId) throw new ForbiddenException();
+            if (!pending.userId) {
+                pending.userId = userId;
+                await repository.saveAuthorization(pending);
+            }
+            return this.toAuthorizationResponse(pending);
+        });
     }
 
     async decide(id: string, userId: string, decision: 'approve' | 'deny'): Promise<string> {
         this.requireEnabled();
-        const authorization = await this.pendingAuthorization(id);
-        if (authorization.userId && authorization.userId !== userId) throw new ForbiddenException();
-        authorization.userId = userId;
-        authorization.status = decision === 'approve' ? 'approved' : 'denied';
-        if (decision === 'approve') {
-            const connection = await this.repository.createConnection({
-                userId,
-                clientId: authorization.clientId,
-                clientName: authorization.clientName,
-                scopes: authorization.scopes,
-                status: 'active',
-                expiresAt: new Date(Date.now() + GRANT_LIFETIME_MS),
-            });
-            authorization.connectionId = connection.id;
-        }
-        await this.repository.saveAuthorization(authorization);
+        const authorization = await this.repository.transaction(async (repository) => {
+            const pending = await this.pendingAuthorization(id, repository, true);
+            if (pending.userId && pending.userId !== userId) throw new ForbiddenException();
+            pending.userId = userId;
+            pending.status = decision === 'approve' ? 'approved' : 'denied';
+            if (decision === 'approve') {
+                const connection = await repository.createConnection({
+                    userId,
+                    clientId: pending.clientId,
+                    clientName: pending.clientName,
+                    scopes: pending.scopes,
+                    status: 'active',
+                    expiresAt: new Date(Date.now() + GRANT_LIFETIME_MS),
+                });
+                pending.connectionId = connection.id;
+            }
+            await repository.saveAuthorization(pending);
+            await this.audit(
+                repository,
+                `agent.authorization.${decision === 'approve' ? 'approved' : 'denied'}`,
+                pending,
+            );
+            return pending;
+        });
         if (authorization.redirectUri) return `${this.issuer()}/oauth/complete?transaction=${authorization.id}`;
         return `${this.appOrigin()}/en/portfolio?agent=${decision === 'approve' ? 'connected' : 'denied'}`;
     }
 
     async completeBrowserAuthorization(id: string): Promise<string> {
         this.requireEnabled();
-        const authorization = await this.repository.authorizationById(id);
-        if (!authorization?.redirectUri || !['approved', 'denied'].includes(authorization.status)) {
-            throw this.oauthError('invalid_request', 'Authorization cannot be completed');
-        }
-        if (authorization.authorizationCodeHash)
-            throw this.oauthError('invalid_request', 'Authorization was already completed');
-        const redirect = new URL(authorization.redirectUri);
-        if (authorization.status === 'denied') redirect.searchParams.set('error', 'access_denied');
-        else {
-            const code = this.secret();
-            authorization.authorizationCodeHash = this.hash(code);
-            await this.repository.saveAuthorization(authorization);
-            redirect.searchParams.set('code', code);
-        }
-        if (authorization.state) redirect.searchParams.set('state', authorization.state);
-        redirect.searchParams.set('iss', this.issuer());
-        return redirect.toString();
+        return this.repository.transaction(async (repository) => {
+            const authorization = await repository.authorizationById(id, true);
+            if (!authorization?.redirectUri || !['approved', 'denied'].includes(authorization.status)) {
+                throw this.oauthError('invalid_request', 'Authorization cannot be completed');
+            }
+            if (authorization.authorizationCodeHash)
+                throw this.oauthError('invalid_request', 'Authorization was already completed');
+            const redirect = new URL(authorization.redirectUri);
+            if (authorization.status === 'denied') redirect.searchParams.set('error', 'access_denied');
+            else {
+                const code = this.secret();
+                authorization.authorizationCodeHash = this.hash(code);
+                await repository.saveAuthorization(authorization);
+                redirect.searchParams.set('code', code);
+            }
+            if (authorization.state) redirect.searchParams.set('state', authorization.state);
+            redirect.searchParams.set('iss', this.issuer());
+            return redirect.toString();
+        });
     }
 
     async exchangeAuthorizationCode(input: {
@@ -193,80 +210,128 @@ export class AgentAccessService {
         resource: string;
     }): Promise<TokenPair> {
         this.requireEnabled();
-        const authorization = await this.repository.authorizationByCodeHash(this.hash(input.code));
-        if (!authorization || authorization.status !== 'approved' || authorization.expiresAt <= new Date())
-            throw this.oauthError('invalid_grant');
-        if (
-            authorization.clientId !== input.clientId ||
-            authorization.redirectUri !== input.redirectUri ||
-            authorization.resource !== input.resource
-        )
-            throw this.oauthError('invalid_grant');
-        const challenge = createHash('sha256').update(input.verifier).digest('base64url');
-        if (challenge !== authorization.codeChallenge) throw this.oauthError('invalid_grant');
-        authorization.status = 'consumed';
-        authorization.authorizationCodeHash = null;
-        await this.repository.saveAuthorization(authorization);
-        return this.issueTokens(
-            authorization.connectionId,
-            authorization.scopes,
-            Boolean(authorization.scopes.includes('offline_access')),
-        );
+        return this.repository.transaction(async (repository) => {
+            const authorization = await repository.authorizationByCodeHash(this.hash(input.code), true);
+            if (!authorization || authorization.status !== 'approved' || authorization.expiresAt <= new Date())
+                throw this.oauthError('invalid_grant');
+            if (
+                authorization.clientId !== input.clientId ||
+                authorization.redirectUri !== input.redirectUri ||
+                authorization.resource !== input.resource
+            )
+                throw this.oauthError('invalid_grant');
+            const challenge = createHash('sha256').update(input.verifier).digest('base64url');
+            if (challenge !== authorization.codeChallenge) throw this.oauthError('invalid_grant');
+            authorization.status = 'consumed';
+            authorization.authorizationCodeHash = null;
+            await repository.saveAuthorization(authorization);
+            const tokens = await this.issueTokens(
+                repository,
+                authorization.connectionId,
+                authorization.scopes,
+                Boolean(authorization.scopes.includes('offline_access')),
+            );
+            await this.audit(repository, 'agent.authorization.exchanged', authorization, {
+                flow: 'authorization_code',
+            });
+            return tokens;
+        });
     }
 
     async exchangeDeviceCode(input: { deviceCode: string; clientId: string }): Promise<TokenPair> {
         this.requireEnabled();
-        const authorization = await this.repository.authorizationByDeviceHash(this.hash(input.deviceCode));
-        if (!authorization || authorization.clientId !== input.clientId || authorization.expiresAt <= new Date())
-            throw this.oauthError('expired_token');
-        if (authorization.status === 'pending') throw this.oauthError('authorization_pending');
-        if (authorization.status === 'denied') throw this.oauthError('access_denied');
-        if (authorization.status !== 'approved') throw this.oauthError('invalid_grant');
-        authorization.status = 'consumed';
-        authorization.deviceCodeHash = null;
-        await this.repository.saveAuthorization(authorization);
-        return this.issueTokens(
-            authorization.connectionId,
-            authorization.scopes,
-            Boolean(authorization.scopes.includes('offline_access')),
-        );
+        return this.repository.transaction(async (repository) => {
+            const authorization = await repository.authorizationByDeviceHash(this.hash(input.deviceCode), true);
+            if (!authorization || authorization.clientId !== input.clientId || authorization.expiresAt <= new Date())
+                throw this.oauthError('expired_token');
+            if (authorization.status === 'pending') throw this.oauthError('authorization_pending');
+            if (authorization.status === 'denied') throw this.oauthError('access_denied');
+            if (authorization.status !== 'approved') throw this.oauthError('invalid_grant');
+            authorization.status = 'consumed';
+            authorization.deviceCodeHash = null;
+            await repository.saveAuthorization(authorization);
+            const tokens = await this.issueTokens(
+                repository,
+                authorization.connectionId,
+                authorization.scopes,
+                Boolean(authorization.scopes.includes('offline_access')),
+            );
+            await this.audit(repository, 'agent.authorization.exchanged', authorization, { flow: 'device_code' });
+            return tokens;
+        });
     }
 
     async refresh(refreshToken: string, clientId: string): Promise<TokenPair> {
         this.requireEnabled();
-        const credential = await this.repository.credentialByHash(this.hash(refreshToken), 'refresh');
-        if (!credential) throw this.oauthError('invalid_grant');
-        if (credential.usedAt || credential.revokedAt) {
-            await this.repository.revokeFamily(credential.familyId);
-            throw this.oauthError('invalid_grant', 'Refresh token reuse detected');
-        }
-        const connection = await this.repository.connectionById(credential.connectionId);
-        if (
-            !connection ||
-            connection.clientId !== clientId ||
-            connection.status !== 'active' ||
-            connection.expiresAt <= new Date() ||
-            credential.expiresAt <= new Date()
-        )
-            throw this.oauthError('invalid_grant');
-        credential.usedAt = new Date();
-        await credential.save();
-        return this.issueTokens(connection.id, connection.scopes, true, credential.familyId, connection.expiresAt);
+        const result = await this.repository.transaction(async (repository) => {
+            const credential = await repository.credentialByHash(this.hash(refreshToken), 'refresh', true);
+            if (!credential) return { error: 'invalid' as const };
+            const connection = await repository.connectionById(credential.connectionId, true);
+            if (credential.usedAt || credential.revokedAt) {
+                await repository.revokeFamily(credential.familyId);
+                if (connection) {
+                    await repository.createAuditEvent({
+                        userId: connection.userId,
+                        eventType: 'agent.token.refresh_reuse',
+                        metadata: { connectionId: connection.id, clientId: connection.clientId },
+                    });
+                }
+                return { error: 'reuse' as const };
+            }
+            if (
+                !connection ||
+                connection.clientId !== clientId ||
+                connection.status !== 'active' ||
+                connection.expiresAt <= new Date() ||
+                credential.expiresAt <= new Date()
+            )
+                return { error: 'invalid' as const };
+            credential.usedAt = new Date();
+            await repository.saveCredential(credential);
+            const tokens = await this.issueTokens(
+                repository,
+                connection.id,
+                connection.scopes,
+                true,
+                credential.familyId,
+                connection.expiresAt,
+            );
+            await repository.createAuditEvent({
+                userId: connection.userId,
+                eventType: 'agent.token.refreshed',
+                metadata: { connectionId: connection.id, clientId: connection.clientId, scopes: connection.scopes },
+            });
+            return { tokens };
+        });
+        if ('tokens' in result) return result.tokens;
+        if (result.error === 'reuse') throw this.oauthError('invalid_grant', 'Refresh token reuse detected');
+        throw this.oauthError('invalid_grant');
     }
 
     async authenticateAccessToken(token: string, requiredScope?: AgentScope) {
         this.requireEnabled();
-        const credential = await this.repository.credentialByHash(this.hash(token), 'access');
-        if (!credential || credential.revokedAt || credential.expiresAt <= new Date())
-            throw new UnauthorizedException('Invalid agent access token');
-        const connection = await this.repository.connectionById(credential.connectionId);
-        if (!connection || connection.status !== 'active' || connection.expiresAt <= new Date())
-            throw new UnauthorizedException('Agent connection expired or revoked');
-        if (requiredScope && !connection.scopes.includes(requiredScope))
-            throw new ForbiddenException('Required scope was not granted');
-        connection.lastUsedAt = new Date();
-        await this.repository.saveConnection(connection);
-        return connection;
+        return this.repository.transaction(async (repository) => {
+            const credential = await repository.credentialByHash(this.hash(token), 'access');
+            if (!credential || credential.revokedAt || credential.expiresAt <= new Date())
+                throw new UnauthorizedException('Invalid agent access token');
+            const connection = await repository.connectionById(credential.connectionId);
+            if (!connection || connection.status !== 'active' || connection.expiresAt <= new Date())
+                throw new UnauthorizedException('Agent connection expired or revoked');
+            if (requiredScope && !connection.scopes.includes(requiredScope))
+                throw new ForbiddenException('Required scope was not granted');
+            connection.lastUsedAt = new Date();
+            await repository.saveConnection(connection);
+            await repository.createAuditEvent({
+                userId: connection.userId,
+                eventType: 'agent.mcp.access',
+                metadata: {
+                    connectionId: connection.id,
+                    clientId: connection.clientId,
+                    scope: requiredScope ?? null,
+                },
+            });
+            return connection;
+        });
     }
 
     async connectionsForUser(userId: string) {
@@ -284,22 +349,41 @@ export class AgentAccessService {
     }
 
     async revokeConnection(userId: string, id: string) {
-        const connection = await this.repository.connectionById(id);
-        if (!connection || connection.userId !== userId) throw new NotFoundException('Agent connection not found');
-        connection.status = 'revoked';
-        await this.repository.saveConnection(connection);
-        await this.repository.revokeConnectionCredentials(connection.id);
+        await this.repository.transaction(async (repository) => {
+            const connection = await repository.connectionById(id, true);
+            if (!connection || connection.userId !== userId) throw new NotFoundException('Agent connection not found');
+            connection.status = 'revoked';
+            await repository.saveConnection(connection);
+            await repository.revokeConnectionCredentials(connection.id);
+            await repository.createAuditEvent({
+                userId,
+                eventType: 'agent.connection.revoked',
+                metadata: { connectionId: connection.id, clientId: connection.clientId, scopes: connection.scopes },
+            });
+        });
     }
 
     async revokeToken(token: string) {
         const hash = this.hash(token);
-        const credential =
-            (await this.repository.credentialByHash(hash, 'refresh')) ??
-            (await this.repository.credentialByHash(hash, 'access'));
-        if (credential) await this.repository.revokeConnectionCredentials(credential.connectionId);
+        await this.repository.transaction(async (repository) => {
+            const credential =
+                (await repository.credentialByHash(hash, 'refresh', true)) ??
+                (await repository.credentialByHash(hash, 'access', true));
+            if (!credential) return;
+            const connection = await repository.connectionById(credential.connectionId, true);
+            await repository.revokeConnectionCredentials(credential.connectionId);
+            if (connection) {
+                await repository.createAuditEvent({
+                    userId: connection.userId,
+                    eventType: 'agent.token.revoked',
+                    metadata: { connectionId: connection.id, clientId: connection.clientId },
+                });
+            }
+        });
     }
 
     private async issueTokens(
+        repository: AgentAccessRepository,
         connectionId: string,
         scopes: string[],
         includeRefresh: boolean,
@@ -307,7 +391,7 @@ export class AgentAccessService {
         grantExpiry?: Date,
     ): Promise<TokenPair> {
         const accessToken = this.secret();
-        await this.repository.createCredential({
+        await repository.createCredential({
             connectionId,
             kind: 'access',
             tokenHash: this.hash(accessToken),
@@ -322,7 +406,7 @@ export class AgentAccessService {
         };
         if (includeRefresh) {
             const refreshToken = this.secret();
-            await this.repository.createCredential({
+            await repository.createCredential({
                 connectionId,
                 kind: 'refresh',
                 tokenHash: this.hash(refreshToken),
@@ -334,11 +418,40 @@ export class AgentAccessService {
         return result;
     }
 
-    private async pendingAuthorization(id: string) {
-        const authorization = await this.repository.authorizationById(id);
+    private async pendingAuthorization(
+        id: string,
+        repository: AgentAccessRepository = this.repository,
+        forUpdate = false,
+    ) {
+        const authorization = await repository.authorizationById(id, forUpdate);
         if (!authorization || authorization.status !== 'pending' || authorization.expiresAt <= new Date())
             throw new NotFoundException('Authorization request is invalid or expired');
         return authorization;
+    }
+
+    private audit(
+        repository: AgentAccessRepository,
+        eventType: string,
+        authorization: {
+            id: string;
+            userId?: string | null;
+            clientId: string;
+            scopes: string[];
+            connectionId?: string | null;
+        },
+        metadata: Record<string, unknown> = {},
+    ) {
+        return repository.createAuditEvent({
+            userId: authorization.userId ?? null,
+            eventType,
+            metadata: {
+                authorizationId: authorization.id,
+                connectionId: authorization.connectionId ?? null,
+                clientId: authorization.clientId,
+                scopes: authorization.scopes,
+                ...metadata,
+            },
+        });
     }
 
     private toAuthorizationResponse(authorization: {

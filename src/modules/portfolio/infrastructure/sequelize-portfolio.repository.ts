@@ -13,7 +13,11 @@ export class SequelizePortfolioRepository implements PortfolioRepository {
         const wallets = await WalletLink.findAll({ where: { userId, status: 'active' }, attributes: ['id'] });
         if (!wallets.length) return [];
         const entries = await BalanceCacheEntry.findAll({
-            where: { userId, walletId: { [Op.in]: wallets.map((wallet) => wallet.id) } },
+            where: {
+                userId,
+                walletId: { [Op.in]: wallets.map((wallet) => wallet.id) },
+                expiresAt: { [Op.gt]: new Date() },
+            },
             order: [['fetchedAt', 'DESC']],
         });
         return entries.map((entry) => ({

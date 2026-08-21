@@ -17,3 +17,7 @@ Rollback by setting the capability flag to `false` and redeploying. The migratio
 Agent tokens carry only connection identity through opaque, hashed-at-rest credentials. MCP tools derive the user from the grant and accept no user or wallet identifier. Responses omit email, provider subjects, session metadata, and full wallet addresses. There are no write or transaction tools.
 
 Access tokens expire after ten minutes. Refresh tokens rotate on every use, revoke their family on reuse, and cannot outlive the 30-day connection grant.
+
+Authorization codes, device codes, and refresh tokens are consumed inside database transactions with row-level locking. Consent decisions and investment-profile changes require an explicit Privy bearer token; the cookie fallback remains available only to read-only endpoints. Grant lifecycle and MCP access events are appended to `auth_audit_events` without recording token values.
+
+Portfolio snapshots exclude expired balance-cache rows. The top-level `asOf` is the oldest balance or price timestamp used by the snapshot, and is `null` when no current balance data exists.

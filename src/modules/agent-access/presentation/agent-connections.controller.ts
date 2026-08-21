@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../../api/auth/current-user.decorator';
-import { PrivyAuthGuard } from '../../../api/auth/privy-auth.guard';
+import { PrivyAuthGuard, RequirePrivyBearer } from '../../../api/auth/privy-auth.guard';
 import { AuthenticatedUser } from '../../../api/auth/types';
 import { AgentAccessService } from '../application/agent-access.service';
 import { DeviceCodeLookupDto } from './agent-oauth.dto';
@@ -21,7 +21,9 @@ export class AgentConnectionsController {
         return { connections: await this.agents.connectionsForUser(user.id) };
     }
 
-    @Delete('agent-connections/:id') async revoke(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    @Delete('agent-connections/:id')
+    @RequirePrivyBearer()
+    async revoke(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
         await this.agents.revokeConnection(user.id, id);
         return { status: 'revoked' };
     }
@@ -30,21 +32,21 @@ export class AgentConnectionsController {
         return this.agents.authorizationForUser(id, user.id);
     }
 
-    @Post('agent-authorizations/device-code') deviceAuthorization(
-        @CurrentUser() user: AuthenticatedUser,
-        @Body() body: DeviceCodeLookupDto,
-    ) {
+    @Post('agent-authorizations/device-code')
+    @RequirePrivyBearer()
+    deviceAuthorization(@CurrentUser() user: AuthenticatedUser, @Body() body: DeviceCodeLookupDto) {
         return this.agents.authorizationForDeviceCode(body.userCode, user.id);
     }
 
-    @Post('agent-authorizations/:id/approve') async approve(
-        @CurrentUser() user: AuthenticatedUser,
-        @Param('id') id: string,
-    ) {
+    @Post('agent-authorizations/:id/approve')
+    @RequirePrivyBearer()
+    async approve(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
         return { continueUrl: await this.agents.decide(id, user.id, 'approve') };
     }
 
-    @Post('agent-authorizations/:id/deny') async deny(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    @Post('agent-authorizations/:id/deny')
+    @RequirePrivyBearer()
+    async deny(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
         return { continueUrl: await this.agents.decide(id, user.id, 'deny') };
     }
 }

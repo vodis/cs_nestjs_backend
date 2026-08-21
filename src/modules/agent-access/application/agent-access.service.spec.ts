@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'crypto';
 import { AgentAccessService } from './agent-access.service';
@@ -11,6 +11,7 @@ describe('AgentAccessService', () => {
     let authorizations: any[];
     let connections: any[];
     let credentials: any[];
+    let auditEvents: any[];
     let revokedFamilies: string[];
     let service: AgentAccessService;
 
@@ -18,8 +19,18 @@ describe('AgentAccessService', () => {
         authorizations = [];
         connections = [];
         credentials = [];
+        auditEvents = [];
         revokedFamilies = [];
-        const repository = {
+        let transactionTail = Promise.resolve<unknown>(undefined);
+        const repository: any = {
+            transaction: jest.fn((callback) => {
+                const result = transactionTail.then(() => callback(repository));
+                transactionTail = result.then(
+                    () => undefined,
+                    () => undefined,
+                );
+                return result;
+            }),
             createAuthorization: jest.fn(async (input) => {
                 const item = record({ id: randomUUID(), createdAt: new Date(), ...input });
                 authorizations.push(item);
@@ -58,6 +69,7 @@ describe('AgentAccessService', () => {
             credentialByHash: jest.fn(
                 async (hash, kind) => credentials.find((item) => item.tokenHash === hash && item.kind === kind) ?? null,
             ),
+            saveCredential: jest.fn(async () => undefined),
             revokeFamily: jest.fn(async (familyId) => {
                 revokedFamilies.push(familyId);
                 credentials
@@ -69,6 +81,11 @@ describe('AgentAccessService', () => {
                     .filter((item) => item.connectionId === connectionId)
                     .forEach((item) => (item.revokedAt = new Date())),
             ),
+            createAuditEvent: jest.fn(async (input) => {
+                const item = { id: randomUUID(), createdAt: new Date(), ...input };
+                auditEvents.push(item);
+                return item;
+            }),
         };
         const config = new ConfigService({
             AGENT_INTEGRATIONS_ENABLED: 'true',
@@ -93,9 +110,7 @@ describe('AgentAccessService', () => {
         expect(consentUrl).toContain(authorization.id);
 
         await service.authorizationForUser(authorization.id, 'user-1');
-        await expect(service.authorizationForUser(authorization.id, 'user-2')).rejects.toBeInstanceOf(
-            ForbiddenException,
-        );
+        expect(authorization.userId).toBeUndefined();
         const completion = await service.decide(authorization.id, 'user-1', 'approve');
         expect(completion).toBe(`https://api.craftscript.test/oauth/complete?transaction=${authorization.id}`);
 
@@ -106,16 +121,31 @@ describe('AgentAccessService', () => {
             BadRequestException,
         );
 
-        const tokens = await service.exchangeAuthorizationCode({
-            code,
-            clientId: 'https://chatgpt.com/oauth/client.json',
-            redirectUri: 'https://chatgpt.com/connector_platform_oauth_redirect',
-            verifier,
-            resource: 'https://api.craftscript.test/mcp',
-        });
+        const exchange = () =>
+            service.exchangeAuthorizationCode({
+                code,
+                clientId: 'https://chatgpt.com/oauth/client.json',
+                redirectUri: 'https://chatgpt.com/connector_platform_oauth_redirect',
+                verifier,
+                resource: 'https://api.craftscript.test/mcp',
+            });
+        const attempts = await Promise.allSettled([exchange(), exchange()]);
+        expect(attempts.filter((attempt) => attempt.status === 'fulfilled')).toHaveLength(1);
+        expect(attempts.filter((attempt) => attempt.status === 'rejected')).toHaveLength(1);
+        const tokens = (attempts.find((attempt) => attempt.status === 'fulfilled') as PromiseFulfilledResult<any>)
+            .value;
         expect(tokens.refresh_token).toBeTruthy();
         expect(JSON.stringify(credentials)).not.toContain(tokens.access_token);
         expect(JSON.stringify(credentials)).not.toContain(tokens.refresh_token);
+        expect(JSON.stringify(auditEvents)).not.toContain(tokens.access_token);
+        expect(JSON.stringify(auditEvents)).not.toContain(tokens.refresh_token);
+        expect(auditEvents.map((event) => event.eventType)).toEqual(
+            expect.arrayContaining([
+                'agent.authorization.requested',
+                'agent.authorization.approved',
+                'agent.authorization.exchanged',
+            ]),
+        );
     });
 
     it('supports device authorization and rejects refresh-token reuse', async () => {
@@ -142,6 +172,7 @@ describe('AgentAccessService', () => {
             BadRequestException,
         );
         expect(revokedFamilies).toHaveLength(1);
+        expect(auditEvents.map((event) => event.eventType)).toContain('agent.token.refresh_reuse');
     });
 
     it('rejects redirect URIs that are not owned by the client', async () => {

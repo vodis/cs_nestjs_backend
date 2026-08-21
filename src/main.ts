@@ -81,6 +81,7 @@ async function bootstrap() {
             { path: '/oauth/device_authorization', method: RequestMethod.POST },
             { path: '/oauth/token', method: RequestMethod.POST },
             { path: '/oauth/revoke', method: RequestMethod.POST },
+            { path: '/mcp', method: RequestMethod.GET },
             { path: '/mcp', method: RequestMethod.POST },
         ],
     });

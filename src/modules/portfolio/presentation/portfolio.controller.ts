@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../../api/auth/current-user.decorator';
-import { PrivyAuthGuard } from '../../../api/auth/privy-auth.guard';
+import { PrivyAuthGuard, RequirePrivyBearer } from '../../../api/auth/privy-auth.guard';
 import { AuthenticatedUser } from '../../../api/auth/types';
 import { GetPortfolioUseCase } from '../application/get-portfolio.use-case';
 import { ManagePreferencesUseCase } from '../application/manage-preferences.use-case';
@@ -25,10 +25,9 @@ export class PortfolioController {
         return this.preferences.get(user.id);
     }
 
-    @Put('investment-profile') putPreferences(
-        @CurrentUser() user: AuthenticatedUser,
-        @Body() body: PutInvestmentProfileDto,
-    ) {
+    @Put('investment-profile')
+    @RequirePrivyBearer()
+    putPreferences(@CurrentUser() user: AuthenticatedUser, @Body() body: PutInvestmentProfileDto) {
         return this.preferences.save(user.id, body);
     }
 }

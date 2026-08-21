@@ -14,6 +14,10 @@ function response() {
             value.body = body;
             return value;
         }),
+        send: jest.fn((body) => {
+            value.body = body;
+            return value;
+        }),
     };
     return value;
 }
@@ -65,5 +69,22 @@ describe('McpController', () => {
         });
         const names = res.body.result.tools.map((tool: { name: string }) => tool.name);
         expect(names).toEqual(['get_portfolio_snapshot', 'get_investment_profile']);
+    });
+
+    it('accepts the initialized notification without a JSON-RPC response', async () => {
+        const res = response();
+        await controller.handle({ headers: { authorization: 'Bearer opaque-token' } } as never, res, {
+            jsonrpc: '2.0',
+            method: 'notifications/initialized',
+        });
+        expect(res.statusCode).toBe(202);
+        expect(res.send).toHaveBeenCalledWith();
+        expect(res.json).not.toHaveBeenCalled();
+    });
+
+    it('returns method not allowed when the client requests an SSE stream', () => {
+        const res = response();
+        controller.stream(res);
+        expect(res.statusCode).toBe(405);
     });
 });

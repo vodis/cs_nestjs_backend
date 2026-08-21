@@ -44,6 +44,7 @@ Current mitigating factors:
 
 - Production CORS is origin-restricted when `NODE_ENV=production`.
 - Auth also supports bearer tokens.
+- Agent consent/revocation and investment-profile mutations require bearer authentication and do not accept the cookie fallback.
 
 Gaps:
 

@@ -27,13 +27,21 @@ export class GetPortfolioUseCase {
             return { balance, asset, value };
         });
         const total = calculated.reduce((sum, item) => sum + (item.value ?? 0n), 0n);
-        const asOf = balances.reduce<Date | null>(
-            (latest, balance) => (!latest || balance.balanceUpdatedAt > latest ? balance.balanceUpdatedAt : latest),
+        const freshnessTimestamps = calculated.flatMap(({ balance, asset }) => {
+            const timestamps = [balance.balanceUpdatedAt];
+            if (asset?.priceUpdatedAt) {
+                const priceUpdatedAt = new Date(asset.priceUpdatedAt);
+                if (!Number.isNaN(priceUpdatedAt.getTime())) timestamps.push(priceUpdatedAt);
+            }
+            return timestamps;
+        });
+        const asOf = freshnessTimestamps.reduce<Date | null>(
+            (oldest, timestamp) => (!oldest || timestamp < oldest ? timestamp : oldest),
             null,
         );
 
         return {
-            asOf: (asOf ?? new Date()).toISOString(),
+            asOf: asOf?.toISOString() ?? null,
             valuationCurrency: 'USD' as const,
             totalValue: formatScaled(total),
             unpricedPositionCount: calculated.filter((item) => item.value === null).length,

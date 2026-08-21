@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Post, Req, Res, VERSION_NEUTRAL } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Req, Res, VERSION_NEUTRAL } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { GetPortfolioUseCase } from '../../portfolio/application/get-portfolio.use-case';
 import { ManagePreferencesUseCase } from '../../portfolio/application/manage-preferences.use-case';
@@ -15,11 +15,20 @@ export class McpController {
         private readonly preferences: ManagePreferencesUseCase,
     ) {}
 
+    @Get()
+    stream(@Res() response: Response) {
+        return response.status(405).send();
+    }
+
     @Post()
     async handle(@Req() request: Request, @Res() response: Response, @Body() body: McpRequest) {
         const token = this.bearer(request.headers.authorization);
         if (!token) return this.unauthorized(response);
         try {
+            if (body.id === undefined && body.method?.startsWith('notifications/')) {
+                await this.agents.authenticateAccessToken(token);
+                return response.status(202).send();
+            }
             if (body.method === 'initialize') {
                 await this.agents.authenticateAccessToken(token);
                 return response.json(
@@ -36,6 +45,10 @@ export class McpController {
             }
             if (body.method === 'tools/call') {
                 return response.json(this.ok(body.id, await this.callTool(token, body.params?.name)));
+            }
+            if (body.method === 'ping') {
+                await this.agents.authenticateAccessToken(token);
+                return response.json(this.ok(body.id, {}));
             }
             return response.status(400).json(this.failure(body.id, -32601, 'Method not found'));
         } catch (error) {

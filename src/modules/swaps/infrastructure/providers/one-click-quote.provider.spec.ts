@@ -35,7 +35,7 @@ describe('OneClickQuoteProvider', () => {
 
         expect(client.createQuote).toHaveBeenCalledWith(
             expect.objectContaining({
-                dry: true,
+                dry: false,
                 originAsset: command.originAsset,
                 destinationAsset: command.destinationAsset,
                 depositType: 'INTENTS',
@@ -68,6 +68,21 @@ describe('OneClickQuoteProvider', () => {
                 }),
             }),
         ]);
+    });
+
+    it('requests an executable quote during prepare instead of a dry estimate', async () => {
+        const client = {
+            createQuote: jest.fn().mockResolvedValue({
+                amountIn: '1000000',
+                amountOut: '900000',
+                depositAddress: 'one-click-deposit.near',
+            }),
+        } as unknown as OneClickApiHttpClient;
+        const provider = new OneClickQuoteProvider(client);
+
+        await provider.requestQuotes(command);
+
+        expect(client.createQuote).toHaveBeenCalledWith(expect.objectContaining({ dry: false }));
     });
 
     it('keeps a foreign destination recipient separate from the signer refund address', async () => {

@@ -10,11 +10,12 @@ import { SwapQuote } from '../src/modules/swaps/domain/models/swap-quote';
 
 const ORIGIN_ASSET = 'nep141:wrap.near';
 const DESTINATION_ASSET = 'nep141:usdt.tether-token.near';
+const SOL_DESTINATION_ASSET = 'nep141:sol-usdc.omft.near';
 const EVM_SIGNER = '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9';
 const NEAR_SIGNER = 'alice.near';
 
 type CreateSwapsAppOptions = {
-    assets?: Record<string, { price?: string } | null>;
+    assets?: Record<string, { price?: string; blockchain?: string } | null>;
     providers?: QuoteProviderPort[];
     maxSlippageBps?: number;
     solverRelay?: Pick<SolverRelayApiHttpClient, 'publishIntent'>;
@@ -60,7 +61,7 @@ function defaultAssetRegistry(assets?: CreateSwapsAppOptions['assets']) {
         ({
             [ORIGIN_ASSET]: { price: '1' },
             [DESTINATION_ASSET]: { price: '1' },
-        } as Record<string, { price?: string } | null>);
+        } as NonNullable<CreateSwapsAppOptions['assets']>);
 
     return {
         findById: jest.fn(async (assetId: string) => {
@@ -75,7 +76,7 @@ function defaultAssetRegistry(assets?: CreateSwapsAppOptions['assets']) {
                 defuseAssetId: assetId,
                 symbol: assetId.includes('wrap') ? 'wNEAR' : 'USDC',
                 decimals: assetId.includes('wrap') ? 24 : 6,
-                blockchain: 'near',
+                blockchain: entry.blockchain ?? 'near',
                 price: entry.price ?? '1',
             };
         }),
@@ -190,6 +191,8 @@ describe('Swaps (e2e)', () => {
                 .send(
                     validPreparePayload({
                         signerId: NEAR_SIGNER,
+                        recipient: NEAR_SIGNER,
+                        recipientType: 'INTENTS',
                         authMethod: 'near',
                     }),
                 )
@@ -520,6 +523,32 @@ describe('Swaps (e2e)', () => {
 
             expect(response.body).toMatchObject({
                 code: 'INVALID_SIGNER',
+            });
+        });
+
+        it('rejects a foreign recipient that does not match the destination network', async () => {
+            app = await createSwapsApp({
+                assets: {
+                    [ORIGIN_ASSET]: { price: '1', blockchain: 'near' },
+                    [SOL_DESTINATION_ASSET]: { price: '1', blockchain: 'sol' },
+                },
+            });
+
+            const response = await request(app.getHttpServer())
+                .post('/api/v1/swaps/prepare')
+                .send(
+                    validPreparePayload({
+                        destinationAsset: SOL_DESTINATION_ASSET,
+                        recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b8',
+                    }),
+                )
+                .expect(400);
+
+            expect(response.body).toMatchObject({
+                code: 'INVALID_RECIPIENT',
+                details: {
+                    destinationBlockchain: 'sol',
+                },
             });
         });
 

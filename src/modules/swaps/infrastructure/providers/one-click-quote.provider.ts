@@ -92,7 +92,7 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
         const userAddressType = command.authMethod === 'near' ? 'INTENTS' : 'ORIGIN_CHAIN';
 
         return {
-            dry: true,
+            dry: false,
             swapType: command.swapType,
             slippageTolerance: command.slippageTolerance,
             originAsset: command.originAsset,

@@ -36,6 +36,7 @@ export class PrepareSwapUseCase {
 
         this.validationService.assertAssetSupported(command.originAsset, originAsset);
         this.validationService.assertAssetSupported(command.destinationAsset, destinationAsset);
+        this.validationService.assertExternalRecipientSupported(command, destinationAsset!);
 
         await this.productEvents.recordBestEffort({
             eventName: 'swap.quote',
@@ -81,10 +82,9 @@ export class PrepareSwapUseCase {
     }
 
     private async collectQuotes(command: SwapQuoteCommand) {
-        const providers =
-            command.recipient !== command.signerId
-                ? this.quoteProviders.filter((provider) => provider.supportsExternalRecipient)
-                : this.quoteProviders;
+        const providers = this.validationService.isExternalRecipient(command)
+            ? this.quoteProviders.filter((provider) => provider.supportsExternalRecipient)
+            : this.quoteProviders;
         const settled = await Promise.allSettled(providers.map((provider) => provider.requestQuotes(command)));
 
         return settled

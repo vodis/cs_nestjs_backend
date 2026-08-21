@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsISO8601, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsISO8601, IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
 
 const deadlineExample = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
@@ -39,6 +39,7 @@ export class CreateOneClickQuoteRequestDto {
     })
     @IsOptional()
     @IsString()
+    @Matches(/^\S+$/, { message: 'recipient must not contain whitespace' })
     recipient?: string;
 
     @ApiPropertyOptional({ enum: ['DESTINATION_CHAIN', 'INTENTS'] })

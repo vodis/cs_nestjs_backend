@@ -72,7 +72,18 @@ async function bootstrap() {
     app.enableVersioning({ type: VersioningType.URI });
 
     app.setGlobalPrefix('/api', {
-        exclude: [{ path: '/health', method: RequestMethod.GET }],
+        exclude: [
+            { path: '/health', method: RequestMethod.GET },
+            { path: '/.well-known/oauth-protected-resource', method: RequestMethod.GET },
+            { path: '/.well-known/oauth-authorization-server', method: RequestMethod.GET },
+            { path: '/oauth/authorize', method: RequestMethod.GET },
+            { path: '/oauth/complete', method: RequestMethod.GET },
+            { path: '/oauth/device_authorization', method: RequestMethod.POST },
+            { path: '/oauth/token', method: RequestMethod.POST },
+            { path: '/oauth/revoke', method: RequestMethod.POST },
+            { path: '/mcp', method: RequestMethod.GET },
+            { path: '/mcp', method: RequestMethod.POST },
+        ],
     });
 
     const config = new DocumentBuilder().setTitle('CSS-API Web Api Service').setVersion('1.0').build();

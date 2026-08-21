@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsISO8601, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsIn, IsISO8601, IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
 
 const deadlineExample = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
@@ -32,6 +32,20 @@ export class CreateOneClickQuoteRequestDto {
     @ApiProperty({ example: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9' })
     @IsString()
     userAddress: string;
+
+    @ApiPropertyOptional({
+        example: 'BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z',
+        description: 'Destination-chain recipient. Defaults to userAddress.',
+    })
+    @IsOptional()
+    @IsString()
+    @Matches(/^\S+$/, { message: 'recipient must not contain whitespace' })
+    recipient?: string;
+
+    @ApiPropertyOptional({ enum: ['DESTINATION_CHAIN', 'INTENTS'] })
+    @IsOptional()
+    @IsIn(['DESTINATION_CHAIN', 'INTENTS'])
+    recipientType?: 'DESTINATION_CHAIN' | 'INTENTS';
 
     @ApiProperty({ example: 'evm' })
     @IsIn(['evm', 'near'])

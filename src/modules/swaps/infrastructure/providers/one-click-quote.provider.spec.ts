@@ -11,6 +11,8 @@ describe('OneClickQuoteProvider', () => {
         slippageTolerance: 100,
         deadline: new Date(Date.now() + 60_000).toISOString(),
         signerId: 'alice.near',
+        recipient: 'alice.near',
+        recipientType: 'INTENTS',
         authMethod: 'near',
     };
 
@@ -33,11 +35,12 @@ describe('OneClickQuoteProvider', () => {
 
         expect(client.createQuote).toHaveBeenCalledWith(
             expect.objectContaining({
-                dry: true,
+                dry: false,
                 originAsset: command.originAsset,
                 destinationAsset: command.destinationAsset,
                 depositType: 'INTENTS',
                 recipientType: 'INTENTS',
+                recipient: command.recipient,
             }),
         );
         expect(quotes).toEqual([
@@ -65,6 +68,43 @@ describe('OneClickQuoteProvider', () => {
                 }),
             }),
         ]);
+    });
+
+    it('requests an executable quote during prepare instead of a dry estimate', async () => {
+        const client = {
+            createQuote: jest.fn().mockResolvedValue({
+                amountIn: '1000000',
+                amountOut: '900000',
+                depositAddress: 'one-click-deposit.near',
+            }),
+        } as unknown as OneClickApiHttpClient;
+        const provider = new OneClickQuoteProvider(client);
+
+        await provider.requestQuotes(command);
+
+        expect(client.createQuote).toHaveBeenCalledWith(expect.objectContaining({ dry: false }));
+    });
+
+    it('keeps a foreign destination recipient separate from the signer refund address', async () => {
+        const client = {
+            createQuote: jest.fn().mockResolvedValue({ amountIn: '1000000', amountOut: '900000' }),
+        } as unknown as OneClickApiHttpClient;
+        const provider = new OneClickQuoteProvider(client);
+
+        await provider.requestQuotes({
+            ...command,
+            recipient: 'BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z',
+            recipientType: 'DESTINATION_CHAIN',
+        });
+
+        expect(client.createQuote).toHaveBeenCalledWith(
+            expect.objectContaining({
+                recipient: 'BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z',
+                recipientType: 'DESTINATION_CHAIN',
+                refundTo: 'alice.near',
+                refundType: 'INTENTS',
+            }),
+        );
     });
 
     it('maps quote hashes when 1Click exposes them for intent-sign execution', async () => {

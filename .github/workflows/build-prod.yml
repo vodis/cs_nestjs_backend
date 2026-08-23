@@ -5,7 +5,7 @@
 #   2. ghcr.io/vodis/cs_nestjs_backend:production-metadata
 #
 # PRs targeting `master` run lint/tests only (no image push).
-# Branch flow: develop → staging → master
+# Branch flow: develop → staging environment; master → production.
 
 name: Build Production - Backend
 

@@ -22,19 +22,25 @@ Full app-team guide: [`cs_orchestrator/docs/integration/SERVICE_INTEGRATION_GUID
 ## Branch flow
 
 ```text
-develop  →  staging  →  master
-   │           │           │
- build-dev   build-staging  build-prod
- (CI only)   (orchestrator) (orchestrator)
+task PR  →  develop  →  staging environment
+               │
+          build-staging
+           (orchestrator)
+
+develop  →  master  →  production environment
+               │
+           build-prod
+          (orchestrator)
 ```
 
-| Branch    | Workflow            | Orchestrator service     | GHCR tags                             |
-| --------- | ------------------- | ------------------------ | ------------------------------------- |
-| `develop` | `build-dev.yml`     | —                        | —                                     |
-| `staging` | `build-staging.yml` | `staging-nestjs-backend` | `:staging`, `:staging-metadata`       |
-| `master`  | `build-prod.yml`    | `nestjs-backend`         | `:production`, `:production-metadata` |
+| Branch          | Workflow            | Orchestrator service     | GHCR tags                             |
+| --------------- | ------------------- | ------------------------ | ------------------------------------- |
+| PR to `develop` | `build-dev.yml`     | —                        | —                                     |
+| `develop`       | `build-staging.yml` | `staging-nestjs-backend` | `:staging`, `:staging-metadata`       |
+| `master`        | `build-prod.yml`    | `nestjs-backend`         | `:production`, `:production-metadata` |
 
-Promote by merging PRs: `develop` → `staging` → `master`.
+Every merge to `develop` publishes a staging candidate. Promote a reviewed
+`develop` commit to production through a PR to `master`.
 
 ## Production CI contract (`master`)
 
@@ -46,14 +52,19 @@ Promote by merging PRs: `develop` → `staging` → `master`.
 | `git.branch`     | `master`                                         |
 | `git.repository` | `https://github.com/vodis/cs_nestjs_backend.git` |
 
-## Staging CI contract (`staging`)
+## Staging CI contract (`develop`)
 
 | Item         | Value                                 |
 | ------------ | ------------------------------------- |
 | Workflow     | `.github/workflows/build-staging.yml` |
 | Service id   | `staging-nestjs-backend`              |
 | Environment  | `staging`                             |
-| `git.branch` | `staging`                             |
+| `git.branch` | `develop`                             |
+
+Manual staging dispatches must run from `develop`. Set
+`force_database_migration=true` for first-database bootstrap or a controlled
+database-gate retry; this override can only strengthen metadata to
+`database.risk=migration`.
 
 Each release run: lint/test/build → OCI image digest → Syft/Trivy → `deploy-metadata.json` → ORAS metadata push.
 
@@ -120,10 +131,10 @@ migrated; they must not leak into the public host contract.
 
 Runtime env is applied when the orchestrator creates a new container. Updating service catalog values after a deployment does not mutate the active container. Use the normal branch promotion/deploy path, or a documented orchestrator config-only redeploy mechanism, whenever production env changes must take effect.
 
-| Environment | Public health URL                            |
-| ----------- | -------------------------------------------- |
-| Staging     | `https://staging-api.craftscript.com/health` |
-| Production  | `https://api.craftscript.com/health`         |
+| Environment | Public health URL                                         |
+| ----------- | --------------------------------------------------------- |
+| Staging     | `https://staging-api-a41bf4534acb.craftscript.com/health` |
+| Production  | `https://api.craftscript.com/health`                      |
 
 ## Health
 
@@ -131,10 +142,10 @@ Runtime env is applied when the orchestrator creates a new container. Updating s
 
 ## GitHub setup
 
--   Protect `staging` and `master`; require the matching build workflow on each.
--   `develop`: optional PR checks via `build-dev.yml`.
+- Protect `develop` and `master`; require `build-dev.yml` for PRs to `develop`
+  and the production workflow for PRs to `master`.
 
 ## Reference
 
--   `cs_nextjs_client` — same branch/tag pattern (`staging` / `master` + `:staging` / `:production` tags)
--   `cs_orchestrator/docs/integration/SERVICE_INTEGRATION_GUIDE.md`
+- `cs_nextjs_client` — related orchestrator integration using the same metadata contract.
+- `cs_orchestrator/docs/integration/SERVICE_INTEGRATION_GUIDE.md`

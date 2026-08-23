@@ -1,6 +1,6 @@
 # Reusable GHCR build + deploy-metadata publish (orchestrator intake; no host deploy).
 #
-# Callers: build-prod.yml
+# Callers: build-staging.yml, build-prod.yml
 
 name: Reusable build
 
@@ -35,6 +35,11 @@ on:
         description: Concurrency group prefix
         required: true
         type: string
+      force_database_migration:
+        description: Force database.risk=migration; cannot weaken detected migration risk
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -214,8 +219,16 @@ jobs:
       - name: Detect database release risk
         id: database_risk
         shell: bash
+        env:
+          FORCE_DATABASE_MIGRATION: ${{ inputs.force_database_migration }}
         run: |
           set -euo pipefail
+
+          if [ "${FORCE_DATABASE_MIGRATION}" = "true" ]; then
+            echo "risk=migration" >> "${GITHUB_OUTPUT}"
+            echo "Database migration gate forced by the caller."
+            exit 0
+          fi
 
           if [ "${{ github.event_name }}" != "push" ]; then
             echo "risk=migration" >> "${GITHUB_OUTPUT}"

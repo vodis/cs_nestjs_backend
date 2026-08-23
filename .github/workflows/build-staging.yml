@@ -1,22 +1,25 @@
 # Staging — orchestrator intake via GHCR (no SSH deploy).
 #
-# On push / workflow_dispatch to `staging`:
+# On push / workflow_dispatch to `develop`:
 #   1. ghcr.io/vodis/cs_nestjs_backend:staging
 #   2. ghcr.io/vodis/cs_nestjs_backend:staging-metadata
 #
-# PRs targeting `staging` run lint/tests only (no image push).
-# Branch flow: develop → staging → master
+# PRs targeting `develop` run build-dev.yml checks only (no image push).
+# Branch flow: develop → staging environment; master → production.
 
 name: Build Staging - Backend
 
 on:
-  pull_request:
-    branches:
-      - staging
   push:
     branches:
-      - staging
+      - develop
   workflow_dispatch:
+    inputs:
+      force_database_migration:
+        description: Force database.risk=migration for bootstrap or a controlled retry
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -25,6 +28,7 @@ permissions:
 
 jobs:
   staging:
+    if: github.event_name == 'push' || github.ref == 'refs/heads/develop'
     permissions:
       contents: read
       packages: write
@@ -33,8 +37,9 @@ jobs:
     with:
       environment: staging
       service_name: staging-nestjs-backend
-      git_branch: staging
+      git_branch: develop
       image_tag: staging
       metadata_tag: staging-metadata
       artifact_prefix: staging-deploy-bundle
       concurrency_group: staging-orchestrator
+      force_database_migration: ${{ github.event_name == 'workflow_dispatch' && inputs.force_database_migration }}

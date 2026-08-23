@@ -32,10 +32,13 @@ Production secrets and runtime env are injected by the orchestrator when it crea
 
 ## Branch Flow
 
-Use short-lived task branches from `develop` and open PRs back to `develop`. Promote through:
+Use short-lived task branches from `develop` and open PRs back to `develop`.
+Merges to `develop` deploy the staging environment; production releases are
+promoted from `develop` to `master`:
 
 ```text
-develop -> staging -> master
+develop -> staging environment
+master  -> production environment
 ```
 
 See [docs/ORCHESTRATOR_INTEGRATION.md](./docs/ORCHESTRATOR_INTEGRATION.md) for CI/deploy contract details.

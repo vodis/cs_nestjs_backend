@@ -1,13 +1,17 @@
 version: '3.9'
 
+# Shared with cs_i18n_service (and other local CraftScript containers).
+# Create once: docker network create cs-network
 networks:
   cs-network:
-    driver: bridge
+    external: true
+    name: cs-network
 
 services:
   db:
     image: ${DB_CLIENT}
     container_name: db_cs
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}

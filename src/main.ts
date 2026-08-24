@@ -9,12 +9,8 @@ import { config as loadEnv } from 'dotenv';
 loadEnv();
 
 const LOCAL_DEV_ORIGINS = [
-    'http://localhost:4200',
-    'http://127.0.0.1:4200',
-    'http://localhost:5002',
-    'http://127.0.0.1:5002',
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
+    'http://localhost:5001',
+    'http://127.0.0.1:5001',
 ];
 const DEFAULT_ALLOWED_ORIGINS = ['*.craftscript.com', ...LOCAL_DEV_ORIGINS].join(',');
 

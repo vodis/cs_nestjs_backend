@@ -79,11 +79,16 @@ Required for production boot:
 -   `DEFAULT_LANGUAGE`
 -   `COOKIES_DOMAIN`
 
-Required for authenticated user flows:
+Required for authenticated user flows (production **and** staging):
 
 -   `PRIVY_APP_ID`
 -   `PRIVY_APP_SECRET`
 -   `PRIVY_JWKS_URL`
+
+Staging injects these via `staging-nestjs-backend` `requiredSecrets` in
+`cs_orchestrator` (`ops/scaffold/services.catalog.yml`). Locally, set the same
+keys in gitignored `.env`; `/api/v1/public/auth-config` stays `enabled: false`
+until `PRIVY_APP_ID` is non-empty.
 
 Keep `EXTERNAL_WALLET_BINDING_ENABLED=false` until the signed ownership-challenge
 flow is deployed. Embedded Privy wallets are verified server-side against the

@@ -74,16 +74,17 @@ Each release run: lint/test/build → OCI image digest → Syft/Trivy → `deplo
 
 Required for production boot:
 
--   `DATABASE_URL`
--   `CS_I18N_SERVICE_URL`
--   `DEFAULT_LANGUAGE`
--   `COOKIES_DOMAIN`
+- `DATABASE_URL`
+- `CS_I18N_SERVICE_URL`
+- `DEFAULT_LANGUAGE`
+- `COOKIES_DOMAIN`
 
 Required for authenticated user flows (production **and** staging):
 
--   `PRIVY_APP_ID`
--   `PRIVY_APP_SECRET`
--   `PRIVY_JWKS_URL`
+- `PRIVY_APP_ID`
+- `PRIVY_APP_SECRET`
+- `PRIVY_JWKS_URL`
+- `CHAIN_RPC_ENDPOINTS_JSON`
 
 Staging injects these via `staging-nestjs-backend` `requiredSecrets` in
 `cs_orchestrator` (`ops/scaffold/services.catalog.yml`). Locally, set the same
@@ -95,6 +96,32 @@ flow is deployed. Embedded Privy wallets are verified server-side against the
 authoritative Privy user record before persistence.
 
 Provider/config vars are documented in [.env.example](../.env.example). `API_SIGNING_KEY` is reserved in the environment contract but is not consumed by repository-visible code yet.
+
+### Balance RPC contract
+
+`CHAIN_RPC_ENDPOINTS_JSON` is a backend-only, orchestrator-managed secret. It is
+an object keyed by CAIP-2 network id. Each value is an ordered list of one to
+four `{ "alias", "url" }` providers. Aliases are safe for logs; URLs may contain
+provider credentials and must never be exposed to the browser or committed.
+
+The backend verifies a provider's reported chain before using it, retries
+transport errors, timeouts, rate limits, and provider 5xx responses on the next
+configured endpoint, and temporarily opens a circuit after repeated failures.
+Deterministic per-token errors remain partial batch results. When every provider
+fails, an expired cached value may be returned with `stale: true` and
+`meta.partial: true`; the API never invents a zero balance.
+
+`POST /api/v1/balances` accepts one `assetId` or up to 20 `assetIds`, plus an
+optional owned `walletId`/`walletAddress` and CAIP-2 `network`. Requested assets
+must exist in the backend asset allowlist. Requests are grouped by wallet and
+network into JSON-RPC batches. Omitting asset ids refreshes only the chain's
+native asset; discovering an entire token portfolio requires an indexer/cache
+producer and is intentionally not attempted through unbounded RPC scans.
+
+The `20260830000100-add-balance-cache-network.js` migration must be applied by
+the orchestrator before this application version serves traffic. It adds the
+CAIP-2 network to the cache identity so the same wallet and asset cannot collide
+across networks.
 
 Passkey enrollment and passkey login are separate capabilities. Users first
 authenticate with an existing CCO method such as email, Google, or Apple, then

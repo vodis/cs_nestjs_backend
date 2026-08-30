@@ -1,16 +1,17 @@
 import { Module } from '@nestjs/common';
+import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { AssetsModule } from '../assets/assets.module';
 import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../../database/database.module';
-import { NearRpcApiModule } from '../../http-clients/near-rpc-api/near-rpc-api.module';
 import { BalancesController } from './balances.controller';
 import { BalancesService } from './balances.service';
-import { NearRpcBalanceService } from './near-rpc-balance.service';
+import { ChainBalanceService } from './chain-balance.service';
+import { ChainRpcService } from './rpc/chain-rpc.service';
 
 @Module({
-    imports: [AuthModule, AssetsModule, DatabaseModule, ConfigModule, NearRpcApiModule],
+    imports: [AuthModule, AssetsModule, DatabaseModule, ConfigModule, HttpModule],
     controllers: [BalancesController],
-    providers: [BalancesService, NearRpcBalanceService],
+    providers: [BalancesService, ChainBalanceService, ChainRpcService],
 })
 export class BalancesModule {}

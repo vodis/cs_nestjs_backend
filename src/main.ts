@@ -8,10 +8,7 @@ import { config as loadEnv } from 'dotenv';
 
 loadEnv();
 
-const LOCAL_DEV_ORIGINS = [
-    'http://localhost:5001',
-    'http://127.0.0.1:5001',
-];
+const LOCAL_DEV_ORIGINS = ['http://localhost:5001', 'http://127.0.0.1:5001'];
 const DEFAULT_ALLOWED_ORIGINS = ['*.craftscript.com', ...LOCAL_DEV_ORIGINS].join(',');
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

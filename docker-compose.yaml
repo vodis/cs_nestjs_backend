@@ -1,5 +1,6 @@
 version: '3.9'
 
+# Local Postgres only. Run the Nest API with pnpm (DB_HOST=localhost).
 # Shared with cs_i18n_service (and other local CraftScript containers).
 # Create once: docker network create cs-network
 networks:
@@ -20,24 +21,6 @@ services:
       - ${DB_PORT}:5432
     volumes:
       - pg-db:/var/lib/postgres/data
-    networks:
-      - cs-network
-
-  app:
-    build:
-      dockerfile: '.docker/Dockerfile'
-      context: .
-      target: develop
-    env_file:
-      - '.env'
-    volumes:
-      - './src:/code/src'
-      - './package.json:/code/package.json'
-      - './pnpm-lock.yaml:/code/pnpm-lock.yaml'
-    ports:
-      - ${SERVER_PORT}:${SERVER_PORT}
-    depends_on:
-      - db
     networks:
       - cs-network
 

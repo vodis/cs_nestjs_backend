@@ -51,6 +51,57 @@ describe('ChainRpcService', () => {
         expect(result).toEqual({ result: { amount: '7' }, providerAlias: 'near-secondary' });
     });
 
+    it.each([
+        ['eip155:56', '0x38'],
+        ['eip155:8453', '0x2105'],
+    ])('verifies independently configured EVM network %s', async (network, rpcChainId) => {
+        const { service, post } = createService({
+            CHAIN_RPC_ENDPOINTS_JSON: JSON.stringify({
+                [network]: [{ alias: 'evm-primary', url: 'https://evm.rpc.example' }],
+            }),
+        });
+        post.mockResolvedValueOnce({ data: { result: rpcChainId } });
+        post.mockResolvedValueOnce({ data: { result: '0x2a' } });
+
+        const result = await service.request<string>(network, 'eth_getBalance', []);
+
+        expect(result).toEqual({ result: '0x2a', providerAlias: 'evm-primary' });
+        expect(post.mock.calls[0][1]).toEqual(expect.objectContaining({ method: 'eth_chainId' }));
+    });
+
+    it('rejects an endpoint for a different EVM network and verifies the next provider', async () => {
+        const { service, post } = createService({
+            CHAIN_RPC_ENDPOINTS_JSON: JSON.stringify({
+                'eip155:8453': [
+                    { alias: 'wrong-network', url: 'https://wrong.rpc.example' },
+                    { alias: 'base-primary', url: 'https://base.rpc.example' },
+                ],
+            }),
+        });
+        post.mockResolvedValueOnce({ data: { result: '0x1' } });
+        post.mockResolvedValueOnce({ data: { result: '0x2105' } });
+        post.mockResolvedValueOnce({ data: { result: '0x2a' } });
+
+        const result = await service.request<string>('eip155:8453', 'eth_getBalance', []);
+
+        expect(result).toEqual({ result: '0x2a', providerAlias: 'base-primary' });
+        expect(post.mock.calls.map((call) => call[0])).toEqual([
+            'https://wrong.rpc.example',
+            'https://base.rpc.example',
+            'https://base.rpc.example',
+        ]);
+    });
+
+    it('rejects an unsupported CAIP-2 namespace during endpoint configuration', () => {
+        expect(() =>
+            createService({
+                CHAIN_RPC_ENDPOINTS_JSON: JSON.stringify({
+                    'solana:mainnet': [{ alias: 'solana-primary', url: 'https://solana.rpc.example' }],
+                }),
+            }),
+        ).toThrow('Invalid RPC endpoint list for solana:mainnet');
+    });
+
     it('keeps deterministic batch item errors as partial results', async () => {
         const { service, post } = createService();
         post.mockResolvedValueOnce({ data: { result: { chain_id: 'mainnet' } } });

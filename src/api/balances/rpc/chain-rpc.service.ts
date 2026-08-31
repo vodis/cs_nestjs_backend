@@ -2,6 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import { Injectable, Logger, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { isAxiosError } from 'axios';
+import { parseEvmRpcChainId, parseSupportedChainNetwork } from '../../../utils/chain-network.util';
 import {
     ChainRpcBatchRequest,
     ChainRpcBatchResult,
@@ -19,7 +20,6 @@ type EndpointState = {
 
 type NearStatus = { chain_id?: string };
 
-const NETWORK_PATTERN = /^(?:near:(?:mainnet|testnet)|eip155:\d+)$/;
 const ALIAS_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 
 @Injectable()
@@ -108,21 +108,45 @@ export class ChainRpcService implements OnModuleInit {
     ): Promise<void> {
         if (state.verified) return;
 
-        if (network.startsWith('near:')) {
-            const status = await this.call<NearStatus>(endpoint, 'status', [], deadline);
-            const expected = network.slice('near:'.length);
-            if (status.chain_id !== expected) {
-                throw new ChainRpcRequestError(`RPC endpoint ${endpoint.alias} returned the wrong NEAR network`, true);
-            }
-        } else {
-            const chainId = await this.call<string>(endpoint, 'eth_chainId', [], deadline);
-            const expected = BigInt(network.slice('eip155:'.length));
-            if (!/^0x[0-9a-f]+$/i.test(chainId) || BigInt(chainId) !== expected) {
-                throw new ChainRpcRequestError(`RPC endpoint ${endpoint.alias} returned the wrong EVM network`, true);
-            }
+        const parsedNetwork = parseSupportedChainNetwork(network);
+        if (!parsedNetwork) {
+            throw new ChainRpcRequestError(`RPC network is unsupported: ${network}`, false);
+        }
+
+        switch (parsedNetwork.namespace) {
+            case 'near':
+                await this.verifyNearNetwork(parsedNetwork.reference, endpoint, deadline);
+                break;
+            case 'eip155':
+                await this.verifyEvmNetwork(parsedNetwork.chainId, endpoint, deadline);
+                break;
+            default:
+                throw new ChainRpcRequestError(`RPC network is unsupported: ${network}`, false);
         }
 
         state.verified = true;
+    }
+
+    private async verifyNearNetwork(
+        expectedNetwork: string,
+        endpoint: ChainRpcEndpoint,
+        deadline: number,
+    ): Promise<void> {
+        const status = await this.call<NearStatus>(endpoint, 'status', [], deadline);
+        if (status.chain_id !== expectedNetwork) {
+            throw new ChainRpcRequestError(`RPC endpoint ${endpoint.alias} returned the wrong NEAR network`, true);
+        }
+    }
+
+    private async verifyEvmNetwork(
+        expectedChainId: bigint,
+        endpoint: ChainRpcEndpoint,
+        deadline: number,
+    ): Promise<void> {
+        const chainId = parseEvmRpcChainId(await this.call<unknown>(endpoint, 'eth_chainId', [], deadline));
+        if (chainId !== expectedChainId) {
+            throw new ChainRpcRequestError(`RPC endpoint ${endpoint.alias} returned the wrong EVM network`, true);
+        }
     }
 
     private async call<T>(endpoint: ChainRpcEndpoint, method: string, params: unknown, deadline: number): Promise<T> {
@@ -201,7 +225,12 @@ export class ChainRpcService implements OnModuleInit {
 
         const result = new Map<string, ChainRpcEndpoint[]>();
         for (const [network, value] of Object.entries(parsed)) {
-            if (!NETWORK_PATTERN.test(network) || !Array.isArray(value) || value.length === 0 || value.length > 4) {
+            if (
+                !parseSupportedChainNetwork(network) ||
+                !Array.isArray(value) ||
+                value.length === 0 ||
+                value.length > 4
+            ) {
                 throw new Error(`Invalid RPC endpoint list for ${network}`);
             }
             const endpoints = value.map((candidate) => this.parseEndpoint(network, candidate));

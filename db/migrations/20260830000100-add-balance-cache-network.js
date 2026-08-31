@@ -5,14 +5,19 @@
  * CAIP-2 networks so resilient multi-network RPC reads cannot overwrite one
  * another.
  *
- * Safety: the column is expanded as nullable, backfilled from the legacy
- * chain_type, then made required before the unique index changes. Existing
- * application versions ignore the additive column during blue/green rollout.
+ * Safety: this is the expand/application-transition release. The column stays
+ * nullable and the legacy unique index remains in place so the active and
+ * rollback application versions can continue upserting rows without network.
+ * The new network-aware index is added alongside it for this application.
  *
- * Rollback mitigation: deploy the previous application image first. The down
- * migration can restore the old unique key only when no wallet has duplicate
- * asset rows across networks; otherwise retain the additive column and roll
- * forward after reconciling those rows.
+ * Contract follow-up: only after every active and retained rollback image
+ * writes network, backfill again, make network required, and remove the legacy
+ * unique index in a separately approved release. Until then, the legacy index
+ * intentionally prevents storing the same wallet/asset pair on two networks.
+ *
+ * Rollback mitigation: the previous application image remains compatible with
+ * this expanded schema. If this migration itself must be reverted, deploy the
+ * previous image before running down.
  */
 module.exports = {
     async up(queryInterface, Sequelize) {
@@ -29,11 +34,6 @@ module.exports = {
       END
       WHERE network IS NULL
     `);
-        await queryInterface.changeColumn('balance_cache_entries', 'network', {
-            type: Sequelize.STRING,
-            allowNull: false,
-        });
-        await queryInterface.removeIndex('balance_cache_entries', ['user_id', 'wallet_id', 'asset_id']);
         await queryInterface.addIndex('balance_cache_entries', ['user_id', 'wallet_id', 'network', 'asset_id'], {
             unique: true,
         });
@@ -41,7 +41,6 @@ module.exports = {
 
     async down(queryInterface, Sequelize) {
         await queryInterface.removeIndex('balance_cache_entries', ['user_id', 'wallet_id', 'network', 'asset_id']);
-        await queryInterface.addIndex('balance_cache_entries', ['user_id', 'wallet_id', 'asset_id'], { unique: true });
         await queryInterface.removeColumn('balance_cache_entries', 'network');
     },
 };

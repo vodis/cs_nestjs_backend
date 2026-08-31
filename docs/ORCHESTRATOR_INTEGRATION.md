@@ -119,9 +119,19 @@ native asset; discovering an entire token portfolio requires an indexer/cache
 producer and is intentionally not attempted through unbounded RPC scans.
 
 The `20260830000100-add-balance-cache-network.js` migration must be applied by
-the orchestrator before this application version serves traffic. It adds the
-CAIP-2 network to the cache identity so the same wallet and asset cannot collide
-across networks.
+the orchestrator before this application version serves traffic. It is an
+expand/application-transition migration: `network` remains nullable, and the
+legacy `(user_id, wallet_id, asset_id)` unique index remains alongside the new
+network-aware index so both the active and rollback images can upsert safely.
+This transition application deliberately uses the legacy conflict key while
+writing `network`, so a row written by the old active image after the migration
+can be adopted rather than causing a unique-key failure after traffic switches.
+The legacy index temporarily prevents storing the same wallet/asset pair on two
+networks. After this version is active in both staging and production and its
+rollback windows close, a separately approved contract migration must backfill
+again, enforce `network NOT NULL`, remove the legacy index, and switch the model
+and upsert conflict key to the network-aware identity. Do not combine that
+contract step with this deployment.
 
 Passkey enrollment and passkey login are separate capabilities. Users first
 authenticate with an existing CCO method such as email, Google, or Apple, then

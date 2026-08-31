@@ -16,6 +16,10 @@ type SelectedWallet = { wallet: WalletLink; network?: string };
 type RefreshTarget = { wallet: WalletLink; network: string; asset?: AssetDto; assetId: string };
 type RefreshGroup = { wallet: WalletLink; network: string; targets: RefreshTarget[] };
 
+// Sequelize emits explicit conflictFields verbatim, so underscored database
+// columns are required even though its TypeScript declaration expects attributes.
+const LEGACY_CACHE_CONFLICT_FIELDS = ['user_id', 'wallet_id', 'asset_id'] as unknown as Array<keyof BalanceCacheEntry>;
+
 @Injectable()
 export class BalancesService {
     private readonly logger = new Logger(BalancesService.name);
@@ -46,7 +50,9 @@ export class BalancesService {
             ],
         });
         const freshEntries = entries.filter((entry) => entry.expiresAt > now);
-        const freshKeys = new Set(freshEntries.map((entry) => this.key(entry.walletId, entry.network, entry.assetId)));
+        const freshKeys = new Set(
+            freshEntries.map((entry) => this.key(entry.walletId, this.cacheNetwork(entry), entry.assetId)),
+        );
         const targets = selected.flatMap(({ wallet, network }) => {
             if (!network) return [];
             const requestedAssets = assets.length ? assets : [undefined];
@@ -83,13 +89,13 @@ export class BalancesService {
             liveBalances.map((balance) => this.key(balance.walletId, balance.network, balance.assetId)),
         );
         const cachedBalances = freshEntries
-            .filter((entry) => !liveKeys.has(this.key(entry.walletId, entry.network, entry.assetId)))
+            .filter((entry) => !liveKeys.has(this.key(entry.walletId, this.cacheNetwork(entry), entry.assetId)))
             .map((entry) => this.toDto(entry, false));
         const staleFallbacks = failedTargets.flatMap((target) => {
             const entry = entries.find(
                 (candidate) =>
                     candidate.walletId === target.wallet.id &&
-                    candidate.network === target.network &&
+                    this.cacheNetwork(candidate) === target.network &&
                     candidate.assetId === target.assetId &&
                     candidate.expiresAt <= now,
             );
@@ -139,7 +145,15 @@ export class BalancesService {
 
     private async findSupportedAssets(query: BalancesRequest): Promise<AssetDto[]> {
         const assetIds = this.requestedAssetIds(query);
-        const assets = await Promise.all(assetIds.map((assetId) => this.assetsService.findAssetById(assetId)));
+        if (!assetIds.length) return [];
+
+        const { data } = await this.assetsService.getAssets();
+        const byId = new Map<string, AssetDto>();
+        for (const asset of data) {
+            byId.set(asset.assetId, asset);
+            byId.set(asset.defuseAssetId, asset);
+        }
+        const assets = assetIds.map((assetId) => byId.get(assetId));
         if (assets.some((asset) => !asset)) throw new BadRequestException('Unsupported asset');
         return assets as AssetDto[];
     }
@@ -172,21 +186,24 @@ export class BalancesService {
         );
         await Promise.all(
             result.balances.map((balance) =>
-                BalanceCacheEntry.upsert({
-                    userId,
-                    walletId: group.wallet.id,
-                    walletAddress: group.wallet.address,
-                    chainType: group.wallet.chainType,
-                    network: group.network,
-                    assetId: balance.assetId,
-                    symbol: balance.symbol,
-                    decimals: balance.decimals,
-                    balanceRaw: balance.balanceRaw,
-                    balanceDecimal: balance.balanceDecimal,
-                    source: balance.source,
-                    fetchedAt: balance.fetchedAt,
-                    expiresAt: balance.expiresAt,
-                }),
+                BalanceCacheEntry.upsert(
+                    {
+                        userId,
+                        walletId: group.wallet.id,
+                        walletAddress: group.wallet.address,
+                        chainType: group.wallet.chainType,
+                        network: group.network,
+                        assetId: balance.assetId,
+                        symbol: balance.symbol,
+                        decimals: balance.decimals,
+                        balanceRaw: balance.balanceRaw,
+                        balanceDecimal: balance.balanceDecimal,
+                        source: balance.source,
+                        fetchedAt: balance.fetchedAt,
+                        expiresAt: balance.expiresAt,
+                    },
+                    { conflictFields: LEGACY_CACHE_CONFLICT_FIELDS },
+                ),
             ),
         );
         return {
@@ -200,7 +217,7 @@ export class BalancesService {
             walletId: entry.walletId,
             walletAddress: entry.walletAddress,
             chainType: entry.chainType,
-            network: entry.network,
+            network: this.cacheNetwork(entry),
             assetId: entry.assetId,
             symbol: entry.symbol,
             decimals: entry.decimals,
@@ -248,6 +265,13 @@ export class BalancesService {
 
     private nativeAssetId(network: string): string {
         return network.startsWith('near:') ? NEAR_NATIVE_ASSET_ID : `${network}/native`;
+    }
+
+    private cacheNetwork(entry: Pick<BalanceCacheEntry, 'network' | 'chainType'>): string {
+        if (entry.network) return entry.network;
+        if (entry.chainType === 'near') return 'near:mainnet';
+        if (entry.chainType === 'ethereum' || entry.chainType === 'evm') return 'eip155:1';
+        return entry.chainType;
     }
 
     private key(walletId: string, network: string, assetId: string): string {

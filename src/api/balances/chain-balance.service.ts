@@ -48,6 +48,18 @@ const EVM_NETWORK_BY_BLOCKCHAIN: Record<string, string> = {
     scroll: 'eip155:534352',
 };
 
+const EVM_NATIVE_ASSET_BY_NETWORK: Record<string, { symbol: string; decimals: number }> = {
+    'eip155:1': { symbol: 'ETH', decimals: 18 },
+    'eip155:10': { symbol: 'ETH', decimals: 18 },
+    'eip155:56': { symbol: 'BNB', decimals: 18 },
+    'eip155:100': { symbol: 'xDAI', decimals: 18 },
+    'eip155:137': { symbol: 'POL', decimals: 18 },
+    'eip155:8453': { symbol: 'ETH', decimals: 18 },
+    'eip155:42161': { symbol: 'ETH', decimals: 18 },
+    'eip155:43114': { symbol: 'AVAX', decimals: 18 },
+    'eip155:534352': { symbol: 'ETH', decimals: 18 },
+};
+
 @Injectable()
 export class ChainBalanceService {
     constructor(
@@ -135,28 +147,34 @@ export class ChainBalanceService {
     private evmRequest(wallet: WalletLink, network: string, asset?: AssetDto): BalanceRequestSpec {
         const address = wallet.address.toLowerCase();
         if (!/^0x[a-f0-9]{40}$/.test(address)) throw new BadRequestException('Wallet is not a valid EVM address');
-        if (asset) this.assertEvmAssetNetwork(asset, network);
+        if (!asset) return this.evmNativeRequest(address, network);
 
-        if (asset?.contractAddress) {
-            const contract = asset.contractAddress.toLowerCase();
-            if (!/^0x[a-f0-9]{40}$/.test(contract)) throw new BadRequestException('Asset has an invalid EVM contract');
-            return {
-                key: asset.assetId,
-                assetId: asset.assetId,
-                symbol: asset.symbol,
-                decimals: asset.decimals,
-                method: 'eth_call',
-                params: [{ to: contract, data: `0x70a08231${address.slice(2).padStart(64, '0')}` }, 'latest'],
-                source: 'evm_rpc',
-                parse: (value) => this.evmQuantity(value),
-            };
+        this.assertEvmAssetNetwork(asset, network);
+        const contract = asset.contractAddress?.toLowerCase();
+        if (!contract || !/^0x[a-f0-9]{40}$/.test(contract)) {
+            throw new BadRequestException('EVM token asset requires a valid contract address');
         }
-
         return {
-            key: asset?.assetId || `${network}/native`,
-            assetId: asset?.assetId || `${network}/native`,
-            symbol: asset?.symbol || 'ETH',
-            decimals: asset?.decimals ?? 18,
+            key: asset.assetId,
+            assetId: asset.assetId,
+            symbol: asset.symbol,
+            decimals: asset.decimals,
+            method: 'eth_call',
+            params: [{ to: contract, data: `0x70a08231${address.slice(2).padStart(64, '0')}` }, 'latest'],
+            source: 'evm_rpc',
+            parse: (value) => this.evmQuantity(value),
+        };
+    }
+
+    private evmNativeRequest(address: string, network: string): BalanceRequestSpec {
+        const native = EVM_NATIVE_ASSET_BY_NETWORK[network];
+        if (!native) throw new BadRequestException(`Native asset is not configured for EVM network: ${network}`);
+        const assetId = `${network}/native`;
+        return {
+            key: assetId,
+            assetId,
+            symbol: native.symbol,
+            decimals: native.decimals,
             method: 'eth_getBalance',
             params: [address, 'latest'],
             source: 'evm_rpc',
@@ -231,7 +249,7 @@ export class ChainBalanceService {
 
     private assertEvmAssetNetwork(asset: AssetDto, network: string): void {
         const expected = EVM_NETWORK_BY_BLOCKCHAIN[asset.blockchain.toLowerCase()];
-        if (!expected || expected !== network || asset.assetId.startsWith('nep141:')) {
+        if (!expected || expected !== network) {
             throw new BadRequestException('Asset is not supported on the requested EVM network');
         }
     }

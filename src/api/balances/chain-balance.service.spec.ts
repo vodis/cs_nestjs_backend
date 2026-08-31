@@ -13,8 +13,8 @@ const usdcNear: AssetDto = {
     blockchain: 'near',
 };
 const usdcEthereum: AssetDto = {
-    assetId: 'erc20:eth:usdc',
-    defuseAssetId: 'erc20:eth:usdc',
+    assetId: 'nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near',
+    defuseAssetId: 'nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near',
     symbol: 'USDC',
     decimals: 6,
     blockchain: 'eth',
@@ -102,5 +102,47 @@ describe('ChainBalanceService', () => {
                 usdcEthereum,
             ]),
         ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects an EVM token without authoritative contract metadata', async () => {
+        const requestBatch = jest.fn();
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config);
+
+        await expect(
+            service.getBalances(wallet('0x1111111111111111111111111111111111111111', 'ethereum'), 'eip155:1', [
+                { ...usdcEthereum, contractAddress: undefined },
+            ]),
+        ).rejects.toThrow('EVM token asset requires a valid contract address');
+        expect(requestBatch).not.toHaveBeenCalled();
+    });
+
+    it('uses network-specific native asset metadata', async () => {
+        const requestBatch = jest.fn(async (_network, requests) => ({
+            providerAlias: 'bsc-primary',
+            items: [{ key: requests[0].key, result: '0xde0b6b3a7640000' }],
+        }));
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config);
+
+        const result = await service.getBalances(
+            wallet('0x1111111111111111111111111111111111111111', 'ethereum'),
+            'eip155:56',
+            [undefined],
+        );
+
+        expect(result.balances).toEqual([
+            expect.objectContaining({ assetId: 'eip155:56/native', symbol: 'BNB', decimals: 18 }),
+        ]);
+    });
+
+    it('rejects a native balance request for an unregistered EVM network', async () => {
+        const requestBatch = jest.fn();
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config);
+
+        await expect(
+            service.getBalances(wallet('0x1111111111111111111111111111111111111111', 'ethereum'), 'eip155:999999', [
+                undefined,
+            ]),
+        ).rejects.toThrow('Native asset is not configured for EVM network');
+        expect(requestBatch).not.toHaveBeenCalled();
     });
 });

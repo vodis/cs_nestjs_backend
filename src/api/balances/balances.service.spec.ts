@@ -24,11 +24,12 @@ const wrappedNear: AssetDto = {
     blockchain: 'near',
 };
 
-function assetsService(): jest.Mocked<Pick<AssetsService, 'findAssetById'>> {
+function assetsService(): jest.Mocked<Pick<AssetsService, 'getAssets'>> {
     return {
-        findAssetById: jest.fn(async (assetId: string) =>
-            [usdc, wrappedNear].find((asset) => asset.assetId === assetId),
-        ),
+        getAssets: jest.fn(async () => ({
+            data: [usdc, wrappedNear],
+            meta: { source: '1click' as const, cached: false, fetchedAt: new Date().toISOString() },
+        })),
     };
 }
 
@@ -55,7 +56,7 @@ function chainBalanceService(): jest.Mocked<Pick<ChainBalanceService, 'getBalanc
 describe('BalancesService', () => {
     let sequelize: Sequelize;
     let service: BalancesService;
-    let assets: jest.Mocked<Pick<AssetsService, 'findAssetById'>>;
+    let assets: jest.Mocked<Pick<AssetsService, 'getAssets'>>;
     let chainBalances: jest.Mocked<Pick<ChainBalanceService, 'getBalances'>>;
 
     beforeEach(async () => {
@@ -127,6 +128,7 @@ describe('BalancesService', () => {
         ]);
         expect(result.meta).toMatchObject({ source: 'rpc', cached: false, partial: false });
         expect(await BalanceCacheEntry.count({ where: { network: 'near:mainnet' } })).toBe(2);
+        expect(assets.getAssets).toHaveBeenCalledTimes(1);
     });
 
     it('returns a fresh cache entry without calling RPC', async () => {
@@ -141,6 +143,34 @@ describe('BalancesService', () => {
         expect(result.data).toEqual([expect.objectContaining({ assetId: usdc.assetId, stale: false })]);
         expect(result.meta).toMatchObject({ source: 'postgres_cache', cached: true, partial: false });
         expect(chainBalances.getBalances).not.toHaveBeenCalled();
+    });
+
+    it('adopts a cache row written without network by the legacy active image', async () => {
+        const { user, wallet } = await userWallet();
+        await BalanceCacheEntry.create({
+            userId: user.id,
+            walletId: wallet.id,
+            walletAddress: wallet.address,
+            chainType: wallet.chainType,
+            network: null,
+            assetId: usdc.assetId,
+            symbol: usdc.symbol,
+            decimals: usdc.decimals,
+            balanceRaw: '1',
+            balanceDecimal: '0.000001',
+            source: 'near_rpc',
+            fetchedAt: new Date(Date.now() - 60000),
+            expiresAt: new Date(Date.now() - 30000),
+        });
+
+        await service.getBalances(
+            { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
+            { walletId: wallet.id, network: 'near:mainnet', assetId: usdc.assetId },
+        );
+
+        const entries = await BalanceCacheEntry.findAll();
+        expect(entries).toHaveLength(1);
+        expect(entries[0].network).toBe('near:mainnet');
     });
 
     it('returns an explicitly stale cache entry when every provider fails', async () => {
@@ -215,5 +245,30 @@ describe('BalancesService', () => {
                 assetIds: [wrappedNear.assetId],
             }),
         ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('loads the asset registry once for a maximum-size batch', async () => {
+        const { user, wallet } = await userWallet();
+        const batch = Array.from({ length: 20 }, (_, index) => ({
+            ...usdc,
+            assetId: `nep141:token-${index}.near`,
+            defuseAssetId: `nep141:token-${index}.near`,
+        }));
+        assets.getAssets.mockResolvedValueOnce({
+            data: batch,
+            meta: { source: '1click', cached: false, fetchedAt: new Date().toISOString() },
+        });
+
+        await service.getBalances(
+            { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
+            { walletId: wallet.id, network: 'near:mainnet', assetIds: batch.map((asset) => asset.assetId) },
+        );
+
+        expect(assets.getAssets).toHaveBeenCalledTimes(1);
+        expect(chainBalances.getBalances).toHaveBeenCalledWith(
+            expect.objectContaining({ id: wallet.id }),
+            'near:mainnet',
+            batch,
+        );
     });
 });

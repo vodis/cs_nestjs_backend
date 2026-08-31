@@ -22,7 +22,7 @@ export class SequelizePortfolioRepository implements PortfolioRepository {
         });
         return entries.map((entry) => ({
             walletId: entry.walletId,
-            chain: entry.chainType,
+            chain: entry.network,
             assetId: entry.assetId,
             symbol: entry.symbol,
             quantity: entry.balanceDecimal || formatTokenAmount(entry.balanceRaw, entry.decimals),

@@ -10,6 +10,9 @@ export class BalanceDto {
     @ApiProperty()
     chainType: string;
 
+    @ApiProperty({ example: 'near:mainnet' })
+    network: string;
+
     @ApiProperty()
     assetId: string;
 
@@ -33,17 +36,23 @@ export class BalanceDto {
 
     @ApiProperty()
     expiresAt: string;
+
+    @ApiProperty()
+    stale: boolean;
 }
 
 export class BalancesMetaDto {
-    @ApiProperty({ enum: ['postgres_cache', 'near_rpc', 'mixed'] })
-    source: 'postgres_cache' | 'near_rpc' | 'mixed';
+    @ApiProperty({ enum: ['postgres_cache', 'rpc', 'mixed'] })
+    source: 'postgres_cache' | 'rpc' | 'mixed';
 
     @ApiProperty()
     cached: boolean;
 
     @ApiProperty()
     fetchedAt: string;
+
+    @ApiProperty()
+    partial: boolean;
 }
 
 export class GetBalancesResponseDto {

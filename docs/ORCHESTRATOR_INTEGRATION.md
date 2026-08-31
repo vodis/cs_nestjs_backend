@@ -104,9 +104,12 @@ an object keyed by CAIP-2 network id. Each value is an ordered list of one to
 four `{ "alias", "url" }` providers. Aliases are safe for logs; URLs may contain
 provider credentials and must never be exposed to the browser or committed.
 
-The backend verifies a provider's reported chain before using it, retries
-transport errors, timeouts, rate limits, and provider 5xx responses on the next
-configured endpoint, and temporarily opens a circuit after repeated failures.
+During production-mode startup, the backend verifies that every configured
+network has at least one reachable provider reporting the expected chain. A
+failure prevents readiness, so the orchestrator does not switch traffic. The
+backend retries transport errors, timeouts, rate limits, and provider 5xx
+responses on the next configured endpoint, and temporarily opens a circuit
+after repeated failures.
 Deterministic per-token errors remain partial batch results. When every provider
 fails, an expired cached value may be returned with `stale: true` and
 `meta.partial: true`; the API never invents a zero balance.

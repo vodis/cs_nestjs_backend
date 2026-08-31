@@ -36,10 +36,12 @@ export class ChainRpcService implements OnModuleInit {
         this.endpoints = this.loadEndpoints();
     }
 
-    onModuleInit(): void {
-        if (this.isProduction() && !this.config.get<string>('CHAIN_RPC_ENDPOINTS_JSON')?.trim()) {
+    async onModuleInit(): Promise<void> {
+        const configuredEndpoints = this.config.get<string>('CHAIN_RPC_ENDPOINTS_JSON')?.trim();
+        if (this.isProduction() && !configuredEndpoints) {
             throw new Error('CHAIN_RPC_ENDPOINTS_JSON is required in production');
         }
+        if (this.isProduction()) await this.verifyConfiguredNetworks();
     }
 
     async request<T>(network: string, method: string, params: unknown): Promise<ChainRpcResult<T>> {
@@ -125,6 +127,27 @@ export class ChainRpcService implements OnModuleInit {
         }
 
         state.verified = true;
+    }
+
+    private async verifyConfiguredNetworks(): Promise<void> {
+        for (const [network, endpoints] of this.endpoints) {
+            let lastError: ChainRpcRequestError | undefined;
+            for (const endpoint of endpoints) {
+                const state = this.state(network, endpoint.alias);
+                try {
+                    const deadline = Date.now() + this.positiveNumber('RPC_TOTAL_TIMEOUT_MS', 6000);
+                    await this.verifyNetwork(network, endpoint, state, deadline);
+                    lastError = undefined;
+                    break;
+                } catch (error) {
+                    lastError = this.toRpcError(error);
+                    this.recordFailure(network, endpoint.alias, state, 'startup', lastError);
+                }
+            }
+            if (lastError) {
+                throw new Error(`RPC startup verification failed for ${network}: ${lastError.message}`);
+            }
+        }
     }
 
     private async verifyNearNetwork(

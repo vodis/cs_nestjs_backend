@@ -140,12 +140,41 @@ describe('ChainRpcService', () => {
         expect(post.mock.calls.filter((call) => call[0] === 'https://primary.rpc.example')).toHaveLength(2);
     });
 
-    it('fails closed when production does not provide the secret endpoint map', () => {
+    it('accepts startup failover while verifying every configured production network', async () => {
+        const { service, post } = createService({
+            NODE_ENV: 'production',
+            CHAIN_RPC_ENDPOINTS_JSON: JSON.stringify({
+                'near:mainnet': [
+                    { alias: 'near-primary', url: 'https://near-primary.rpc.example' },
+                    { alias: 'near-secondary', url: 'https://near-secondary.rpc.example' },
+                ],
+                'eip155:8453': [{ alias: 'base-primary', url: 'https://base.rpc.example' }],
+            }),
+        });
+        post.mockRejectedValueOnce({ isAxiosError: true, code: 'ECONNABORTED' });
+        post.mockResolvedValueOnce({ data: { result: { chain_id: 'mainnet' } } });
+        post.mockResolvedValueOnce({ data: { result: '0x2105' } });
+
+        await service.onModuleInit();
+
+        expect(post.mock.calls.map((call) => call[1].method)).toEqual(['status', 'status', 'eth_chainId']);
+    });
+
+    it('fails startup when no provider serves a configured production network', async () => {
+        const { service, post } = createService({ NODE_ENV: 'production' });
+        post.mockRejectedValue({ isAxiosError: true, code: 'ECONNABORTED' });
+
+        await expect(service.onModuleInit()).rejects.toThrow(
+            'RPC startup verification failed for near:mainnet: RPC provider is temporarily unavailable',
+        );
+    });
+
+    it('fails closed when production does not provide the secret endpoint map', async () => {
         const post = jest.fn();
         const service = new ChainRpcService(
             new ConfigService({ NODE_ENV: 'production', NEAR_RPC_URL: 'https://rpc.mainnet.near.org' }),
             { axiosRef: { post } } as unknown as HttpService,
         );
-        expect(() => service.onModuleInit()).toThrow('CHAIN_RPC_ENDPOINTS_JSON is required in production');
+        await expect(service.onModuleInit()).rejects.toThrow('CHAIN_RPC_ENDPOINTS_JSON is required in production');
     });
 });

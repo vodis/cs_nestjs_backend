@@ -66,6 +66,13 @@ Manual staging dispatches must run from `develop`. Set
 database-gate retry; this override can only strengthen metadata to
 `database.risk=migration`.
 
+Every staging and production bundle also publishes
+`database.migrationFingerprint`, a SHA-256 fingerprint over the complete,
+ordered migration inventory. The orchestrator compares it with the last
+successful migration evidence and promotes a changed or unrecorded fingerprint
+to the approval flow. This keeps an undeployed migration gated across later
+pushes even when the latest Git diff does not contain the migration file.
+
 Each release run: lint/test/build → OCI image digest → Syft/Trivy → `deploy-metadata.json` → ORAS metadata push.
 
 **CI must not** SSH to VPS or run host deploy steps.

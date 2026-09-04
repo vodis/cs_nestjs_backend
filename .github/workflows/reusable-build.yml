@@ -224,6 +224,22 @@ jobs:
         run: |
           set -euo pipefail
 
+          MIGRATION_FINGERPRINT="$(
+            git ls-files -- \
+              'migrations/**' \
+              'db/migrations/**' \
+              'src/**/migration/**' \
+              'src/**/migrations/**' \
+              | LC_ALL=C sort \
+              | while IFS= read -r file; do
+                  printf '%s\0' "${file}"
+                  sha256sum "${file}"
+                done \
+              | sha256sum \
+              | awk '{print "sha256:" $1}'
+          )"
+          echo "fingerprint=${MIGRATION_FINGERPRINT}" >> "${GITHUB_OUTPUT}"
+
           if [ "${FORCE_DATABASE_MIGRATION}" = "true" ]; then
             echo "risk=migration" >> "${GITHUB_OUTPUT}"
             echo "Database migration gate forced by the caller."
@@ -268,6 +284,7 @@ jobs:
           ENVIRONMENT: ${{ inputs.environment }}
           GIT_BRANCH: ${{ inputs.git_branch }}
           DB_RISK: ${{ steps.database_risk.outputs.risk }}
+          DB_MIGRATION_FINGERPRINT: ${{ steps.database_risk.outputs.fingerprint }}
         run: |
           mkdir -p artifacts
           python3 <<'PY'
@@ -307,6 +324,7 @@ jobs:
               },
               "database": {
                   "risk": os.environ["DB_RISK"],
+                  "migrationFingerprint": os.environ["DB_MIGRATION_FINGERPRINT"],
               },
           }
           with open("artifacts/deploy-metadata.json", "w", encoding="utf-8") as f:

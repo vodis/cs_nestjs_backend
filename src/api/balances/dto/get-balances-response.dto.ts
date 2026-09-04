@@ -1,8 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class BalanceDto {
-    @ApiProperty()
-    walletId: string;
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Owned wallet id, or null for an explicit read-only external-address request.',
+    })
+    walletId: string | null;
 
     @ApiProperty()
     walletAddress: string;

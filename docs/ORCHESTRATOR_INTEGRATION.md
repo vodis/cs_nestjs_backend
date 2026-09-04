@@ -115,11 +115,26 @@ fails, an expired cached value may be returned with `stale: true` and
 `meta.partial: true`; the API never invents a zero balance.
 
 `POST /api/v1/balances` accepts one `assetId` or up to 20 `assetIds`, plus an
-optional owned `walletId`/`walletAddress` and CAIP-2 `network`. Requested assets
-must exist in the backend asset allowlist. Requests are grouped by wallet and
-network into JSON-RPC batches. Omitting asset ids refreshes only the chain's
-native asset; discovering an entire token portfolio requires an indexer/cache
-producer and is intentionally not attempted through unbounded RPC scans.
+optional owned `walletId`/`walletAddress` and network. A `walletId` is always
+ownership-scoped. An address that is not linked to the authenticated user is an
+explicit read-only target: `network` is mandatory, `walletId` is returned as
+`null`, and the result is not written to the user's cache. Requested assets
+must exist in the backend asset allowlist.
+
+NEAR and EVM reads use the resilient JSON-RPC provider pool. EVM token reads
+use authoritative contract metadata and ERC-20 `balanceOf`; native reads use
+the network-specific native asset. TON uses the server-side TON Center adapter:
+API v2 for native nanotons and API v3 owner/master filtering for allowlisted
+Jettons. `TONCENTER_API_KEY` and `TONCENTER_TESTNET_API_KEY` are S3 provider
+credentials and must stay in Vault or the orchestrator's controlled secret
+backend; unauthenticated hosted access is limited to 1 request per second.
+See the official [TON Center v2 overview](https://docs.ton.org/api/v2/overview),
+[native balance endpoint](https://docs.ton.org/api/v2/accounts/get-address-balance),
+and [Jetton-wallet query](https://docs.ton.org/api/v3/jettons/get-jetton-wallets).
+
+Omitting asset ids refreshes only the chain's native asset. Discovering an
+entire token portfolio is intentionally not attempted through unbounded RPC
+scans; the Angular host supplies bounded asset IDs from `/api/v1/assets`.
 
 The `20260830000100-add-balance-cache-network.js` migration must be applied by
 the orchestrator before this application version serves traffic. It is an

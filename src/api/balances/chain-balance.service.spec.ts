@@ -4,6 +4,7 @@ import { AssetDto } from '../assets/dto/get-assets-response.dto';
 import { WalletLink } from '../../database/models/wallet-link.model';
 import { ChainBalanceService } from './chain-balance.service';
 import { ChainRpcService } from './rpc/chain-rpc.service';
+import { TonCenterService } from './ton/ton-center.service';
 
 const usdcNear: AssetDto = {
     assetId: 'nep141:usdc.near',
@@ -27,6 +28,10 @@ function wallet(address: string, chainType: string): WalletLink {
 
 describe('ChainBalanceService', () => {
     const config = new ConfigService({ BALANCE_CACHE_TTL_MS: 15000 });
+    const tonCenter = {
+        getNativeBalance: jest.fn(),
+        getJettonBalance: jest.fn(),
+    } as unknown as TonCenterService;
 
     it('batches native NEAR and NEP-141 ft_balance_of reads', async () => {
         const requestBatch = jest.fn(async (_network, requests) => ({
@@ -36,7 +41,7 @@ describe('ChainBalanceService', () => {
                 { key: requests[1].key, result: { result: [...Buffer.from('"1250000"')] } },
             ],
         }));
-        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config);
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
 
         const result = await service.getBalances(wallet('alice.near', 'near'), 'near:mainnet', [undefined, usdcNear]);
 
@@ -67,7 +72,7 @@ describe('ChainBalanceService', () => {
                 { key: requests[1].key, result: '0x1312d00' },
             ],
         }));
-        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config);
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
         const evmWallet = wallet('0x1111111111111111111111111111111111111111', 'ethereum');
 
         const result = await service.getBalances(evmWallet, 'eip155:1', [undefined, usdcEthereum]);
@@ -93,7 +98,7 @@ describe('ChainBalanceService', () => {
 
     it('accepts implicit NEAR accounts and rejects cross-network assets', async () => {
         const requestBatch = jest.fn(async () => ({ providerAlias: 'near-primary', items: [] }));
-        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config);
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
         await expect(
             service.getBalances(wallet('a'.repeat(64), 'near'), 'near:mainnet', [undefined]),
         ).resolves.toMatchObject({ balances: [] });
@@ -106,7 +111,7 @@ describe('ChainBalanceService', () => {
 
     it('rejects an EVM token without authoritative contract metadata', async () => {
         const requestBatch = jest.fn();
-        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config);
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
 
         await expect(
             service.getBalances(wallet('0x1111111111111111111111111111111111111111', 'ethereum'), 'eip155:1', [
@@ -121,7 +126,7 @@ describe('ChainBalanceService', () => {
             providerAlias: 'bsc-primary',
             items: [{ key: requests[0].key, result: '0xde0b6b3a7640000' }],
         }));
-        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config);
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
 
         const result = await service.getBalances(
             wallet('0x1111111111111111111111111111111111111111', 'ethereum'),
@@ -136,7 +141,7 @@ describe('ChainBalanceService', () => {
 
     it('rejects a native balance request for an unregistered EVM network', async () => {
         const requestBatch = jest.fn();
-        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config);
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
 
         await expect(
             service.getBalances(wallet('0x1111111111111111111111111111111111111111', 'ethereum'), 'eip155:999999', [
@@ -144,5 +149,33 @@ describe('ChainBalanceService', () => {
             ]),
         ).rejects.toThrow('Native asset is not configured for EVM network');
         expect(requestBatch).not.toHaveBeenCalled();
+    });
+
+    it('fetches native TON and an allowlisted Jetton through the TON adapter', async () => {
+        const getNativeBalance = jest.fn(async () => '2500000000');
+        const getJettonBalance = jest.fn(async () => '1250000');
+        const service = new ChainBalanceService({ requestBatch: jest.fn() } as unknown as ChainRpcService, config, {
+            getNativeBalance,
+            getJettonBalance,
+        } as unknown as TonCenterService);
+        const owner = `EQ${'a'.repeat(46)}`;
+        const master = `EQ${'b'.repeat(46)}`;
+        const jetton: AssetDto = {
+            assetId: 'ton:usdc',
+            defuseAssetId: 'ton:usdc',
+            symbol: 'USDC',
+            decimals: 6,
+            blockchain: 'ton',
+            contractAddress: master,
+        };
+
+        const result = await service.getBalances(wallet(owner, 'ton'), 'ton:mainnet', [undefined, jetton]);
+
+        expect(getNativeBalance).toHaveBeenCalledWith('ton:mainnet', owner);
+        expect(getJettonBalance).toHaveBeenCalledWith('ton:mainnet', owner, master);
+        expect(result.balances).toEqual([
+            expect.objectContaining({ assetId: 'ton:native', symbol: 'TON', balanceDecimal: '2.5' }),
+            expect.objectContaining({ assetId: jetton.assetId, symbol: 'USDC', balanceDecimal: '1.25' }),
+        ]);
     });
 });

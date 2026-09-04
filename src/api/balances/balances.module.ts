@@ -8,10 +8,11 @@ import { BalancesController } from './balances.controller';
 import { BalancesService } from './balances.service';
 import { ChainBalanceService } from './chain-balance.service';
 import { ChainRpcService } from './rpc/chain-rpc.service';
+import { TonCenterService } from './ton/ton-center.service';
 
 @Module({
     imports: [AuthModule, AssetsModule, DatabaseModule, ConfigModule, HttpModule],
     controllers: [BalancesController],
-    providers: [BalancesService, ChainBalanceService, ChainRpcService],
+    providers: [BalancesService, ChainBalanceService, ChainRpcService, TonCenterService],
 })
 export class BalancesModule {}

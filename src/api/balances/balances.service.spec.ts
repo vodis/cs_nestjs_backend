@@ -33,7 +33,7 @@ function assetsService(): jest.Mocked<Pick<AssetsService, 'getAssets'>> {
     };
 }
 
-function chainBalanceService(): jest.Mocked<Pick<ChainBalanceService, 'getBalances'>> {
+function chainBalanceService(): jest.Mocked<Pick<ChainBalanceService, 'getBalances' | 'assertAddress'>> {
     return {
         getBalances: jest.fn(async (_wallet, network, assets) => ({
             balances: assets.map((asset) => ({
@@ -50,6 +50,7 @@ function chainBalanceService(): jest.Mocked<Pick<ChainBalanceService, 'getBalanc
             })),
             failures: [],
         })),
+        assertAddress: jest.fn(),
     };
 }
 
@@ -57,7 +58,7 @@ describe('BalancesService', () => {
     let sequelize: Sequelize;
     let service: BalancesService;
     let assets: jest.Mocked<Pick<AssetsService, 'getAssets'>>;
-    let chainBalances: jest.Mocked<Pick<ChainBalanceService, 'getBalances'>>;
+    let chainBalances: jest.Mocked<Pick<ChainBalanceService, 'getBalances' | 'assertAddress'>>;
 
     beforeEach(async () => {
         sequelize = new Sequelize({
@@ -118,7 +119,7 @@ describe('BalancesService', () => {
         );
 
         expect(chainBalances.getBalances).toHaveBeenCalledWith(
-            expect.objectContaining({ id: wallet.id, address: wallet.address }),
+            expect.objectContaining({ walletId: wallet.id, address: wallet.address }),
             'near:mainnet',
             [usdc, wrappedNear],
         );
@@ -266,9 +267,55 @@ describe('BalancesService', () => {
 
         expect(assets.getAssets).toHaveBeenCalledTimes(1);
         expect(chainBalances.getBalances).toHaveBeenCalledWith(
-            expect.objectContaining({ id: wallet.id }),
+            expect.objectContaining({ walletId: wallet.id }),
             'near:mainnet',
             batch,
         );
+    });
+
+    it('live-fetches an unlinked external address without persisting or inventing a wallet id', async () => {
+        const { user } = await userWallet();
+        const address = '0x1111111111111111111111111111111111111111';
+        chainBalances.getBalances.mockResolvedValueOnce({
+            balances: [
+                {
+                    network: 'eip155:1',
+                    assetId: 'eip155:1/native',
+                    symbol: 'ETH',
+                    decimals: 18,
+                    balanceRaw: '1000000000000000000',
+                    balanceDecimal: '1',
+                    source: 'evm_rpc',
+                    providerAlias: 'ethereum-primary',
+                    fetchedAt: new Date(),
+                    expiresAt: new Date(Date.now() + 15000),
+                },
+            ],
+            failures: [],
+        });
+
+        const result = await service.getBalances(
+            { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
+            { walletAddress: address.toUpperCase().replace('0X', '0x'), network: 'eip155:1' },
+        );
+
+        expect(chainBalances.assertAddress).toHaveBeenCalledWith('eip155:1', address);
+        expect(chainBalances.getBalances).toHaveBeenCalledWith(
+            { walletId: null, address, chainType: 'ethereum' },
+            'eip155:1',
+            [undefined],
+        );
+        expect(result.data).toEqual([expect.objectContaining({ walletId: null, walletAddress: address })]);
+        expect(await BalanceCacheEntry.count()).toBe(0);
+    });
+
+    it('requires an explicit network for an unlinked address', async () => {
+        const { user } = await userWallet();
+        await expect(
+            service.getBalances(
+                { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
+                { walletAddress: '0x1111111111111111111111111111111111111111' },
+            ),
+        ).rejects.toThrow('network is required');
     });
 });

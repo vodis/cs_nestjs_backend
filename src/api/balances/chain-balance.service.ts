@@ -5,6 +5,9 @@ import { WalletLink } from '../../database/models/wallet-link.model';
 import { formatTokenAmount } from '../../utils/decimal.util';
 import { NEAR_NATIVE_ASSET_ID, NEAR_NATIVE_DECIMALS, NEAR_NATIVE_SYMBOL } from './near-balance.constants';
 import { ChainRpcService } from './rpc/chain-rpc.service';
+import { TonCenterService } from './ton/ton-center.service';
+
+export type BalanceAccount = Pick<WalletLink, 'address' | 'chainType'>;
 
 export type LiveChainBalance = {
     network: string;
@@ -13,7 +16,7 @@ export type LiveChainBalance = {
     decimals: number;
     balanceRaw: string;
     balanceDecimal: string;
-    source: 'near_rpc' | 'evm_rpc';
+    source: 'near_rpc' | 'evm_rpc' | 'toncenter_api';
     providerAlias: string;
     fetchedAt: Date;
     expiresAt: Date;
@@ -65,13 +68,17 @@ export class ChainBalanceService {
     constructor(
         private readonly rpc: ChainRpcService,
         private readonly config: ConfigService,
+        private readonly tonCenter: TonCenterService,
     ) {}
 
     async getBalances(
-        wallet: WalletLink,
+        wallet: BalanceAccount,
         network: string,
         assets: Array<AssetDto | undefined>,
     ): Promise<ChainBalanceBatchResult> {
+        if (network === 'ton:mainnet' || network === 'ton:testnet') {
+            return this.getTonBalances(wallet, network, assets);
+        }
         const specs = assets.map((asset) => this.requestSpec(wallet, network, asset));
         const response = await this.rpc.requestBatch(
             network,
@@ -100,13 +107,20 @@ export class ChainBalanceService {
         return { balances, failures };
     }
 
-    private requestSpec(wallet: WalletLink, network: string, asset?: AssetDto): BalanceRequestSpec {
+    assertAddress(network: string, address: string): void {
+        if (network.startsWith('near:')) return this.assertNearAccount(address);
+        if (network.startsWith('eip155:')) return this.assertEvmAccount(address);
+        if (network === 'ton:mainnet' || network === 'ton:testnet') return this.assertTonAccount(address);
+        throw new BadRequestException(`Unsupported balance network: ${network}`);
+    }
+
+    private requestSpec(wallet: BalanceAccount, network: string, asset?: AssetDto): BalanceRequestSpec {
         if (network.startsWith('near:')) return this.nearRequest(wallet, asset);
         if (network.startsWith('eip155:')) return this.evmRequest(wallet, network, asset);
         throw new BadRequestException(`Unsupported balance network: ${network}`);
     }
 
-    private nearRequest(wallet: WalletLink, asset?: AssetDto): BalanceRequestSpec {
+    private nearRequest(wallet: BalanceAccount, asset?: AssetDto): BalanceRequestSpec {
         this.assertNearAccount(wallet.address);
         if (!asset || asset.assetId === NEAR_NATIVE_ASSET_ID) {
             return {
@@ -144,9 +158,9 @@ export class ChainBalanceService {
         };
     }
 
-    private evmRequest(wallet: WalletLink, network: string, asset?: AssetDto): BalanceRequestSpec {
+    private evmRequest(wallet: BalanceAccount, network: string, asset?: AssetDto): BalanceRequestSpec {
         const address = wallet.address.toLowerCase();
-        if (!/^0x[a-f0-9]{40}$/.test(address)) throw new BadRequestException('Wallet is not a valid EVM address');
+        this.assertEvmAccount(address);
         if (!asset) return this.evmNativeRequest(address, network);
 
         this.assertEvmAssetNetwork(asset, network);
@@ -163,6 +177,74 @@ export class ChainBalanceService {
             params: [{ to: contract, data: `0x70a08231${address.slice(2).padStart(64, '0')}` }, 'latest'],
             source: 'evm_rpc',
             parse: (value) => this.evmQuantity(value),
+        };
+    }
+
+    private async getTonBalances(
+        wallet: BalanceAccount,
+        network: string,
+        assets: Array<AssetDto | undefined>,
+    ): Promise<ChainBalanceBatchResult> {
+        this.assertTonAccount(wallet.address);
+        const requests = assets.map(async (asset): Promise<LiveChainBalance> => {
+            if (!asset) {
+                return this.tonResult(
+                    network,
+                    'ton:native',
+                    'TON',
+                    9,
+                    await this.tonCenter.getNativeBalance(network, wallet.address),
+                );
+            }
+            if (asset.blockchain.toLowerCase() !== 'ton') {
+                throw new BadRequestException('Asset is not supported on the requested TON network');
+            }
+            const master = asset.contractAddress?.trim();
+            if (!master) throw new BadRequestException('TON Jetton asset requires a master contract address');
+            this.assertTonAccount(master);
+            return this.tonResult(
+                network,
+                asset.assetId,
+                asset.symbol,
+                asset.decimals,
+                await this.tonCenter.getJettonBalance(network, wallet.address, master),
+            );
+        });
+        const settled = await Promise.allSettled(requests);
+        const balances: LiveChainBalance[] = [];
+        const failures: ChainBalanceBatchResult['failures'] = [];
+        settled.forEach((result, index) => {
+            if (result.status === 'fulfilled') balances.push(result.value);
+            else {
+                if (result.reason instanceof BadRequestException) throw result.reason;
+                failures.push({
+                    assetId: assets[index]?.assetId || 'ton:native',
+                    reason: result.reason instanceof Error ? result.reason.message : 'TON provider request failed',
+                });
+            }
+        });
+        return { balances, failures };
+    }
+
+    private tonResult(
+        network: string,
+        assetId: string,
+        symbol: string,
+        decimals: number,
+        balanceRaw: string,
+    ): LiveChainBalance {
+        const fetchedAt = new Date();
+        return {
+            network,
+            assetId,
+            symbol,
+            decimals,
+            balanceRaw,
+            balanceDecimal: formatTokenAmount(balanceRaw, decimals),
+            source: 'toncenter_api',
+            providerAlias: 'toncenter',
+            fetchedAt,
+            expiresAt: new Date(fetchedAt.getTime() + this.balanceTtlMs()),
         };
     }
 
@@ -245,6 +327,16 @@ export class ChainBalanceService {
         const named = /^[a-z0-9._-]+\.(?:near|testnet|tg)$/i.test(address);
         const implicit = /^[a-f0-9]{64}$/i.test(address);
         if (!named && !implicit) throw new BadRequestException('Wallet is not a valid NEAR account');
+    }
+
+    private assertEvmAccount(address: string): void {
+        if (!/^0x[a-f0-9]{40}$/i.test(address)) throw new BadRequestException('Wallet is not a valid EVM address');
+    }
+
+    private assertTonAccount(address: string): void {
+        const userFriendly = /^[A-Za-z0-9_-]{48}$/.test(address);
+        const raw = /^(?:-1|0):[a-f0-9]{64}$/i.test(address);
+        if (!userFriendly && !raw) throw new BadRequestException('Wallet is not a valid TON address');
     }
 
     private assertEvmAssetNetwork(asset: AssetDto, network: string): void {

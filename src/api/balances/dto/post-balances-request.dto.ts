@@ -8,7 +8,8 @@ export class PostBalancesRequestDto {
     walletId?: string;
 
     @ApiPropertyOptional({
-        description: 'Restrict balances to one active wallet address owned by the authenticated user.',
+        description:
+            'Read one wallet address. If it is not linked to the user, network is required and the request is read-only.',
     })
     @IsOptional()
     @IsString()

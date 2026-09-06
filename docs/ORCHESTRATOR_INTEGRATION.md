@@ -17,6 +17,11 @@ Orchestrator: validate metadata, pull digest, run container on host
 
 Legacy [`.docker/Dockerfile`](../.docker/Dockerfile) is for local `docker-compose` only; orchestrator uses the root `Dockerfile`. Same pattern as [`cs_nextjs_client`](https://github.com/vodis/cs_nextjs_client) (root `Dockerfile` + workflows).
 
+The production image prepares the exact `pnpm` version declared by
+`packageManager` during the image build and disables Corepack network access in
+the runtime stage. Orchestrated database commands therefore never download a
+package manager during deployment.
+
 Full app-team guide: [`cs_orchestrator/docs/integration/SERVICE_INTEGRATION_GUIDE.md`](https://github.com/vodis/cs_orchestrator/blob/main/docs/integration/SERVICE_INTEGRATION_GUIDE.md).
 
 ## Branch flow

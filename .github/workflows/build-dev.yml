@@ -33,6 +33,9 @@ jobs:
       - name: Build check
         run: pnpm run build
 
+      - name: Production image check
+        run: docker build --target production .
+
       - name: Typecheck
         run: pnpm exec tsc --noEmit
 

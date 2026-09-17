@@ -14,5 +14,6 @@ import { TonCenterService } from './ton/ton-center.service';
     imports: [AuthModule, AssetsModule, DatabaseModule, ConfigModule, HttpModule],
     controllers: [BalancesController],
     providers: [BalancesService, ChainBalanceService, ChainRpcService, TonCenterService],
+    exports: [BalancesService],
 })
 export class BalancesModule {}

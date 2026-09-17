@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../../api/auth/current-user.decorator';
 import { PrivyAuthGuard, RequirePrivyBearer } from '../../../api/auth/privy-auth.guard';
@@ -6,6 +6,7 @@ import { AuthenticatedUser } from '../../../api/auth/types';
 import { GetPortfolioUseCase } from '../application/get-portfolio.use-case';
 import { ManagePreferencesUseCase } from '../application/manage-preferences.use-case';
 import { PutInvestmentProfileDto } from './investment-profile.dto';
+import { GetPortfolioQueryDto } from './portfolio-query.dto';
 
 @ApiTags('portfolio')
 @ApiBearerAuth()
@@ -17,8 +18,8 @@ export class PortfolioController {
         private readonly preferences: ManagePreferencesUseCase,
     ) {}
 
-    @Get('portfolio') portfolio(@CurrentUser() user: AuthenticatedUser) {
-        return this.getPortfolio.execute(user.id);
+    @Get('portfolio') portfolio(@CurrentUser() user: AuthenticatedUser, @Query() query: GetPortfolioQueryDto) {
+        return this.getPortfolio.execute(user.id, query);
     }
 
     @Get('investment-profile') getPreferences(@CurrentUser() user: AuthenticatedUser) {

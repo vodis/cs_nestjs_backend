@@ -146,13 +146,13 @@ asset. Asset-specific balance requests remain bounded to 20 IDs and use the
 1Click `/v0/tokens` catalog as their allowlist.
 
 `GET /api/v1/portfolio` may receive `walletAddress` and a CAIP-2 `network` to
-value one connected wallet from live balance reads. For NEAR, the backend loads
-the supported token universe and USD prices from 1Click `/v0/tokens`, requests
-the native balance plus every catalogued NEP-141 balance in bounded chunks, and
-returns only non-zero positions. This discovers bridged assets such as ZEC
-without an unbounded chain scan. Unlinked addresses remain read-only and require
-an explicit network; they are never persisted in the balance cache. Native NEAR
-(`near:native`) uses the market price published for wrapped NEAR
+value one connected wallet from live balance reads. For NEAR mainnet, the
+backend loads the supported token universe and USD prices from 1Click
+`/v0/tokens`, requests the native balance plus every catalogued NEP-141 balance
+in bounded chunks, and returns only non-zero positions. This discovers bridged
+assets such as ZEC without an unbounded chain scan. Unlinked addresses remain
+read-only and require an explicit network; they are never persisted in the
+balance cache. Native NEAR (`near:native`) uses the market price published for wrapped NEAR
 (`nep141:wrap.near`), which represents the same underlying unit. If any live
 balance batch is partial because its provider is unavailable, the endpoint
 returns an availability error rather than understating the portfolio or

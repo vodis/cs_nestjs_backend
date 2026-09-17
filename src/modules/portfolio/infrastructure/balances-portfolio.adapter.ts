@@ -59,7 +59,8 @@ export class BalancesPortfolioAdapter implements PortfolioBalanceSource {
     private async liveBalanceResponses(userId: string, query: PortfolioBalanceQuery) {
         const nativeResponse = await this.balances.getBalancesForUser(userId, query);
         const tokenResponses: Array<Awaited<ReturnType<BalancesService['getBalancesForUser']>>> = [];
-        if (query.network?.startsWith('near:')) {
+        const resolvedNetwork = nativeResponse.data[0]?.network || query.network;
+        if (resolvedNetwork === 'near:mainnet') {
             const { data } = await this.assets.getAssets();
             const assetIds = data
                 .filter(
@@ -70,6 +71,7 @@ export class BalancesPortfolioAdapter implements PortfolioBalanceSource {
                 tokenResponses.push(
                     await this.balances.getBalancesForUser(userId, {
                         ...query,
+                        network: resolvedNetwork,
                         assetIds: assetIds.slice(index, index + 20),
                     }),
                 );

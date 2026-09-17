@@ -168,4 +168,69 @@ describe('BalancesPortfolioAdapter', () => {
         expect(getBalancesForUser.mock.calls[1][1].assetIds).toHaveLength(20);
         expect(getBalancesForUser.mock.calls[2][1].assetIds).toEqual(['nep141:token-20.near']);
     });
+
+    it('loads NEAR tokens when the linked wallet network is inferred', async () => {
+        const getBalancesForUser = jest
+            .fn()
+            .mockResolvedValueOnce({
+                data: [
+                    {
+                        walletId: 'wallet-1',
+                        walletAddress: 'alice.near',
+                        network: 'near:mainnet',
+                        assetId: 'near:native',
+                        symbol: 'NEAR',
+                        decimals: 24,
+                        balanceRaw: '1',
+                        balanceDecimal: '0.000000000000000000000001',
+                        fetchedAt: '2026-09-17T12:00:00.000Z',
+                    },
+                ],
+                meta: { partial: false },
+            })
+            .mockResolvedValueOnce({ data: [], meta: { partial: false } });
+        const assets = {
+            getAssets: jest.fn().mockResolvedValue({
+                data: [{ assetId: '1cs_v1:near:nep141:zec.omft.near', blockchain: 'near' }],
+            }),
+        };
+
+        await new BalancesPortfolioAdapter({ getBalancesForUser } as never, assets as never).balancesForUser('user-1', {
+            walletAddress: 'alice.near',
+        });
+
+        expect(getBalancesForUser).toHaveBeenNthCalledWith(2, 'user-1', {
+            walletAddress: 'alice.near',
+            network: 'near:mainnet',
+            assetIds: ['1cs_v1:near:nep141:zec.omft.near'],
+        });
+    });
+
+    it('does not use the 1Click mainnet token catalog for NEAR testnet', async () => {
+        const getBalancesForUser = jest.fn().mockResolvedValue({
+            data: [
+                {
+                    walletId: 'wallet-1',
+                    walletAddress: 'alice.testnet',
+                    network: 'near:testnet',
+                    assetId: 'near:native',
+                    symbol: 'NEAR',
+                    decimals: 24,
+                    balanceRaw: '1',
+                    balanceDecimal: '0.000000000000000000000001',
+                    fetchedAt: '2026-09-17T12:00:00.000Z',
+                },
+            ],
+            meta: { partial: false },
+        });
+        const getAssets = jest.fn();
+
+        await new BalancesPortfolioAdapter({ getBalancesForUser } as never, { getAssets } as never).balancesForUser(
+            'user-1',
+            { walletAddress: 'alice.testnet' },
+        );
+
+        expect(getBalancesForUser).toHaveBeenCalledTimes(1);
+        expect(getAssets).not.toHaveBeenCalled();
+    });
 });

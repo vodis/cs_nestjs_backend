@@ -21,6 +21,7 @@ type EndpointState = {
 type NearStatus = { chain_id?: string };
 
 const ALIAS_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+const LOGICAL_BATCH_CONCURRENCY = 4;
 
 @Injectable()
 export class ChainRpcService implements OnModuleInit {
@@ -203,33 +204,30 @@ export class ChainRpcService implements OnModuleInit {
     }
 
     private async callBatch(endpoint: ChainRpcEndpoint, requests: ChainRpcBatchRequest[], deadline: number) {
-        const remaining = deadline - Date.now();
-        if (remaining <= 0) throw new ChainRpcRequestError('RPC request deadline exceeded', true);
-        const timeout = Math.min(this.positiveNumber('RPC_ATTEMPT_TIMEOUT_MS', 2500), remaining);
-        const keyedRequests = requests.map((request) => ({ ...request, id: String(++this.requestId) }));
-        const response = await this.http.axiosRef.post<JsonRpcEnvelope<unknown>[]>(
-            endpoint.url,
-            keyedRequests.map(({ id, method, params }) => ({ jsonrpc: '2.0', id, method, params })),
-            { timeout },
-        );
-        if (!Array.isArray(response.data)) throw new ChainRpcRequestError('RPC provider rejected batch requests', true);
-
-        const envelopeById = new Map(response.data.map((envelope) => [String(envelope.id), envelope]));
-        return keyedRequests.map(({ key, id }) => {
-            const envelope = envelopeById.get(id);
-            if (!envelope) throw new ChainRpcRequestError('RPC provider returned an incomplete batch', true);
-            if (envelope.error) {
-                const message = envelope.error.message || 'RPC provider rejected a batch item';
-                if (this.isRetryableProviderError(envelope.error.code, message)) {
-                    throw new ChainRpcRequestError('RPC provider is temporarily unavailable', true);
+        const items: ChainRpcBatchResult['items'] = new Array(requests.length);
+        let nextIndex = 0;
+        let retryableError: ChainRpcRequestError | undefined;
+        const worker = async () => {
+            while (!retryableError && nextIndex < requests.length) {
+                const index = nextIndex++;
+                const request = requests[index];
+                try {
+                    const result = await this.call<unknown>(endpoint, request.method, request.params, deadline);
+                    items[index] = { key: request.key, result };
+                } catch (error) {
+                    const rpcError = this.toRpcError(error);
+                    if (rpcError.retryable) {
+                        retryableError = rpcError;
+                        return;
+                    }
+                    items[index] = { key: request.key, error: rpcError.message };
                 }
-                return { key, error: 'RPC provider rejected the batch item' };
             }
-            if (envelope.result === undefined) {
-                throw new ChainRpcRequestError('RPC provider returned an invalid batch item', true);
-            }
-            return { key, result: envelope.result };
-        });
+        };
+        const concurrency = Math.min(requests.length, LOGICAL_BATCH_CONCURRENCY);
+        await Promise.all(Array.from({ length: concurrency }, worker));
+        if (retryableError) throw retryableError;
+        return items;
     }
 
     private loadEndpoints(): Map<string, ChainRpcEndpoint[]> {

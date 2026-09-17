@@ -21,6 +21,13 @@ const usdcEthereum: AssetDto = {
     blockchain: 'eth',
     contractAddress: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
 };
+const zecNear: AssetDto = {
+    assetId: '1cs_v1:near:nep141:zec.omft.near',
+    defuseAssetId: '1cs_v1:near:nep141:zec.omft.near',
+    symbol: 'ZEC',
+    decimals: 8,
+    blockchain: 'near',
+};
 
 function wallet(address: string, chainType: string): WalletLink {
     return { id: 'wallet-1', address, chainType } as WalletLink;
@@ -39,17 +46,23 @@ describe('ChainBalanceService', () => {
             items: [
                 { key: requests[0].key, result: { amount: '2000000000000000000000000' } },
                 { key: requests[1].key, result: { result: [...Buffer.from('"1250000"')] } },
+                { key: requests[2].key, result: { result: [...Buffer.from('"50000000"')] } },
             ],
         }));
         const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
 
-        const result = await service.getBalances(wallet('alice.near', 'near'), 'near:mainnet', [undefined, usdcNear]);
+        const result = await service.getBalances(wallet('alice.near', 'near'), 'near:mainnet', [
+            undefined,
+            usdcNear,
+            zecNear,
+        ]);
 
         expect(requestBatch).toHaveBeenCalledWith(
             'near:mainnet',
             expect.arrayContaining([
                 expect.objectContaining({ key: 'near:native', method: 'query' }),
                 expect.objectContaining({ key: usdcNear.assetId, method: 'query' }),
+                expect.objectContaining({ key: zecNear.assetId, method: 'query' }),
             ]),
         );
         const tokenRequest = requestBatch.mock.calls[0][1][1];
@@ -58,9 +71,16 @@ describe('ChainBalanceService', () => {
             account_id: 'usdc.near',
             method_name: 'ft_balance_of',
         });
+        const zecRequest = requestBatch.mock.calls[0][1][2];
+        expect(zecRequest.params).toMatchObject({
+            request_type: 'call_function',
+            account_id: 'zec.omft.near',
+            method_name: 'ft_balance_of',
+        });
         expect(result.balances).toEqual([
             expect.objectContaining({ assetId: 'near:native', balanceDecimal: '2' }),
             expect.objectContaining({ assetId: usdcNear.assetId, balanceDecimal: '1.25' }),
+            expect.objectContaining({ assetId: zecNear.assetId, balanceDecimal: '0.5' }),
         ]);
     });
 

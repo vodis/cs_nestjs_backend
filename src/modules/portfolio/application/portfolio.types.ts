@@ -5,12 +5,17 @@ export type InvestmentPreferences = {
 };
 
 export type PortfolioBalance = {
-    walletId: string;
+    walletReference: string;
     chain: string;
     assetId: string;
     symbol: string;
     quantity: string;
     balanceUpdatedAt: Date;
+};
+
+export type PortfolioBalanceQuery = {
+    walletAddress?: string;
+    network?: string;
 };
 
 export type PortfolioAsset = {

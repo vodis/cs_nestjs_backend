@@ -143,6 +143,15 @@ Omitting asset ids refreshes only the chain's native asset. Discovering an
 entire token portfolio is intentionally not attempted through unbounded RPC
 scans; the Angular host supplies bounded asset IDs from `/api/v1/assets`.
 
+`GET /api/v1/portfolio` may receive `walletAddress` and a CAIP-2 `network` to
+value one connected wallet from a live native-balance read. Unlinked addresses
+remain read-only and require an explicit network; they are never persisted in
+the balance cache. Native NEAR (`near:native`) uses the market price published
+for wrapped NEAR (`nep141:wrap.near`), which represents the same underlying
+unit. If the requested wallet has no balance result because its provider is
+unavailable, the endpoint returns an availability error rather than reporting
+an invented zero valuation.
+
 The `20260830000100-add-balance-cache-network.js` migration must be applied by
 the orchestrator before this application version serves traffic. It is an
 expand/application-transition migration: `network` remains nullable, and the

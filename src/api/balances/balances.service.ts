@@ -31,8 +31,12 @@ export class BalancesService {
     ) {}
 
     async getBalances(user: AuthenticatedUser, query: BalancesRequest): Promise<GetBalancesResponseDto> {
+        return this.getBalancesForUser(user.id, query);
+    }
+
+    async getBalancesForUser(userId: string, query: BalancesRequest): Promise<GetBalancesResponseDto> {
         const now = new Date();
-        const selected = await this.findWallets(user.id, query);
+        const selected = await this.findWallets(userId, query);
         const assets = await this.findSupportedAssets(query);
         if (selected.length === 0) return this.toResponse([], now, 0, 0);
 
@@ -41,7 +45,7 @@ export class BalancesService {
         const entries = linkedWalletIds.length
             ? await BalanceCacheEntry.findAll({
                   where: {
-                      userId: user.id,
+                      userId,
                       walletId: { [Op.in]: linkedWalletIds },
                       ...(assets.length ? { assetId: { [Op.in]: assets.map((asset) => asset.assetId) } } : {}),
                       ...(requestedNetwork ? { network: requestedNetwork } : {}),
@@ -69,7 +73,7 @@ export class BalancesService {
         });
 
         const groups = this.groupTargets(targets);
-        const results = await Promise.allSettled(groups.map(async (group) => this.refreshBalances(user.id, group)));
+        const results = await Promise.allSettled(groups.map(async (group) => this.refreshBalances(userId, group)));
         const liveBalances: BalanceDto[] = [];
         const failedTargets: RefreshTarget[] = [];
         results.forEach((result, index) => {
@@ -282,7 +286,7 @@ export class BalancesService {
 
     private inferNetwork(wallet: WalletLink): string | undefined {
         if (wallet.chainType === 'near') {
-            return /\.(?:testnet|tg)$/i.test(wallet.address) ? 'near:testnet' : 'near:mainnet';
+            return /\.testnet$/i.test(wallet.address) ? 'near:testnet' : 'near:mainnet';
         }
         if (wallet.chainType === 'ton') return 'ton:mainnet';
         return undefined;

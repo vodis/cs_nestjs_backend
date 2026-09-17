@@ -3,21 +3,22 @@ import { createHash } from 'crypto';
 import { formatScaled, multiplyToScale, percentage } from '../domain/decimal-value';
 import {
     PORTFOLIO_ASSET_SOURCE,
-    PORTFOLIO_REPOSITORY,
+    PORTFOLIO_BALANCE_SOURCE,
     PortfolioAssetSource,
-    PortfolioRepository,
+    PortfolioBalanceSource,
 } from './portfolio.ports';
+import { PortfolioBalanceQuery } from './portfolio.types';
 
 @Injectable()
 export class GetPortfolioUseCase {
     constructor(
-        @Inject(PORTFOLIO_REPOSITORY) private readonly repository: PortfolioRepository,
+        @Inject(PORTFOLIO_BALANCE_SOURCE) private readonly balances: PortfolioBalanceSource,
         @Inject(PORTFOLIO_ASSET_SOURCE) private readonly assets: PortfolioAssetSource,
     ) {}
 
-    async execute(userId: string) {
+    async execute(userId: string, query?: PortfolioBalanceQuery) {
         const [balances, assets] = await Promise.all([
-            this.repository.balancesForUser(userId),
+            this.balances.balancesForUser(userId, query),
             this.assets.getAssets(),
         ]);
         const assetById = new Map(assets.map((asset) => [asset.assetId, asset]));
@@ -46,7 +47,10 @@ export class GetPortfolioUseCase {
             totalValue: formatScaled(total),
             unpricedPositionCount: calculated.filter((item) => item.value === null).length,
             positions: calculated.map(({ balance, asset, value }) => ({
-                walletRef: createHash('sha256').update(`${userId}:${balance.walletId}`).digest('hex').slice(0, 16),
+                walletRef: createHash('sha256')
+                    .update(`${userId}:${balance.walletReference}`)
+                    .digest('hex')
+                    .slice(0, 16),
                 chain: balance.chain,
                 assetId: balance.assetId,
                 symbol: balance.symbol,

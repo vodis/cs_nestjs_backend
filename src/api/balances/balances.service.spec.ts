@@ -78,12 +78,12 @@ describe('BalancesService', () => {
 
     afterEach(async () => sequelize.close());
 
-    async function userWallet(privyUserId = 'did:privy:user-1') {
+    async function userWallet(privyUserId = 'did:privy:user-1', address = 'alice.near') {
         const user = await AppUser.create({ privyUserId, status: 'active' });
         const wallet = await WalletLink.create({
             userId: user.id,
             privyWalletId: `wallet-${privyUserId}`,
-            address: 'alice.near',
+            address,
             chainType: 'near',
             walletType: 'embedded',
             source: 'privy',
@@ -317,5 +317,20 @@ describe('BalancesService', () => {
                 { walletAddress: '0x1111111111111111111111111111111111111111' },
             ),
         ).rejects.toThrow('network is required');
+    });
+
+    it('infers mainnet for a linked .tg account', async () => {
+        const { user, wallet } = await userWallet('did:privy:tg-user', 'alice.tg');
+
+        await service.getBalances(
+            { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
+            { walletId: wallet.id },
+        );
+
+        expect(chainBalances.getBalances).toHaveBeenCalledWith(
+            expect.objectContaining({ address: 'alice.tg' }),
+            'near:mainnet',
+            [undefined],
+        );
     });
 });

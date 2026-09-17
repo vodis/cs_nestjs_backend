@@ -3,7 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { AssetDto } from '../assets/dto/get-assets-response.dto';
 import { WalletLink } from '../../database/models/wallet-link.model';
 import { formatTokenAmount } from '../../utils/decimal.util';
-import { NEAR_NATIVE_ASSET_ID, NEAR_NATIVE_DECIMALS, NEAR_NATIVE_SYMBOL } from './near-balance.constants';
+import {
+    nearTokenContractFromAssetId,
+    NEAR_NATIVE_ASSET_ID,
+    NEAR_NATIVE_DECIMALS,
+    NEAR_NATIVE_SYMBOL,
+} from './near-balance.constants';
 import { ChainRpcService } from './rpc/chain-rpc.service';
 import { TonCenterService } from './ton/ton-center.service';
 
@@ -316,8 +321,8 @@ export class ChainBalanceService {
     }
 
     private nep141Contract(asset: AssetDto): string {
-        const contract = asset.assetId.startsWith('nep141:') ? asset.assetId.slice('nep141:'.length) : undefined;
-        if (!contract || !/^[a-z0-9._-]+$/i.test(contract)) {
+        const contract = nearTokenContractFromAssetId(asset.assetId);
+        if (!contract) {
             throw new BadRequestException('Asset is not a supported NEP-141 token');
         }
         return contract;

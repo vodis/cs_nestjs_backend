@@ -22,9 +22,7 @@ describe('ChainRpcService', () => {
         post.mockResolvedValueOnce({ data: { result: { chain_id: 'mainnet' } } });
         post.mockRejectedValueOnce({ isAxiosError: true, code: 'ECONNABORTED' });
         post.mockResolvedValueOnce({ data: { result: { chain_id: 'mainnet' } } });
-        post.mockImplementationOnce(async (_url, body) => ({
-            data: body.map((item) => ({ jsonrpc: '2.0', id: item.id, result: { amount: '42' } })),
-        }));
+        post.mockResolvedValueOnce({ data: { result: { amount: '42' } } });
 
         const result = await service.requestBatch('near:mainnet', [
             { key: 'near:native', method: 'query', params: { request_type: 'view_account' } },
@@ -38,6 +36,7 @@ describe('ChainRpcService', () => {
             'https://secondary.rpc.example',
             'https://secondary.rpc.example',
         ]);
+        expect(post.mock.calls.every((call) => !Array.isArray(call[1]))).toBe(true);
     });
 
     it('rejects a wrong-chain primary and uses a verified secondary', async () => {
@@ -105,12 +104,8 @@ describe('ChainRpcService', () => {
     it('keeps deterministic batch item errors as partial results', async () => {
         const { service, post } = createService();
         post.mockResolvedValueOnce({ data: { result: { chain_id: 'mainnet' } } });
-        post.mockImplementationOnce(async (_url, body) => ({
-            data: [
-                { jsonrpc: '2.0', id: body[0].id, result: { amount: '7' } },
-                { jsonrpc: '2.0', id: body[1].id, error: { code: -32602, message: 'Unknown contract' } },
-            ],
-        }));
+        post.mockResolvedValueOnce({ data: { result: { amount: '7' } } });
+        post.mockResolvedValueOnce({ data: { error: { code: -32602, message: 'Unknown contract' } } });
 
         const result = await service.requestBatch('near:mainnet', [
             { key: 'near:native', method: 'query', params: {} },
@@ -119,9 +114,10 @@ describe('ChainRpcService', () => {
 
         expect(result.items).toEqual([
             { key: 'near:native', result: { amount: '7' } },
-            { key: 'nep141:missing.near', error: 'RPC provider rejected the batch item' },
+            { key: 'nep141:missing.near', error: 'RPC provider rejected the request' },
         ]);
-        expect(post).toHaveBeenCalledTimes(2);
+        expect(post).toHaveBeenCalledTimes(3);
+        expect(post.mock.calls.every((call) => !Array.isArray(call[1]))).toBe(true);
     });
 
     it('opens the primary circuit and skips it until cooldown', async () => {

@@ -116,7 +116,9 @@ network has at least one reachable provider reporting the expected chain. A
 failure prevents readiness, so the orchestrator does not switch traffic. The
 backend retries transport errors, timeouts, rate limits, and provider 5xx
 responses on the next configured endpoint, and temporarily opens a circuit
-after repeated failures.
+after repeated failures. Logical balance batches are sent as bounded concurrent
+single JSON-RPC requests because some supported providers reject wire-level
+JSON-RPC batch arrays.
 Deterministic per-token errors remain partial batch results. When every provider
 fails, an expired cached value may be returned with `stale: true` and
 `meta.partial: true`; the API never invents a zero balance.
@@ -139,18 +141,22 @@ See the official [TON Center v2 overview](https://docs.ton.org/api/v2/overview),
 [native balance endpoint](https://docs.ton.org/api/v2/accounts/get-address-balance),
 and [Jetton-wallet query](https://docs.ton.org/api/v3/jettons/get-jetton-wallets).
 
-Omitting asset ids refreshes only the chain's native asset. Discovering an
-entire token portfolio is intentionally not attempted through unbounded RPC
-scans; the Angular host supplies bounded asset IDs from `/api/v1/assets`.
+Omitting asset ids from the balances endpoint refreshes only the chain's native
+asset. Asset-specific balance requests remain bounded to 20 IDs and use the
+1Click `/v0/tokens` catalog as their allowlist.
 
 `GET /api/v1/portfolio` may receive `walletAddress` and a CAIP-2 `network` to
-value one connected wallet from a live native-balance read. Unlinked addresses
-remain read-only and require an explicit network; they are never persisted in
-the balance cache. Native NEAR (`near:native`) uses the market price published
-for wrapped NEAR (`nep141:wrap.near`), which represents the same underlying
-unit. If the requested wallet has no balance result because its provider is
-unavailable, the endpoint returns an availability error rather than reporting
-an invented zero valuation.
+value one connected wallet from live balance reads. For NEAR, the backend loads
+the supported token universe and USD prices from 1Click `/v0/tokens`, requests
+the native balance plus every catalogued NEP-141 balance in bounded chunks, and
+returns only non-zero positions. This discovers bridged assets such as ZEC
+without an unbounded chain scan. Unlinked addresses remain read-only and require
+an explicit network; they are never persisted in the balance cache. Native NEAR
+(`near:native`) uses the market price published for wrapped NEAR
+(`nep141:wrap.near`), which represents the same underlying unit. If any live
+balance batch is partial because its provider is unavailable, the endpoint
+returns an availability error rather than understating the portfolio or
+reporting an invented zero valuation.
 
 The `20260830000100-add-balance-cache-network.js` migration must be applied by
 the orchestrator before this application version serves traffic. It is an

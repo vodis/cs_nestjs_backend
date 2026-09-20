@@ -48,6 +48,16 @@ export class PrepareSwapRequestDto {
     @IsIn(['DESTINATION_CHAIN', 'INTENTS'])
     recipientType?: 'DESTINATION_CHAIN' | 'INTENTS';
 
+    @ApiPropertyOptional({ enum: ['ORIGIN_CHAIN', 'INTENTS'] })
+    @IsOptional()
+    @IsIn(['ORIGIN_CHAIN', 'INTENTS'])
+    depositType?: 'ORIGIN_CHAIN' | 'INTENTS';
+
+    @ApiPropertyOptional({ enum: ['ORIGIN_CHAIN', 'INTENTS'] })
+    @IsOptional()
+    @IsIn(['ORIGIN_CHAIN', 'INTENTS'])
+    refundType?: 'ORIGIN_CHAIN' | 'INTENTS';
+
     @ApiProperty({ example: 'evm' })
     @IsIn(['evm', 'near'])
     authMethod: 'evm' | 'near';

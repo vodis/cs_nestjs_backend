@@ -1,10 +1,16 @@
 import { SwapValidationError } from '../../domain/errors/swap-validation.error';
-import { SwapQuote } from '../../domain/models/swap-quote';
+import { SwapExecutionMode, SwapQuote } from '../../domain/models/swap-quote';
 import { SwapType } from '../../domain/models/swap-quote-request';
 
 export class SwapQuoteSelectionPolicy {
-    selectBestExecutableQuote(quotes: SwapQuote[], swapType: SwapType): SwapQuote {
-        const executableQuotes = quotes.filter((quote) => this.isExecutable(quote));
+    selectBestExecutableQuote(
+        quotes: SwapQuote[],
+        swapType: SwapType,
+        allowedModes?: readonly SwapExecutionMode[],
+    ): SwapQuote {
+        const executableQuotes = quotes.filter(
+            (quote) => (!allowedModes || allowedModes.includes(quote.executionMode)) && this.isExecutable(quote),
+        );
 
         if (!executableQuotes.length) {
             throw new SwapValidationError(

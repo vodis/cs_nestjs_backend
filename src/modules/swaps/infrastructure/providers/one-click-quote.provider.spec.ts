@@ -13,6 +13,8 @@ describe('OneClickQuoteProvider', () => {
         signerId: 'alice.near',
         recipient: 'alice.near',
         recipientType: 'INTENTS',
+        depositType: 'INTENTS',
+        refundType: 'INTENTS',
         authMethod: 'near',
     };
 
@@ -83,6 +85,28 @@ describe('OneClickQuoteProvider', () => {
         await provider.requestQuotes(command);
 
         expect(client.createQuote).toHaveBeenCalledWith(expect.objectContaining({ dry: false }));
+    });
+
+    it('preserves an origin-chain route for a NEAR wallet swap', async () => {
+        const client = {
+            createQuote: jest.fn().mockResolvedValue({ amountIn: '1000000', amountOut: '900000' }),
+        } as unknown as OneClickApiHttpClient;
+        const provider = new OneClickQuoteProvider(client);
+
+        await provider.requestQuotes({
+            ...command,
+            recipientType: 'DESTINATION_CHAIN',
+            depositType: 'ORIGIN_CHAIN',
+            refundType: 'ORIGIN_CHAIN',
+        });
+
+        expect(client.createQuote).toHaveBeenCalledWith(
+            expect.objectContaining({
+                depositType: 'ORIGIN_CHAIN',
+                recipientType: 'DESTINATION_CHAIN',
+                refundType: 'ORIGIN_CHAIN',
+            }),
+        );
     });
 
     it('keeps a foreign destination recipient separate from the signer refund address', async () => {

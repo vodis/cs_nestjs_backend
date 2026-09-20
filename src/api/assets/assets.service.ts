@@ -2,6 +2,7 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OneClickApiHttpClient } from '../../http-clients/one-click-api/one-click-api.http-client';
 import { OneClickTokenDto } from '../../http-clients/one-click-api/dto/one-click-token.dto';
+import { isValidTokenDecimals } from '../../utils/decimal.util';
 import { AssetDto, GetAssetsResponseDto } from './dto/get-assets-response.dto';
 import { getSeedAssetMetadata } from './assets-metadata.seed';
 
@@ -66,8 +67,7 @@ export class AssetsService {
             token.symbol.length > 0 &&
             typeof token.blockchain === 'string' &&
             token.blockchain.length > 0 &&
-            typeof token.decimals === 'number' &&
-            Number.isFinite(token.decimals)
+            isValidTokenDecimals(token.decimals)
         );
     }
 

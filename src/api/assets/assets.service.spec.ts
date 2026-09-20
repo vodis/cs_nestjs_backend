@@ -97,6 +97,9 @@ describe('AssetsService', () => {
                     { assetId: '', decimals: 6, blockchain: 'near', symbol: 'BAD' },
                     { assetId: 'nep141:bad.near', decimals: '6', blockchain: 'near', symbol: 'BAD' },
                     { assetId: 'nep141:bad.near', decimals: 6, blockchain: '', symbol: 'BAD' },
+                    { assetId: 'nep141:negative.near', decimals: -1, blockchain: 'near', symbol: 'BAD' },
+                    { assetId: 'nep141:fractional.near', decimals: 1.5, blockchain: 'near', symbol: 'BAD' },
+                    { assetId: 'nep141:oversized.near', decimals: 256, blockchain: 'near', symbol: 'BAD' },
                 ]),
         );
 

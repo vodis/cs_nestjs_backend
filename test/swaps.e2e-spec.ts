@@ -611,7 +611,7 @@ describe('Swaps (e2e)', () => {
                 },
                 providers: defaultProviders([
                     executableQuote({
-                        amountIn: '1000000',
+                        amountIn: '1000000000000000000000000',
                         amountOut: '1000000',
                     }),
                 ]),
@@ -619,7 +619,12 @@ describe('Swaps (e2e)', () => {
 
             const response = await request(app.getHttpServer())
                 .post('/api/v1/swaps/prepare')
-                .send(validPreparePayload({ slippageTolerance: 100 }))
+                .send(
+                    validPreparePayload({
+                        amount: '1000000000000000000000000',
+                        slippageTolerance: 100,
+                    }),
+                )
                 .expect(400);
 
             expect(response.body).toMatchObject({

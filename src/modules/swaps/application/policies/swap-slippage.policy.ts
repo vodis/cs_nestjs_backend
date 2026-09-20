@@ -1,6 +1,10 @@
 import { SwapValidationError } from '../../domain/errors/swap-validation.error';
 import { AssetRegistryEntry } from '../../domain/models/asset-registry-entry';
 import { SwapQuote } from '../../domain/models/swap-quote';
+import { getAtomicDecimalScale } from '../../../../utils/decimal.util';
+
+const PRICE_RATIO_SCALE = 1_000_000;
+const BASIS_POINTS_SCALE = 10_000;
 
 export class SwapSlippagePolicy {
     assertWithinTolerance(
@@ -23,8 +27,11 @@ export class SwapSlippagePolicy {
             return;
         }
 
-        const expectedOut = (amountIn * BigInt(Math.round((originPrice / destinationPrice) * 1_000_000))) / 1_000_000n;
-        const minAcceptableOut = (expectedOut * BigInt(10_000 - slippageTolerance)) / 10_000n;
+        const priceRatio = BigInt(Math.round((originPrice / destinationPrice) * PRICE_RATIO_SCALE));
+        const decimalScale = getAtomicDecimalScale(originAsset.decimals, destinationAsset.decimals);
+        const minAcceptableOut =
+            (amountIn * priceRatio * BigInt(BASIS_POINTS_SCALE - slippageTolerance) * decimalScale.multiplier) /
+            (BigInt(PRICE_RATIO_SCALE * BASIS_POINTS_SCALE) * decimalScale.divisor);
 
         if (amountOut < minAcceptableOut) {
             throw new SwapValidationError('SLIPPAGE_EXCEEDED', 'Best quote exceeds the requested slippage tolerance', {

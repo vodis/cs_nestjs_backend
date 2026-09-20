@@ -13,3 +13,27 @@ export function formatTokenAmount(raw: string, decimals: number): string {
 
     return fraction ? `${whole}.${fraction}` : whole;
 }
+
+export type AtomicDecimalScale = {
+    multiplier: bigint;
+    divisor: bigint;
+};
+
+const MAX_TOKEN_DECIMALS = 255;
+
+export function getAtomicDecimalScale(sourceDecimals: number, destinationDecimals: number): AtomicDecimalScale {
+    assertValidDecimals(sourceDecimals);
+    assertValidDecimals(destinationDecimals);
+
+    const difference = destinationDecimals - sourceDecimals;
+
+    return difference >= 0
+        ? { multiplier: 10n ** BigInt(difference), divisor: 1n }
+        : { multiplier: 1n, divisor: 10n ** BigInt(-difference) };
+}
+
+function assertValidDecimals(decimals: number): void {
+    if (!Number.isSafeInteger(decimals) || decimals < 0 || decimals > MAX_TOKEN_DECIMALS) {
+        throw new RangeError(`Token decimals must be an integer between 0 and ${MAX_TOKEN_DECIMALS}`);
+    }
+}

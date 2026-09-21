@@ -49,6 +49,25 @@ describe('SwapQuoteSelectionPolicy', () => {
         expect(selected.executionMode).toBe('deposit_address');
     });
 
+    it('selects only the execution mode supported by the requested custody route', () => {
+        const selected = policy.selectBestExecutableQuote(
+            [
+                baseQuote({ amountOut: '999' }),
+                baseQuote({
+                    providerId: 'one-click',
+                    executionMode: 'deposit_address',
+                    quoteHashes: [],
+                    amountOut: '990',
+                    providerMeta: { depositAddress: 'deposit.near' },
+                }),
+            ],
+            'EXACT_INPUT',
+            ['deposit_address'],
+        );
+
+        expect(selected.providerId).toBe('one-click');
+    });
+
     it('rejects when no provider returns an executable package', () => {
         expect(() =>
             policy.selectBestExecutableQuote(

@@ -17,6 +17,8 @@ export class PrepareSwapMapper {
             recipientType:
                 dto.recipientType ??
                 (dto.recipient ? 'DESTINATION_CHAIN' : dto.authMethod === 'near' ? 'INTENTS' : 'DESTINATION_CHAIN'),
+            depositType: dto.depositType,
+            refundType: dto.refundType,
             authMethod: dto.authMethod,
             minDeadlineMs: dto.minDeadlineMs,
         };

@@ -243,7 +243,7 @@ describe('Swaps (e2e)', () => {
             });
         });
 
-        it('returns deposit-address execution packages when they are the best executable quote', async () => {
+        it('returns a deposit-address execution package when origin-chain custody is requested', async () => {
             app = await createSwapsApp({
                 providers: [
                     {
@@ -256,7 +256,7 @@ describe('Swaps (e2e)', () => {
                                 originAsset: ORIGIN_ASSET,
                                 destinationAsset: DESTINATION_ASSET,
                                 amountIn: '1000000',
-                                amountOut: '9999999',
+                                amountOut: '900000',
                                 expirationTime: futureDeadline(),
                                 providerMeta: {
                                     depositAddress: 'one-click-deposit.near',
@@ -273,11 +273,16 @@ describe('Swaps (e2e)', () => {
 
             const response = await request(app.getHttpServer())
                 .post('/api/v1/swaps/prepare')
-                .send(validPreparePayload())
+                .send(
+                    validPreparePayload({
+                        depositType: 'ORIGIN_CHAIN',
+                        refundType: 'ORIGIN_CHAIN',
+                    }),
+                )
                 .expect(201);
 
             expect(response.body.data.providerId).toBe('one-click');
-            expect(response.body.data.amountOut).toBe('9999999');
+            expect(response.body.data.amountOut).toBe('900000');
             expect(response.body.data.executionPackage).toMatchObject({
                 providerId: 'one-click',
                 mode: 'deposit_address',

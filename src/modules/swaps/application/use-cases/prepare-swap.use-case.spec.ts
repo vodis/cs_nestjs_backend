@@ -18,6 +18,8 @@ describe('PrepareSwapUseCase', () => {
         signerId: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9',
         recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9',
         recipientType: 'DESTINATION_CHAIN',
+        depositType: 'INTENTS',
+        refundType: 'INTENTS',
         authMethod: 'evm',
     };
 
@@ -136,6 +138,8 @@ describe('PrepareSwapUseCase', () => {
 
         const result = await useCase.execute({
             ...command,
+            depositType: 'ORIGIN_CHAIN',
+            refundType: 'ORIGIN_CHAIN',
             destinationAsset,
             recipient: 'BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z',
             recipientType: 'DESTINATION_CHAIN',

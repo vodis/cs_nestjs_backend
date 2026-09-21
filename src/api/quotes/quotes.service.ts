@@ -59,7 +59,6 @@ export class QuotesService {
     private toOneClickQuoteRequest(dto: CreateOneClickQuoteRequestDto): OneClickQuoteRequest {
         this.addressValidationService.assertRefundAddress(dto.authMethod, dto.userAddress);
 
-        const userAddressType = dto.authMethod === 'near' ? 'INTENTS' : 'ORIGIN_CHAIN';
         const recipientType =
             dto.recipientType ??
             (dto.recipient ? 'DESTINATION_CHAIN' : dto.authMethod === 'near' ? 'INTENTS' : 'DESTINATION_CHAIN');
@@ -69,13 +68,13 @@ export class QuotesService {
             swapType: dto.swapType,
             slippageTolerance: dto.slippageTolerance,
             originAsset: dto.originAsset,
-            depositType: 'ORIGIN_CHAIN',
+            depositType: dto.depositType ?? 'ORIGIN_CHAIN',
             destinationAsset: dto.destinationAsset,
             amount: dto.amount,
             recipient: dto.recipient || dto.userAddress,
             recipientType,
             refundTo: dto.userAddress,
-            refundType: userAddressType,
+            refundType: dto.refundType ?? (dto.authMethod === 'near' ? 'INTENTS' : 'ORIGIN_CHAIN'),
             deadline: dto.deadline,
         };
     }

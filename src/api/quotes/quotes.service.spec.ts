@@ -48,6 +48,35 @@ describe('QuotesService', () => {
         });
     });
 
+    it('preserves explicit origin-chain custody for a NEAR wallet quote', async () => {
+        oneClickApiHttpClient.createQuote.mockResolvedValue({ quote: { amountOut: '1' } });
+        const service = new QuotesService(oneClickApiHttpClient, assetsService);
+
+        await service.createOneClickQuote({
+            dry: true,
+            slippageTolerance: 50,
+            originAsset: 'nep141:wrap.near',
+            destinationAsset: 'nep141:usdt.tether-token.near',
+            amount: '10000000000000000000000',
+            deadline: '2026-09-20T23:16:08.703Z',
+            userAddress: 'alice.near',
+            recipient: 'alice.near',
+            recipientType: 'DESTINATION_CHAIN',
+            depositType: 'ORIGIN_CHAIN',
+            refundType: 'ORIGIN_CHAIN',
+            authMethod: 'near',
+            swapType: 'EXACT_INPUT',
+        });
+
+        expect(oneClickApiHttpClient.createQuote).toHaveBeenCalledWith(
+            expect.objectContaining({
+                depositType: 'ORIGIN_CHAIN',
+                recipientType: 'DESTINATION_CHAIN',
+                refundType: 'ORIGIN_CHAIN',
+            }),
+        );
+    });
+
     it('rejects a refund address that does not match the selected auth method before calling 1Click', async () => {
         const service = new QuotesService(oneClickApiHttpClient, assetsService);
 

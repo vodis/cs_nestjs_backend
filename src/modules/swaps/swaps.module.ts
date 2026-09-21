@@ -10,6 +10,7 @@ import { ExecuteSwapUseCase } from './application/use-cases/execute-swap.use-cas
 import { PrepareSwapUseCase } from './application/use-cases/prepare-swap.use-case';
 import { AssetRegistryAdapter } from './infrastructure/adapters/asset-registry.adapter';
 import { OneClickQuoteProvider } from './infrastructure/providers/one-click-quote.provider';
+import { OneClickExecutionProvider } from './infrastructure/providers/one-click-execution.provider';
 import { SolverRelayExecutionProvider } from './infrastructure/providers/solver-relay-execution.provider';
 import { SolverRelayQuoteProvider } from './infrastructure/providers/solver-relay-quote.provider';
 import { SwapsController } from './presentation/swaps.controller';
@@ -21,6 +22,7 @@ import { SwapsController } from './presentation/swaps.controller';
         PrepareSwapUseCase,
         ExecuteSwapUseCase,
         AssetRegistryAdapter,
+        OneClickExecutionProvider,
         SolverRelayExecutionProvider,
         SolverRelayQuoteProvider,
         OneClickQuoteProvider,
@@ -38,8 +40,11 @@ import { SwapsController } from './presentation/swaps.controller';
         },
         {
             provide: EXECUTION_PROVIDERS,
-            useFactory: (solverRelay: SolverRelayExecutionProvider) => [solverRelay],
-            inject: [SolverRelayExecutionProvider],
+            useFactory: (solverRelay: SolverRelayExecutionProvider, oneClick: OneClickExecutionProvider) => [
+                solverRelay,
+                oneClick,
+            ],
+            inject: [SolverRelayExecutionProvider, OneClickExecutionProvider],
         },
     ],
 })

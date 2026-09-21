@@ -18,6 +18,30 @@ export type OneClickQuoteRequest = {
     deadline: string;
 };
 
+export type OneClickIntentStandard = 'nep413' | 'erc191';
+
+export type OneClickGenerateIntentRequest = {
+    type: 'swap_transfer';
+    standard: OneClickIntentStandard;
+    signerId: string;
+    depositAddress: string;
+};
+
+export type OneClickGenerateIntentResponse = {
+    intent: Record<string, unknown>;
+    correlationId: string;
+};
+
+export type OneClickSubmitIntentRequest = {
+    type: 'swap_transfer';
+    signedData: Record<string, unknown>;
+};
+
+export type OneClickSubmitIntentResponse = {
+    intentHash: string;
+    correlationId: string;
+};
+
 @Injectable()
 export class OneClickApiHttpClient {
     constructor(
@@ -31,10 +55,39 @@ export class OneClickApiHttpClient {
     }
 
     async createQuote(payload: OneClickQuoteRequest): Promise<unknown> {
-        const token =
-            this.configService.get<string>('ONE_CLICK_API_KEY') || this.configService.get<string>('ONE_CLICK_API_JWT');
-        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-        const { data } = await this.httpServer.axiosRef.post('v0/quote', payload, { headers });
+        const { data } = await this.httpServer.axiosRef.post('v0/quote', payload, { headers: this.authHeaders() });
         return data;
+    }
+
+    async generateIntent(payload: OneClickGenerateIntentRequest): Promise<OneClickGenerateIntentResponse> {
+        const { data } = await this.httpServer.axiosRef.post<OneClickGenerateIntentResponse>(
+            'v0/generate-intent',
+            payload,
+            {
+                headers: this.authHeaders(),
+            },
+        );
+        return data;
+    }
+
+    async submitIntent(payload: OneClickSubmitIntentRequest): Promise<OneClickSubmitIntentResponse> {
+        const { data } = await this.httpServer.axiosRef.post<OneClickSubmitIntentResponse>(
+            'v0/submit-intent',
+            payload,
+            {
+                headers: this.authHeaders(),
+            },
+        );
+        return data;
+    }
+
+    private authHeaders(): Record<string, string> | undefined {
+        const apiKey = this.configService.get<string>('ONE_CLICK_API_KEY');
+        if (apiKey) {
+            return { 'X-API-Key': apiKey };
+        }
+
+        const jwt = this.configService.get<string>('ONE_CLICK_API_JWT');
+        return jwt ? { Authorization: `Bearer ${jwt}` } : undefined;
     }
 }

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayNotEmpty, IsArray, IsIn, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsIn, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class ExecuteSwapRequestDto {
     @ApiProperty({ example: 'solver-relay' })
@@ -43,7 +43,6 @@ export class ExecuteSwapRequestDto {
     @ApiProperty({ type: [String], example: ['0xabc123'], required: false })
     @IsOptional()
     @IsArray()
-    @ArrayNotEmpty()
     @IsString({ each: true })
     quoteHashes?: string[];
 

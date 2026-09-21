@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { BadGatewayException, Injectable } from '@nestjs/common';
 import {
     OneClickApiHttpClient,
+    OneClickIntentStandard,
     OneClickQuoteRequest,
 } from '../../../../http-clients/one-click-api/one-click-api.http-client';
 import { QuoteProviderPort } from '../../application/ports/quote-provider.port';
@@ -17,14 +18,14 @@ type OneClickQuotePayload = {
     deadline?: string;
     expiration_time?: string;
     signature?: string;
-    quote_hash?: string;
-    quote_hashes?: string[];
     depositAddress?: string;
     deposit_address?: string;
 };
 
 type OneClickQuoteResponse = {
     quote?: OneClickQuotePayload;
+    correlationId?: string;
+    signature?: string;
 } & OneClickQuotePayload;
 
 @Injectable()
@@ -47,15 +48,35 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
             return [];
         }
 
-        const quoteHashes = this.extractQuoteHashes(quote);
         const depositAddress = quote.depositAddress ?? quote.deposit_address;
-        const executionMode = quoteHashes.length > 0 ? 'intent_sign' : 'deposit_address';
+        const isIntentDeposit = (command.depositType ?? this.defaultAccountType(command)) === 'INTENTS';
+        const generatedIntent =
+            isIntentDeposit && depositAddress
+                ? await this.oneClickApiHttpClient.generateIntent({
+                      type: 'swap_transfer',
+                      standard: this.signatureStandard(command),
+                      signerId: command.signerId,
+                      depositAddress,
+                  })
+                : undefined;
+        if (
+            generatedIntent &&
+            (!generatedIntent.intent ||
+                typeof generatedIntent.intent !== 'object' ||
+                Array.isArray(generatedIntent.intent))
+        ) {
+            throw new BadGatewayException({
+                code: 'INVALID_ONE_CLICK_INTENT_RESPONSE',
+                message: '1Click did not return a valid intent payload',
+            });
+        }
+        const executionMode = isIntentDeposit ? 'intent_sign' : 'deposit_address';
 
         const expirationTime = quote.deadline ?? quote.expiration_time ?? command.deadline;
         const providerMeta = {
             protocol: '1click',
-            quoteId: quote.quoteId ?? quote.quote_id,
-            signature: quote.signature,
+            quoteId: quote.quoteId ?? quote.quote_id ?? response.correlationId,
+            signature: quote.signature ?? response.signature,
             depositAddress,
         };
 
@@ -63,33 +84,44 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
             {
                 providerId: this.providerId,
                 executionMode,
-                quoteHashes,
+                quoteHashes: [],
                 originAsset: command.originAsset,
                 destinationAsset: command.destinationAsset,
                 amountIn,
                 amountOut,
                 expirationTime,
-                executionPackage:
-                    executionMode === 'deposit_address' && depositAddress
-                        ? {
-                              providerId: this.providerId,
-                              mode: 'deposit_address',
-                              protocol: '1click',
-                              requiredAction: 'deposit',
-                              payload: {
-                                  quoteId: providerMeta.quoteId,
-                                  depositAddress,
-                                  expiresAt: expirationTime,
-                              },
-                          }
-                        : undefined,
+                executionPackage: generatedIntent
+                    ? {
+                          providerId: this.providerId,
+                          mode: 'intent_sign',
+                          protocol: 'near-intents',
+                          requiredAction: 'sign',
+                          payload: {
+                              intent: generatedIntent.intent,
+                              correlationId: generatedIntent.correlationId,
+                              depositAddress,
+                          },
+                      }
+                    : depositAddress
+                      ? {
+                            providerId: this.providerId,
+                            mode: 'deposit_address',
+                            protocol: '1click',
+                            requiredAction: 'deposit',
+                            payload: {
+                                quoteId: providerMeta.quoteId,
+                                depositAddress,
+                                expiresAt: expirationTime,
+                            },
+                        }
+                      : undefined,
                 providerMeta,
             },
         ];
     }
 
     private toOneClickQuoteRequest(command: SwapQuoteCommand): OneClickQuoteRequest {
-        const accountType = command.authMethod === 'near' ? 'INTENTS' : 'ORIGIN_CHAIN';
+        const accountType = this.defaultAccountType(command);
 
         return {
             dry: false,
@@ -107,15 +139,11 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
         };
     }
 
-    private extractQuoteHashes(quote: OneClickQuotePayload): string[] {
-        if (Array.isArray(quote.quote_hashes) && quote.quote_hashes.length > 0) {
-            return quote.quote_hashes.filter((hash): hash is string => typeof hash === 'string' && hash.length > 0);
-        }
+    private defaultAccountType(command: SwapQuoteCommand): 'INTENTS' | 'ORIGIN_CHAIN' {
+        return command.authMethod === 'near' ? 'INTENTS' : 'ORIGIN_CHAIN';
+    }
 
-        if (typeof quote.quote_hash === 'string' && quote.quote_hash.length > 0) {
-            return [quote.quote_hash];
-        }
-
-        return [];
+    private signatureStandard(command: SwapQuoteCommand): OneClickIntentStandard {
+        return command.authMethod === 'near' ? 'nep413' : 'erc191';
     }
 }

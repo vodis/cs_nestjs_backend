@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import * as request from 'supertest';
 import { SwapsModule } from '../src/modules/swaps';
 import { SolverRelayApiHttpClient } from '../src/http-clients/solver-relay-api/solver-relay-api.http-client';
+import { OneClickApiHttpClient } from '../src/http-clients/one-click-api/one-click-api.http-client';
 import { ASSET_REGISTRY_PORT } from '../src/modules/swaps/application/ports/asset-registry.port';
 import { QUOTE_PROVIDERS, QuoteProviderPort } from '../src/modules/swaps/application/ports/quote-provider.port';
 import { SwapQuote } from '../src/modules/swaps/domain/models/swap-quote';
@@ -19,6 +20,7 @@ type CreateSwapsAppOptions = {
     providers?: QuoteProviderPort[];
     maxSlippageBps?: number;
     solverRelay?: Pick<SolverRelayApiHttpClient, 'publishIntent'>;
+    oneClick?: Pick<OneClickApiHttpClient, 'submitIntent'>;
 };
 
 function futureDeadline(msFromNow = 60_000): string {
@@ -113,6 +115,8 @@ async function createSwapsApp(options: CreateSwapsAppOptions = {}): Promise<INes
         .useValue(options.providers ?? defaultProviders())
         .overrideProvider(SolverRelayApiHttpClient)
         .useValue(options.solverRelay ?? { publishIntent: jest.fn() })
+        .overrideProvider(OneClickApiHttpClient)
+        .useValue(options.oneClick ?? { submitIntent: jest.fn() })
         .compile();
 
     const app = moduleFixture.createNestApplication();
@@ -404,6 +408,45 @@ describe('Swaps (e2e)', () => {
                     public_key: 'ed25519:key',
                 },
             });
+        });
+
+        it('submits signed 1Click intent data through 1Click', async () => {
+            const oneClick = {
+                submitIntent: jest.fn().mockResolvedValue({
+                    intentHash: 'one-click-intent-hash',
+                    correlationId: 'correlation-1',
+                }),
+            };
+            app = await createSwapsApp({ oneClick });
+            const signedData = {
+                standard: 'nep413',
+                payload: {
+                    message: '{"signer_id":"alice.near","deadline":"2026-06-11T12:00:00.000Z","intents":[]}',
+                    nonce: 'nonce',
+                    recipient: 'intents.near',
+                },
+                signature: 'ed25519:sig',
+                public_key: 'ed25519:key',
+            };
+
+            await request(app.getHttpServer())
+                .post('/api/v1/swaps/execute')
+                .send({
+                    providerId: 'one-click',
+                    executionMode: 'intent_sign',
+                    executionPayload: { depositAddress: 'one-click-deposit.near' },
+                    signature: signedData,
+                    quoteHashes: [],
+                    userAddress: NEAR_SIGNER,
+                    userChainType: 'near',
+                    traceId: 'trace-one-click',
+                })
+                .expect(201)
+                .expect(({ body }) => {
+                    expect(body.data.intentHash).toBe('one-click-intent-hash');
+                });
+
+            expect(oneClick.submitIntent).toHaveBeenCalledWith({ type: 'swap_transfer', signedData });
         });
     });
 

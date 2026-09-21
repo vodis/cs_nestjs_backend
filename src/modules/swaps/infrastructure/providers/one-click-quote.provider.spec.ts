@@ -87,6 +87,32 @@ describe('OneClickQuoteProvider', () => {
         expect(client.createQuote).toHaveBeenCalledWith(expect.objectContaining({ dry: false }));
     });
 
+    it.each([
+        ['near', 'alice.near', 'INTENTS'],
+        ['evm', '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9', 'ORIGIN_CHAIN'],
+    ] as const)('defaults omitted custody types for %s wallets', async (authMethod, signerId, accountType) => {
+        const client = {
+            createQuote: jest.fn().mockResolvedValue({ amountIn: '1000000', amountOut: '900000' }),
+        } as unknown as OneClickApiHttpClient;
+        const provider = new OneClickQuoteProvider(client);
+
+        await provider.requestQuotes({
+            ...command,
+            signerId,
+            recipient: signerId,
+            authMethod,
+            depositType: undefined,
+            refundType: undefined,
+        });
+
+        expect(client.createQuote).toHaveBeenCalledWith(
+            expect.objectContaining({
+                depositType: accountType,
+                refundType: accountType,
+            }),
+        );
+    });
+
     it('preserves an origin-chain route for a NEAR wallet swap', async () => {
         const client = {
             createQuote: jest.fn().mockResolvedValue({ amountIn: '1000000', amountOut: '900000' }),

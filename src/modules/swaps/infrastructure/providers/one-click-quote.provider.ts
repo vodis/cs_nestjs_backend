@@ -89,18 +89,20 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
     }
 
     private toOneClickQuoteRequest(command: SwapQuoteCommand): OneClickQuoteRequest {
+        const accountType = command.authMethod === 'near' ? 'INTENTS' : 'ORIGIN_CHAIN';
+
         return {
             dry: false,
             swapType: command.swapType,
             slippageTolerance: command.slippageTolerance,
             originAsset: command.originAsset,
-            depositType: command.depositType,
+            depositType: command.depositType ?? accountType,
             destinationAsset: command.destinationAsset,
             amount: command.amount,
             recipient: command.recipient,
             recipientType: command.recipientType,
             refundTo: command.signerId,
-            refundType: command.refundType,
+            refundType: command.refundType ?? accountType,
             deadline: command.deadline,
         };
     }

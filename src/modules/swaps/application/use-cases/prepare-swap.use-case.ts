@@ -58,11 +58,13 @@ export class PrepareSwapUseCase {
             throw new ServiceUnavailableException('All quote providers are temporarily unavailable');
         }
 
-        const bestQuote = this.quoteSelectionPolicy.selectBestExecutableQuote(
-            quotes,
-            command.swapType,
-            command.depositType === 'ORIGIN_CHAIN' ? ['deposit_address'] : ['intent_sign'],
-        );
+        const allowedModes =
+            command.depositType === 'ORIGIN_CHAIN'
+                ? (['deposit_address'] as const)
+                : command.depositType === 'INTENTS'
+                  ? (['intent_sign'] as const)
+                  : undefined;
+        const bestQuote = this.quoteSelectionPolicy.selectBestExecutableQuote(quotes, command.swapType, allowedModes);
         this.slippagePolicy.assertWithinTolerance(
             bestQuote,
             originAsset!,

@@ -14,8 +14,8 @@ export type SwapQuoteCommand = {
     signerId: string;
     recipient: string;
     recipientType: 'DESTINATION_CHAIN' | 'INTENTS';
-    depositType: SwapAccountType;
-    refundType: SwapAccountType;
+    depositType?: SwapAccountType;
+    refundType?: SwapAccountType;
     authMethod: SwapAuthMethod;
     minDeadlineMs?: number;
 };

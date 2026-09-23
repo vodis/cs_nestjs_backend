@@ -3,7 +3,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const REQUIRED_TABLES = ['app_users', 'wallet_links', 'auth_audit_events', 'balance_cache_entries'];
+const REQUIRED_TABLES = [
+  'app_users',
+  'wallet_links',
+  'auth_audit_events',
+  'balance_cache_entries',
+  'swap_preparations',
+  'swap_executions',
+];
 
 function expectedMigrations(directory = path.join(__dirname, 'migrations')) {
   return fs

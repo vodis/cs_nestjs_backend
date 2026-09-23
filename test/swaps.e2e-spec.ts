@@ -1,5 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, VersioningType, ValidationPipe } from '@nestjs/common';
+import {
+    ExecutionContext,
+    INestApplication,
+    UnauthorizedException,
+    VersioningType,
+    ValidationPipe,
+} from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import * as request from 'supertest';
 import { SwapsModule } from '../src/modules/swaps';
@@ -8,6 +14,17 @@ import { OneClickApiHttpClient } from '../src/http-clients/one-click-api/one-cli
 import { ASSET_REGISTRY_PORT } from '../src/modules/swaps/application/ports/asset-registry.port';
 import { QUOTE_PROVIDERS, QuoteProviderPort } from '../src/modules/swaps/application/ports/quote-provider.port';
 import { SwapQuote } from '../src/modules/swaps/domain/models/swap-quote';
+import { PrivyAuthGuard } from '../src/api/auth/privy-auth.guard';
+import {
+    SWAP_EXECUTION_STORE,
+    StoredSwapPreparation,
+    SwapExecutionClaim,
+    SwapExecutionStorePort,
+} from '../src/modules/swaps/application/ports/swap-execution-store.port';
+import {
+    SWAP_WALLET_AUTHORIZATION,
+    SwapWalletAuthorizationPort,
+} from '../src/modules/swaps/application/ports/swap-wallet-authorization.port';
 
 const ORIGIN_ASSET = 'nep141:wrap.near';
 const DESTINATION_ASSET = 'nep141:usdt.tether-token.near';
@@ -21,6 +38,9 @@ type CreateSwapsAppOptions = {
     maxSlippageBps?: number;
     solverRelay?: Pick<SolverRelayApiHttpClient, 'publishIntent'>;
     oneClick?: Pick<OneClickApiHttpClient, 'submitIntent'>;
+    authenticated?: boolean;
+    walletOwned?: boolean;
+    preparations?: StoredSwapPreparation[];
 };
 
 function futureDeadline(msFromNow = 60_000): string {
@@ -95,6 +115,56 @@ function defaultProviders(quotes: SwapQuote[] = [executableQuote()]): QuoteProvi
 }
 
 async function createSwapsApp(options: CreateSwapsAppOptions = {}): Promise<INestApplication> {
+    const preparations = new Map((options.preparations ?? []).map((preparation) => [preparation.id, preparation]));
+    const executions = new Map<string, { fingerprint: string; intentHash?: string; failed?: boolean }>();
+    let preparationSequence = 0;
+    const executionStore: SwapExecutionStorePort = {
+        createPreparation: jest.fn(async (input) => {
+            const preparation = { id: `preparation-${++preparationSequence}`, ...input };
+            preparations.set(preparation.id, preparation);
+            return preparation;
+        }),
+        findPreparation: jest.fn(async (id) => preparations.get(id)),
+        claimExecution: jest.fn(async (input): Promise<SwapExecutionClaim> => {
+            const existing = executions.get(input.idempotencyKey);
+            if (existing) {
+                if (existing.fingerprint !== input.requestFingerprint) {
+                    return { state: 'conflict', executionId: input.idempotencyKey };
+                }
+                if (existing.intentHash) {
+                    return { state: 'succeeded', executionId: input.idempotencyKey, intentHash: existing.intentHash };
+                }
+                return { state: existing.failed ? 'failed' : 'pending', executionId: input.idempotencyKey };
+            }
+            executions.set(input.idempotencyKey, { fingerprint: input.requestFingerprint });
+            return { state: 'claimed', executionId: input.idempotencyKey };
+        }),
+        markSucceeded: jest.fn(async (id, intentHash) => {
+            const execution = executions.get(id)!;
+            execution.intentHash = intentHash;
+        }),
+        markFailed: jest.fn(async (id) => {
+            const execution = executions.get(id)!;
+            execution.failed = true;
+        }),
+    };
+    const walletAuthorization: SwapWalletAuthorizationPort = {
+        isOwnedByUser: jest.fn(async () => options.walletOwned ?? true),
+    };
+    const authGuard = {
+        canActivate: (context: ExecutionContext) => {
+            if (options.authenticated === false) {
+                throw new UnauthorizedException('Missing Privy access token');
+            }
+            context.switchToHttp().getRequest().user = {
+                id: '11111111-1111-4111-8111-111111111111',
+                privyUserId: 'privy-user',
+                sessionId: 'session-1',
+                passkeyEnabled: false,
+            };
+            return true;
+        },
+    };
     const moduleFixture: TestingModule = await Test.createTestingModule({
         imports: [
             ConfigModule.forRoot({
@@ -117,6 +187,12 @@ async function createSwapsApp(options: CreateSwapsAppOptions = {}): Promise<INes
         .useValue(options.solverRelay ?? { publishIntent: jest.fn() })
         .overrideProvider(OneClickApiHttpClient)
         .useValue(options.oneClick ?? { submitIntent: jest.fn() })
+        .overrideGuard(PrivyAuthGuard)
+        .useValue(authGuard)
+        .overrideProvider(SWAP_EXECUTION_STORE)
+        .useValue(executionStore)
+        .overrideProvider(SWAP_WALLET_AUTHORIZATION)
+        .useValue(walletAuthorization)
         .compile();
 
     const app = moduleFixture.createNestApplication();
@@ -354,14 +430,31 @@ describe('Swaps (e2e)', () => {
                     intent_hash: 'intent-hash-1',
                 }),
             };
-            app = await createSwapsApp({ solverRelay });
+            const preparationId = '22222222-2222-4222-8222-222222222222';
+            app = await createSwapsApp({
+                solverRelay,
+                preparations: [
+                    {
+                        id: preparationId,
+                        providerId: 'solver-relay',
+                        executionMode: 'intent_sign',
+                        userAddress: NEAR_SIGNER,
+                        userChainType: 'near',
+                        executionPayload: { quoteHashes: ['quote-hash-1'] },
+                        expiresAt: new Date(Date.now() + 60_000),
+                    },
+                ],
+            });
 
             await request(app.getHttpServer())
                 .post('/api/v1/swaps/execute')
+                .set('Authorization', 'Bearer test-token')
+                .set('Idempotency-Key', 'solver-execution-1')
                 .send({
                     providerId: 'solver-relay',
                     executionMode: 'intent_sign',
                     executionPayload: {
+                        preparationId,
                         quoteHashes: ['quote-hash-1'],
                         signature: {
                             standard: 'nep413',
@@ -417,11 +510,34 @@ describe('Swaps (e2e)', () => {
                     correlationId: 'correlation-1',
                 }),
             };
-            app = await createSwapsApp({ oneClick });
+            const preparationId = '33333333-3333-4333-8333-333333333333';
+            const message = '{"signer_id":"alice.near","deadline":"2026-06-11T12:00:00.000Z","intents":[]}';
+            const intent = {
+                standard: 'nep413',
+                payload: { message, nonce: 'nonce', recipient: 'intents.near' },
+            };
+            app = await createSwapsApp({
+                oneClick,
+                preparations: [
+                    {
+                        id: preparationId,
+                        providerId: 'one-click',
+                        executionMode: 'intent_sign',
+                        userAddress: NEAR_SIGNER,
+                        userChainType: 'near',
+                        executionPayload: {
+                            intent,
+                            correlationId: 'correlation-1',
+                            depositAddress: 'one-click-deposit.near',
+                        },
+                        expiresAt: new Date(Date.now() + 60_000),
+                    },
+                ],
+            });
             const signedData = {
                 standard: 'nep413',
                 payload: {
-                    message: '{"signer_id":"alice.near","deadline":"2026-06-11T12:00:00.000Z","intents":[]}',
+                    message,
                     nonce: 'nonce',
                     recipient: 'intents.near',
                 },
@@ -431,10 +547,17 @@ describe('Swaps (e2e)', () => {
 
             await request(app.getHttpServer())
                 .post('/api/v1/swaps/execute')
+                .set('Authorization', 'Bearer test-token')
+                .set('Idempotency-Key', 'one-click-execution-1')
                 .send({
                     providerId: 'one-click',
                     executionMode: 'intent_sign',
-                    executionPayload: { depositAddress: 'one-click-deposit.near' },
+                    executionPayload: {
+                        preparationId,
+                        intent,
+                        correlationId: 'correlation-1',
+                        depositAddress: 'one-click-deposit.near',
+                    },
                     signature: signedData,
                     quoteHashes: [],
                     userAddress: NEAR_SIGNER,
@@ -447,6 +570,47 @@ describe('Swaps (e2e)', () => {
                 });
 
             expect(oneClick.submitIntent).toHaveBeenCalledWith({ type: 'swap_transfer', signedData });
+
+            await request(app.getHttpServer())
+                .post('/api/v1/swaps/execute')
+                .set('Authorization', 'Bearer test-token')
+                .set('Idempotency-Key', 'one-click-execution-1')
+                .send({
+                    providerId: 'one-click',
+                    executionMode: 'intent_sign',
+                    executionPayload: {
+                        preparationId,
+                        intent,
+                        correlationId: 'correlation-1',
+                        depositAddress: 'one-click-deposit.near',
+                    },
+                    signature: signedData,
+                    quoteHashes: [],
+                    userAddress: NEAR_SIGNER,
+                    userChainType: 'near',
+                    traceId: 'trace-one-click',
+                })
+                .expect(201);
+            expect(oneClick.submitIntent).toHaveBeenCalledTimes(1);
+        });
+
+        it('rejects unauthenticated execution', async () => {
+            app = await createSwapsApp({ authenticated: false });
+
+            await request(app.getHttpServer())
+                .post('/api/v1/swaps/execute')
+                .set('Idempotency-Key', 'unauthorized-execution-1')
+                .send({
+                    providerId: 'one-click',
+                    executionMode: 'intent_sign',
+                    executionPayload: { preparationId: 'missing' },
+                    signature: { signature: 'sig' },
+                    quoteHashes: [],
+                    userAddress: NEAR_SIGNER,
+                    userChainType: 'near',
+                    traceId: 'trace-unauthorized',
+                })
+                .expect(401);
         });
     });
 

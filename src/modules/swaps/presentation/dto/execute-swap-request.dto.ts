@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsIn, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ExecuteSwapRequestDto {
     @ApiProperty({ example: 'solver-relay' })
@@ -56,5 +56,6 @@ export class ExecuteSwapRequestDto {
 
     @ApiProperty({ example: 'trace-123' })
     @IsString()
+    @MaxLength(160)
     traceId: string;
 }

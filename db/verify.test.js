@@ -2,8 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { verifyState } = require('./verify');
+const { REQUIRED_TABLES, verifyState } = require('./verify');
 const balanceNetworkMigration = require('./migrations/20260830000100-add-balance-cache-network');
+const swapExecutionMigration = require('./migrations/20260923000100-create-swap-execution-state');
 
 test('reports pending migrations and missing required tables', () => {
   const result = verifyState(
@@ -28,6 +29,11 @@ test('passes when migrations and required tables are present', () => {
   );
 
   assert.deepEqual(result, { pendingMigrations: [], missingTables: [] });
+});
+
+test('requires durable swap preparation and execution tables', () => {
+  assert.ok(REQUIRED_TABLES.includes('swap_preparations'));
+  assert.ok(REQUIRED_TABLES.includes('swap_executions'));
 });
 
 test('balance network expansion preserves the legacy upsert index', async () => {
@@ -58,5 +64,52 @@ test('balance network expansion preserves the legacy upsert index', async () => 
   assert.deepEqual(calls, [
     ['removeIndex', 'balance_cache_entries', ['user_id', 'wallet_id', 'network', 'asset_id']],
     ['removeColumn', 'balance_cache_entries', 'network'],
+  ]);
+});
+
+test('swap execution migration creates reversible idempotency state', async () => {
+  const calls = [];
+  const queryInterface = {
+    createTable: async (name) => calls.push(['createTable', name]),
+    addIndex: async (table, fields, options = {}) =>
+      calls.push(['addIndex', table, fields, options.name]),
+    dropTable: async (name) => calls.push(['dropTable', name]),
+  };
+  const STRING = (length) => `STRING(${length})`;
+  Object.assign(STRING, { key: 'STRING' });
+  const Sequelize = {
+    UUID: 'UUID',
+    STRING,
+    JSONB: 'JSONB',
+    DATE: 'DATE',
+    literal: (value) => value,
+    fn: (value) => value,
+  };
+
+  await swapExecutionMigration.up(queryInterface, Sequelize);
+  assert.deepEqual(calls, [
+    ['createTable', 'swap_preparations'],
+    ['addIndex', 'swap_preparations', ['expires_at'], undefined],
+    ['createTable', 'swap_executions'],
+    [
+      'addIndex',
+      'swap_executions',
+      ['user_id', 'idempotency_key'],
+      'swap_executions_user_idempotency_unique',
+    ],
+    [
+      'addIndex',
+      'swap_executions',
+      ['user_id', 'request_fingerprint'],
+      'swap_executions_user_fingerprint_unique',
+    ],
+    ['addIndex', 'swap_executions', ['preparation_id'], undefined],
+  ]);
+
+  calls.length = 0;
+  await swapExecutionMigration.down(queryInterface);
+  assert.deepEqual(calls, [
+    ['dropTable', 'swap_executions'],
+    ['dropTable', 'swap_preparations'],
   ]);
 });

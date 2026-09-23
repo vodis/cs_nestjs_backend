@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AssetsModule } from '../../api/assets/assets.module';
 import { ProductEventsModule } from '../../api/product-events/product-events.module';
+import { AuthModule } from '../../api/auth/auth.module';
+import { DatabaseModule } from '../../database/database.module';
 import { OneClickApiModule } from '../../http-clients/one-click-api/one-click-api.module';
 import { SolverRelayApiModule } from '../../http-clients/solver-relay-api/solver-relay-api.module';
 import { EXECUTION_PROVIDERS } from './application/ports/execution-provider.port';
@@ -14,9 +16,13 @@ import { OneClickExecutionProvider } from './infrastructure/providers/one-click-
 import { SolverRelayExecutionProvider } from './infrastructure/providers/solver-relay-execution.provider';
 import { SolverRelayQuoteProvider } from './infrastructure/providers/solver-relay-quote.provider';
 import { SwapsController } from './presentation/swaps.controller';
+import { SWAP_EXECUTION_STORE } from './application/ports/swap-execution-store.port';
+import { SWAP_WALLET_AUTHORIZATION } from './application/ports/swap-wallet-authorization.port';
+import { SwapWalletAuthorizationAdapter } from './infrastructure/adapters/swap-wallet-authorization.adapter';
+import { SequelizeSwapExecutionStore } from './infrastructure/repositories/sequelize-swap-execution-store';
 
 @Module({
-    imports: [AssetsModule, OneClickApiModule, SolverRelayApiModule, ProductEventsModule],
+    imports: [AssetsModule, AuthModule, DatabaseModule, OneClickApiModule, SolverRelayApiModule, ProductEventsModule],
     controllers: [SwapsController],
     providers: [
         PrepareSwapUseCase,
@@ -26,6 +32,8 @@ import { SwapsController } from './presentation/swaps.controller';
         SolverRelayExecutionProvider,
         SolverRelayQuoteProvider,
         OneClickQuoteProvider,
+        SequelizeSwapExecutionStore,
+        SwapWalletAuthorizationAdapter,
         {
             provide: ASSET_REGISTRY_PORT,
             useExisting: AssetRegistryAdapter,
@@ -45,6 +53,14 @@ import { SwapsController } from './presentation/swaps.controller';
                 oneClick,
             ],
             inject: [SolverRelayExecutionProvider, OneClickExecutionProvider],
+        },
+        {
+            provide: SWAP_EXECUTION_STORE,
+            useExisting: SequelizeSwapExecutionStore,
+        },
+        {
+            provide: SWAP_WALLET_AUTHORIZATION,
+            useExisting: SwapWalletAuthorizationAdapter,
         },
     ],
 })

@@ -28,6 +28,15 @@ pnpm run build
 - Swagger: `/swagger`
 - Production deploy authority: `cs_orchestrator`
 
+### Swap execution contract
+
+For signed-intent swaps, `POST /api/v1/swaps/prepare` returns a short-lived `preparationId` inside
+`executionPackage.payload`. Clients must return that payload unchanged when
+calling `POST /api/v1/swaps/execute`. Execution requires a Privy bearer token,
+an active linked wallet matching `userAddress`, and an `Idempotency-Key` header
+containing 8–128 letters, digits, dots, underscores, colons, or hyphens.
+Successful replays return the stored intent hash without resubmitting upstream.
+
 Production secrets and runtime env are injected by the orchestrator when it creates the container. Updating orchestrator env requires a redeploy; restarting an existing container is not enough to apply changed env.
 
 ## Branch Flow

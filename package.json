@@ -24,7 +24,7 @@
     "db:migrate:status": "sequelize-cli db:migrate:status --config db/config.js --migrations-path db/migrations",
     "db:smoke": "node db/smoke.js",
     "db:verify": "node db/verify.js",
-    "db:verify:test": "node --test db/verify.test.js"
+    "db:verify:test": "node db/verify.test.js"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",

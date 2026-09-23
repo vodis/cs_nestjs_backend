@@ -1,5 +1,8 @@
-import { BadRequestException, Body, Controller, Post } from '@nestjs/common';
-import { ApiResponse } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Headers, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiHeader, ApiResponse } from '@nestjs/swagger';
+import { CurrentUser } from '../../../api/auth/current-user.decorator';
+import { PrivyAuthGuard, RequirePrivyBearer } from '../../../api/auth/privy-auth.guard';
+import type { AuthenticatedUser } from '../../../api/auth/types';
 import { ExecuteSwapUseCase } from '../application/use-cases/execute-swap.use-case';
 import { PrepareSwapUseCase } from '../application/use-cases/prepare-swap.use-case';
 import { SwapValidationError } from '../domain/errors/swap-validation.error';
@@ -44,14 +47,22 @@ export class SwapsController {
     }
 
     @Post('execute')
+    @UseGuards(PrivyAuthGuard)
+    @RequirePrivyBearer()
+    @ApiBearerAuth()
+    @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'Stable key for one logical execution' })
     @ApiResponse({
         status: 201,
         description: 'Submit a signed swap package to the provider selected during prepare',
         type: ExecuteSwapResponseDto,
     })
-    async executeSwap(@Body() dto: ExecuteSwapRequestDto): Promise<ExecuteSwapResponseDto> {
+    async executeSwap(
+        @Body() dto: ExecuteSwapRequestDto,
+        @CurrentUser() user: AuthenticatedUser,
+        @Headers('idempotency-key') idempotencyKey?: string,
+    ): Promise<ExecuteSwapResponseDto> {
         return {
-            data: await this.executeSwapUseCase.execute(dto),
+            data: await this.executeSwapUseCase.execute(dto, user, idempotencyKey),
         };
     }
 }

@@ -173,6 +173,15 @@ again, enforce `network NOT NULL`, remove the legacy index, and switch the model
 and upsert conflict key to the network-aware identity. Do not combine that
 contract step with this deployment.
 
+The `20260923000100-create-swap-execution-state.js` migration must be applied
+before enabling signed swap execution. It adds short-lived prepare records and
+durable execution records with per-user idempotency and request-fingerprint
+uniqueness. The application writes append-only `swap.execution` product events
+for attempted, succeeded, and failed transitions. This is an additive migration:
+rollback should deploy the prior image while retaining both tables for audit and
+reconciliation; do not run the destructive `down` migration during an ordinary
+application rollback.
+
 Passkey enrollment and passkey login are separate capabilities. Users first
 authenticate with an existing CCO method such as email, Google, or Apple, then
 enable a passkey on the authenticated account. The backend default public auth

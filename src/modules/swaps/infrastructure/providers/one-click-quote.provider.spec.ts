@@ -30,6 +30,13 @@ describe('OneClickQuoteProvider', () => {
                     depositAddress: 'one-click-deposit.near',
                 },
             }),
+            generateIntent: jest.fn().mockResolvedValue({
+                intent: {
+                    standard: 'nep413',
+                    payload: { message: 'generated-message', nonce: 'nonce', recipient: 'intents.near' },
+                },
+                correlationId: 'intent-correlation-1',
+            }),
         } as unknown as OneClickApiHttpClient;
 
         const provider = new OneClickQuoteProvider(client);
@@ -45,21 +52,31 @@ describe('OneClickQuoteProvider', () => {
                 recipient: command.recipient,
             }),
         );
+        expect(client.generateIntent).toHaveBeenCalledWith({
+            type: 'swap_transfer',
+            standard: 'nep413',
+            signerId: command.signerId,
+            depositAddress: 'one-click-deposit.near',
+        });
         expect(quotes).toEqual([
             expect.objectContaining({
                 providerId: 'one-click',
-                executionMode: 'deposit_address',
+                executionMode: 'intent_sign',
+                quoteHashes: [],
                 amountIn: '1000000',
                 amountOut: '999000',
                 executionPackage: {
                     providerId: 'one-click',
-                    mode: 'deposit_address',
-                    protocol: '1click',
-                    requiredAction: 'deposit',
+                    mode: 'intent_sign',
+                    protocol: 'near-intents',
+                    requiredAction: 'sign',
                     payload: {
-                        quoteId: 'quote-1',
+                        intent: {
+                            standard: 'nep413',
+                            payload: { message: 'generated-message', nonce: 'nonce', recipient: 'intents.near' },
+                        },
+                        correlationId: 'intent-correlation-1',
                         depositAddress: 'one-click-deposit.near',
-                        expiresAt: command.deadline,
                     },
                 },
                 providerMeta: expect.objectContaining({
@@ -79,6 +96,7 @@ describe('OneClickQuoteProvider', () => {
                 amountOut: '900000',
                 depositAddress: 'one-click-deposit.near',
             }),
+            generateIntent: jest.fn().mockResolvedValue({ intent: {}, correlationId: 'correlation-1' }),
         } as unknown as OneClickApiHttpClient;
         const provider = new OneClickQuoteProvider(client);
 
@@ -157,13 +175,17 @@ describe('OneClickQuoteProvider', () => {
         );
     });
 
-    it('maps quote hashes when 1Click exposes them for intent-sign execution', async () => {
+    it('uses 1Click generated intent instead of relying on quote hashes', async () => {
         const client = {
             createQuote: jest.fn().mockResolvedValue({
-                quote_hash: '0xabc',
                 amountIn: '1000000',
                 amountOut: '999000',
                 deadline: command.deadline,
+                depositAddress: 'one-click-deposit.near',
+            }),
+            generateIntent: jest.fn().mockResolvedValue({
+                intent: { standard: 'nep413', payload: { message: 'exact-provider-message' } },
+                correlationId: 'correlation-1',
             }),
         } as unknown as OneClickApiHttpClient;
 
@@ -172,7 +194,58 @@ describe('OneClickQuoteProvider', () => {
 
         expect(quotes[0]).toMatchObject({
             executionMode: 'intent_sign',
-            quoteHashes: ['0xabc'],
+            quoteHashes: [],
+            executionPackage: {
+                mode: 'intent_sign',
+                payload: {
+                    intent: { standard: 'nep413', payload: { message: 'exact-provider-message' } },
+                },
+            },
+        });
+    });
+
+    it('keeps origin-chain quotes on the deposit-address execution path', async () => {
+        const client = {
+            createQuote: jest.fn().mockResolvedValue({
+                amountIn: '1000000',
+                amountOut: '999000',
+                deadline: command.deadline,
+                depositAddress: 'one-click-deposit.near',
+            }),
+            generateIntent: jest.fn(),
+        } as unknown as OneClickApiHttpClient;
+
+        const provider = new OneClickQuoteProvider(client);
+        const quotes = await provider.requestQuotes({
+            ...command,
+            depositType: 'ORIGIN_CHAIN',
+            refundType: 'ORIGIN_CHAIN',
+            recipientType: 'DESTINATION_CHAIN',
+        });
+
+        expect(client.generateIntent).not.toHaveBeenCalled();
+        expect(quotes[0]).toMatchObject({
+            executionMode: 'deposit_address',
+            executionPackage: {
+                mode: 'deposit_address',
+                requiredAction: 'deposit',
+                payload: { depositAddress: 'one-click-deposit.near' },
+            },
+        });
+    });
+
+    it('rejects an invalid generated intent response', async () => {
+        const client = {
+            createQuote: jest.fn().mockResolvedValue({
+                amountIn: '1000000',
+                amountOut: '999000',
+                depositAddress: 'one-click-deposit.near',
+            }),
+            generateIntent: jest.fn().mockResolvedValue({ intent: undefined, correlationId: 'correlation-1' }),
+        } as unknown as OneClickApiHttpClient;
+
+        await expect(new OneClickQuoteProvider(client).requestQuotes(command)).rejects.toMatchObject({
+            response: expect.objectContaining({ code: 'INVALID_ONE_CLICK_INTENT_RESPONSE' }),
         });
     });
 });

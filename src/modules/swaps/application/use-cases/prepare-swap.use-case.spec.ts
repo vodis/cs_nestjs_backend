@@ -6,6 +6,7 @@ import { QuoteProviderPort } from '../ports/quote-provider.port';
 import { SwapQuoteCommand } from '../../domain/models/swap-quote-request';
 import { SwapValidationError } from '../../domain/errors/swap-validation.error';
 import { ProductEventsService } from '../../../../api/product-events/product-events.service';
+import { SwapExecutionStorePort } from '../ports/swap-execution-store.port';
 
 describe('PrepareSwapUseCase', () => {
     const command: SwapQuoteCommand = {
@@ -42,8 +43,12 @@ describe('PrepareSwapUseCase', () => {
         recordBestEffort: jest.fn().mockResolvedValue(undefined),
     } as unknown as ProductEventsService;
 
+    const executionStore = {
+        createPreparation: jest.fn(async (input) => ({ id: 'preparation-1', ...input })),
+    } as unknown as SwapExecutionStorePort;
+
     const createUseCase = (providers: QuoteProviderPort[]) =>
-        new PrepareSwapUseCase(assetRegistry, providers, configService, productEvents);
+        new PrepareSwapUseCase(assetRegistry, providers, configService, productEvents, executionStore);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -103,6 +108,7 @@ describe('PrepareSwapUseCase', () => {
             [command.destinationAsset]: '2500000000000000000000000',
         });
         expect(result.signatureStandard).toBe('erc191');
+        expect(result.executionPackage.payload.preparationId).toBe('preparation-1');
     });
 
     it('uses only recipient-capable providers for a foreign destination address', async () => {
@@ -148,6 +154,7 @@ describe('PrepareSwapUseCase', () => {
         expect(internalProvider.requestQuotes).not.toHaveBeenCalled();
         expect(recipientProvider.requestQuotes).toHaveBeenCalled();
         expect(result.providerId).toBe('one-click');
+        expect(executionStore.createPreparation).not.toHaveBeenCalled();
     });
 
     it('rejects a foreign recipient that is invalid for the destination network', async () => {

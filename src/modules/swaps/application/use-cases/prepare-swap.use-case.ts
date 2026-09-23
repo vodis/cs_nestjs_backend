@@ -1,4 +1,4 @@
-import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BadGatewayException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProductEventsService } from '../../../../api/product-events/product-events.service';
 import { ApprovedPreparePackage } from '../../domain/models/approved-prepare-package';
@@ -9,6 +9,7 @@ import { QUOTE_PROVIDERS, QuoteProviderPort } from '../ports/quote-provider.port
 import { PreparePackageBuilder } from '../services/prepare-package.builder';
 import { SwapQuoteSelectionPolicy } from '../policies/swap-quote-selection.policy';
 import { SwapSlippagePolicy } from '../policies/swap-slippage.policy';
+import { SWAP_EXECUTION_STORE, SwapExecutionStorePort } from '../ports/swap-execution-store.port';
 
 @Injectable()
 export class PrepareSwapUseCase {
@@ -24,6 +25,8 @@ export class PrepareSwapUseCase {
         private readonly quoteProviders: QuoteProviderPort[],
         private readonly configService: ConfigService,
         private readonly productEvents: ProductEventsService,
+        @Inject(SWAP_EXECUTION_STORE)
+        private readonly executionStore: SwapExecutionStorePort,
     ) {}
 
     async execute(command: SwapQuoteCommand): Promise<ApprovedPreparePackage> {
@@ -73,6 +76,30 @@ export class PrepareSwapUseCase {
         );
 
         const packageResult = this.preparePackageBuilder.build(command, bestQuote);
+        const expiresAt = new Date(packageResult.quoteExpiration);
+        if (!Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) {
+            throw new BadGatewayException({
+                code: 'INVALID_SWAP_QUOTE_EXPIRATION',
+                message: 'Selected swap quote has an invalid or expired execution deadline',
+            });
+        }
+        if (packageResult.executionPackage.mode === 'intent_sign') {
+            const preparation = await this.executionStore.createPreparation({
+                providerId: packageResult.providerId,
+                executionMode: packageResult.executionPackage.mode,
+                userAddress: this.normalizeAddress(packageResult.signerId),
+                userChainType: packageResult.authMethod,
+                executionPayload: packageResult.executionPackage.payload,
+                expiresAt,
+            });
+            packageResult.executionPackage = {
+                ...packageResult.executionPackage,
+                payload: {
+                    ...packageResult.executionPackage.payload,
+                    preparationId: preparation.id,
+                },
+            };
+        }
         await this.productEvents.recordBestEffort({
             eventName: 'swap.quote',
             source: 'backend',
@@ -115,5 +142,9 @@ export class PrepareSwapUseCase {
             authMethod: command.authMethod,
             slippageTolerance: command.slippageTolerance,
         };
+    }
+
+    private normalizeAddress(address: string): string {
+        return address.trim().toLowerCase();
     }
 }

@@ -11,6 +11,8 @@ import { InvestmentProfile } from './models/investment-profile.model';
 import { AgentConnection } from './models/agent-connection.model';
 import { AgentCredential } from './models/agent-credential.model';
 import { AgentAuthorization } from './models/agent-authorization.model';
+import { SwapPreparation } from './models/swap-preparation.model';
+import { SwapExecution } from './models/swap-execution.model';
 
 const models = [
     AppUser,
@@ -22,6 +24,8 @@ const models = [
     AgentConnection,
     AgentCredential,
     AgentAuthorization,
+    SwapPreparation,
+    SwapExecution,
 ];
 
 function databaseUrl(config: ConfigService): string | undefined {

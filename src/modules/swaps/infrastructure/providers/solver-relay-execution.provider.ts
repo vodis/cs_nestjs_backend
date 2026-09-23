@@ -35,7 +35,11 @@ export class SolverRelayExecutionProvider implements ExecutionProviderPort {
     private getQuoteHashes(command: ExecuteSwapCommand): string[] {
         const quoteHashes = command.executionPayload?.quoteHashes ?? command.quoteHashes;
 
-        if (!Array.isArray(quoteHashes) || quoteHashes.some((hash) => typeof hash !== 'string' || !hash.length)) {
+        if (
+            !Array.isArray(quoteHashes) ||
+            quoteHashes.length === 0 ||
+            quoteHashes.some((hash) => typeof hash !== 'string' || !hash.length)
+        ) {
             throw new BadRequestException({
                 code: 'MISSING_QUOTE_HASHES',
                 message: 'Solver relay execution requires quoteHashes from the prepare execution package',

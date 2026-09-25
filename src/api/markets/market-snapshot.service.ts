@@ -18,6 +18,8 @@ type CachedMarket = {
     fetchedAt: string;
 };
 
+type RefreshOutcome = 'cached' | 'fetched' | 'failed';
+
 @Injectable()
 export class MarketSnapshotService {
     private readonly logger = new Logger(MarketSnapshotService.name);
@@ -34,25 +36,41 @@ export class MarketSnapshotService {
         const fetchedAt = new Date().toISOString();
 
         if (!this.coinGeckoMarketSnapshotClient.hasApiKey()) {
-            return this.toResponse(symbols.map((symbol) => this.emptySnapshot(symbol)), 'unavailable', false, fetchedAt);
+            return this.toResponse(
+                symbols.map((symbol) => this.emptySnapshot(symbol)),
+                'unavailable',
+                false,
+                fetchedAt,
+            );
         }
 
         const resolved = symbols.map((symbol) => ({ symbol, id: this.resolveId(symbol) }));
         const ids = [...new Set(resolved.flatMap((item) => (item.id ? [item.id] : [])))];
-        const fetched = await this.enqueue(() => this.refresh(ids));
+        if (ids.length === 0) {
+            return this.toResponse(
+                resolved.map((item) => this.emptySnapshot(item.symbol)),
+                'unavailable',
+                false,
+                fetchedAt,
+            );
+        }
+
+        const outcome = ids.every((id) => this.isFresh(id)) ? 'cached' : await this.enqueue(() => this.refresh(ids));
+        const hasCachedSnapshot = ids.some((id) => Boolean(this.cache.get(id)?.snapshot));
+        const unavailable = outcome === 'failed' && !hasCachedSnapshot;
 
         return this.toResponse(
             resolved.map((item) => this.snapshotFor(item.symbol, item.id)),
-            'coingecko',
-            !fetched,
+            unavailable ? 'unavailable' : 'coingecko',
+            outcome === 'cached' || (outcome === 'failed' && hasCachedSnapshot),
             this.latestFetchedAt(ids) || fetchedAt,
         );
     }
 
-    private async refresh(ids: string[]): Promise<boolean> {
+    private async refresh(ids: string[]): Promise<RefreshOutcome> {
         const missing = ids.filter((id) => !this.isFresh(id));
         if (missing.length === 0) {
-            return false;
+            return 'cached';
         }
 
         try {
@@ -70,10 +88,10 @@ export class MarketSnapshotService {
                 });
             }
 
-            return true;
+            return 'fetched';
         } catch (error) {
             this.logger.error(this.failureLog(error));
-            return false;
+            return 'failed';
         }
     }
 

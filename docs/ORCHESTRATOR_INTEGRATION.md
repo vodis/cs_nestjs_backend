@@ -90,6 +90,13 @@ Staging injects these via `staging-nestjs-backend` `requiredSecrets` in
 keys in gitignored `.env`; `/api/v1/public/auth-config` stays `enabled: false`
 until `PRIVY_APP_ID` is non-empty.
 
+`COINGECKO_API_KEY` is an optional backend-only S3 provider credential until it
+is provisioned separately in the orchestrator catalog and secret backend. It
+must never be copied into Angular/MFE configuration, a `NEXT_PUBLIC_*` value, or
+an API response. CoinGecko requests and caching execute only in this backend.
+Without the key, `/api/v1/markets/snapshots` reports `source=unavailable` and
+returns the documented zero-value fallback.
+
 Keep `EXTERNAL_WALLET_BINDING_ENABLED=false` until the signed ownership-challenge
 flow is deployed. Embedded Privy wallets are verified server-side against the
 authoritative Privy user record before persistence.

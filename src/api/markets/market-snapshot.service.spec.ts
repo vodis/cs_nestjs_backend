@@ -25,10 +25,7 @@ describe('MarketSnapshotService', () => {
 
         expect(getMarkets).not.toHaveBeenCalled();
         expect(result.meta.source).toBe('unavailable');
-        expect(result.data).toEqual([
-            empty('NEAR'),
-            empty('BTC'),
-        ]);
+        expect(result.data).toEqual([empty('NEAR'), empty('BTC')]);
     });
 
     it('maps a CoinGecko response and serves the next request from cache', async () => {
@@ -99,7 +96,7 @@ describe('MarketSnapshotService', () => {
         const result = await service.getSnapshots('USDT');
 
         expect(result.data).toEqual([empty('USDT')]);
-        expect(result.meta.source).toBe('coingecko');
+        expect(result.meta).toEqual(expect.objectContaining({ source: 'unavailable', cached: false }));
     });
 
     it('returns zeros and logs when CoinGecko rejects the API key', async () => {
@@ -111,9 +108,53 @@ describe('MarketSnapshotService', () => {
         const result = await service.getSnapshots('NEAR');
 
         expect(result.data).toEqual([empty('NEAR')]);
-        expect(result.meta.source).toBe('coingecko');
-        expect(errorLog).toHaveBeenCalledWith('CoinGecko market snapshot failed status=401: Invalid API key [redacted]');
+        expect(result.meta).toEqual(expect.objectContaining({ source: 'unavailable', cached: false }));
+        expect(errorLog).toHaveBeenCalledWith(
+            'CoinGecko market snapshot failed status=401: Invalid API key [redacted]',
+        );
         expect(JSON.stringify(errorLog.mock.calls)).not.toContain('super-secret-key');
+    });
+
+    it('returns a fresh cached snapshot without waiting for an unrelated fetch', async () => {
+        hasApiKey.mockReturnValue(true);
+        const bitcoin = deferred<[]>();
+        getMarkets
+            .mockResolvedValueOnce([
+                {
+                    id: 'near',
+                    current_price: 5.1,
+                    market_cap: 6_100_000_000,
+                    total_volume: 312_000_000,
+                    price_change_percentage_24h: 3.42,
+                    sparkline_in_7d: { price: [4.8, 5.1] },
+                },
+            ])
+            .mockReturnValueOnce(bitcoin.promise);
+        const service = new MarketSnapshotService(client, config());
+
+        await service.getSnapshots('NEAR');
+        const pendingBitcoin = service.getSnapshots('BTC');
+        await Promise.resolve();
+
+        await expect(
+            Promise.race([
+                service.getSnapshots('NEAR').then(() => 'cached'),
+                new Promise<string>((resolve) => setTimeout(() => resolve('blocked'), 25)),
+            ]),
+        ).resolves.toBe('cached');
+
+        bitcoin.resolve([]);
+        await pendingBitcoin;
+    });
+
+    it('marks unmapped symbols as unavailable rather than cached CoinGecko data', async () => {
+        hasApiKey.mockReturnValue(true);
+        const service = new MarketSnapshotService(client, config());
+
+        const result = await service.getSnapshots('UNKNOWN');
+
+        expect(getMarkets).not.toHaveBeenCalled();
+        expect(result.meta).toEqual(expect.objectContaining({ source: 'unavailable', cached: false }));
     });
 
     it('rejects an empty symbol list', async () => {
@@ -136,4 +177,12 @@ function empty(symbol: string) {
         volume24hUsd: 0,
         sparkline7d: [0, 0],
     };
+}
+
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((promiseResolve) => {
+        resolve = promiseResolve;
+    });
+    return { promise, resolve };
 }

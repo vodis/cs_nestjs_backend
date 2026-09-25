@@ -1,22 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
+import { coinGeckoIdForSymbol } from './coingecko-ids';
 import { MarketComparisonTimeframe } from './dto/get-market-comparison-query.dto';
 import { comparisonTimeframeMs, MarketHistoryPoint, MarketHistoryProvider } from './market-history.types';
 
 interface CoinGeckoMarketChartResponse {
     prices?: [number, number][];
 }
-
-const coinGeckoIdsBySymbol: Record<string, string> = {
-    BTC: 'bitcoin',
-    ETH: 'ethereum',
-    NEAR: 'near',
-    REF: 'ref-finance',
-    SOL: 'solana',
-    USDC: 'usd-coin',
-    USDT: 'tether',
-};
 
 @Injectable()
 export class CoinGeckoMarketHistoryClient implements MarketHistoryProvider {
@@ -54,7 +45,6 @@ export class CoinGeckoMarketHistoryClient implements MarketHistoryProvider {
 
     private resolveCoinId(symbol: string): string | undefined {
         const normalized = symbol.trim().toUpperCase();
-        const configKey = `MARKET_COINGECKO_ID_${normalized}`;
-        return this.configService.get<string>(configKey) || coinGeckoIdsBySymbol[normalized];
+        return coinGeckoIdForSymbol(normalized, this.configService.get<string>(`MARKET_COINGECKO_ID_${normalized}`));
     }
 }

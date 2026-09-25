@@ -7,11 +7,27 @@ import { GetMarketComparisonQueryDto } from './dto/get-market-comparison-query.d
 import { GetMarketComparisonResponseDto } from './dto/get-market-comparison-response.dto';
 import { GetMarketChartQueryDto } from './dto/get-market-chart-query.dto';
 import { GetMarketChartResponseDto } from './dto/get-market-chart-response.dto';
+import { GetMarketSnapshotsQueryDto } from './dto/get-market-snapshots-query.dto';
+import { GetMarketSnapshotsResponseDto } from './dto/get-market-snapshots-response.dto';
+import { MarketSnapshotService } from './market-snapshot.service';
 import { MarketsService } from './markets.service';
 
 @Controller({ version: '1', path: 'markets' })
 export class MarketsController {
-    constructor(private readonly marketsService: MarketsService) {}
+    constructor(
+        private readonly marketsService: MarketsService,
+        private readonly marketSnapshotService: MarketSnapshotService,
+    ) {}
+
+    @Get('snapshots')
+    @ApiResponse({
+        status: 200,
+        description: 'Get cached CoinGecko price, market cap, volume, and 7d sparkline snapshots',
+        type: GetMarketSnapshotsResponseDto,
+    })
+    getSnapshots(@Query() query: GetMarketSnapshotsQueryDto): Promise<GetMarketSnapshotsResponseDto> {
+        return this.marketSnapshotService.getSnapshots(query.symbols);
+    }
 
     @Get('comparison')
     @ApiResponse({

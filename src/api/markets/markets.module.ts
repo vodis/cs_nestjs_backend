@@ -5,7 +5,9 @@ import { HyperliquidApiModule } from '../../http-clients/hyperliquid-api/hyperli
 import { onHttpModuleInit } from '../../http-clients/http-clients.interceptor';
 import { AssetsModule } from '../assets/assets.module';
 import { CoinGeckoMarketHistoryClient } from './coingecko-market-history.client';
+import { CoinGeckoMarketSnapshotClient } from './coingecko-market-snapshot.client';
 import { GeckoTerminalMarketHistoryClient } from './geckoterminal-market-history.client';
+import { MarketSnapshotService } from './market-snapshot.service';
 import { MarketsChartGateway } from './markets-chart.gateway';
 import { MarketsController } from './markets.controller';
 import { MarketsService } from './markets.service';
@@ -24,7 +26,14 @@ import { MarketsService } from './markets.service';
         }),
     ],
     controllers: [MarketsController],
-    providers: [MarketsService, CoinGeckoMarketHistoryClient, GeckoTerminalMarketHistoryClient, MarketsChartGateway],
+    providers: [
+        MarketsService,
+        CoinGeckoMarketHistoryClient,
+        CoinGeckoMarketSnapshotClient,
+        MarketSnapshotService,
+        GeckoTerminalMarketHistoryClient,
+        MarketsChartGateway,
+    ],
 })
 export class MarketsModule {
     constructor(private readonly httpService: HttpService) {}

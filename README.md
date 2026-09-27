@@ -45,6 +45,13 @@ deposit address and memo. `intentHash` means 1Click accepted the signed intent;
 only a later `SUCCESS` status confirms settlement. The backend's idempotency
 claim prevents duplicate submissions through this API, while 1Click controls
 the actual spend of the user's Intents balance.
+Terminal settlement outcomes are recorded with an audit event and remain
+available through the status endpoint if 1Click becomes unavailable. `INTENTS`
+and `CONFIDENTIAL_INTENTS` recipients may be NEAR named accounts, NEAR implicit
+accounts, or EVM implicit accounts.
+Apply the nullable `swap_preparations.settlement_status` migration before deploying
+this version. The previous app version can run with the column present; reversing
+the migration removes recorded settlement outcomes.
 
 Production secrets and runtime env are injected by the orchestrator when it creates the container. Updating orchestrator env requires a redeploy; restarting an existing container is not enough to apply changed env.
 

@@ -17,7 +17,10 @@ describe('GetSwapStatusUseCase', () => {
     };
 
     it('uses the stored quote address and memo after wallet ownership is checked', async () => {
-        const store = { findPreparation: jest.fn().mockResolvedValue(preparation) };
+        const store = {
+            findPreparation: jest.fn().mockResolvedValue(preparation),
+            recordTerminalSettlement: jest.fn().mockResolvedValue('SUCCESS'),
+        };
         const authorization = { isOwnedByUser: jest.fn().mockResolvedValue(true) };
         const client = { getSwapStatus: jest.fn().mockResolvedValue({ status: 'SUCCESS' }) };
         const useCase = new GetSwapStatusUseCase(
@@ -27,10 +30,42 @@ describe('GetSwapStatusUseCase', () => {
         );
         await expect(useCase.execute(preparation.id, actor)).resolves.toEqual({ status: 'SUCCESS' });
         expect(client.getSwapStatus).toHaveBeenCalledWith('deposit-address', 'memo-1');
+        expect(store.recordTerminalSettlement).toHaveBeenCalledWith(preparation.id, 'SUCCESS');
+    });
+
+    it('serves a recorded terminal status without calling 1Click again', async () => {
+        const store = {
+            findPreparation: jest.fn().mockResolvedValue({ ...preparation, settlementStatus: 'REFUNDED' }),
+        };
+        const authorization = { isOwnedByUser: jest.fn().mockResolvedValue(true) };
+        const client = { getSwapStatus: jest.fn() };
+        const useCase = new GetSwapStatusUseCase(
+            store as unknown as SwapExecutionStorePort,
+            authorization as unknown as SwapWalletAuthorizationPort,
+            client as unknown as OneClickApiHttpClient,
+        );
+        await expect(useCase.execute(preparation.id, actor)).resolves.toEqual({ status: 'REFUNDED' });
+        expect(client.getSwapStatus).not.toHaveBeenCalled();
+    });
+
+    it('does not persist nonterminal provider statuses', async () => {
+        const store = {
+            findPreparation: jest.fn().mockResolvedValue(preparation),
+            recordTerminalSettlement: jest.fn(),
+        };
+        const authorization = { isOwnedByUser: jest.fn().mockResolvedValue(true) };
+        const client = { getSwapStatus: jest.fn().mockResolvedValue({ status: 'PROCESSING' }) };
+        const useCase = new GetSwapStatusUseCase(
+            store as unknown as SwapExecutionStorePort,
+            authorization as unknown as SwapWalletAuthorizationPort,
+            client as unknown as OneClickApiHttpClient,
+        );
+        await expect(useCase.execute(preparation.id, actor)).resolves.toEqual({ status: 'PROCESSING' });
+        expect(store.recordTerminalSettlement).not.toHaveBeenCalled();
     });
 
     it('refuses status access for a wallet the actor does not own', async () => {
-        const store = { findPreparation: jest.fn().mockResolvedValue(preparation) };
+        const store = { findPreparation: jest.fn().mockResolvedValue({ ...preparation, settlementStatus: 'SUCCESS' }) };
         const authorization = { isOwnedByUser: jest.fn().mockResolvedValue(false) };
         const client = { getSwapStatus: jest.fn() };
         const useCase = new GetSwapStatusUseCase(

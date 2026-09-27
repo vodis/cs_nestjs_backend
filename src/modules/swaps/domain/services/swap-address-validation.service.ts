@@ -106,7 +106,11 @@ export class SwapAddressValidationService {
         }
 
         if (recipientType === 'INTENTS' || recipientType === 'CONFIDENTIAL_INTENTS') {
-            if (!NEAR_ACCOUNT_PATTERN.test(recipient) && !NEAR_IMPLICIT_ACCOUNT_PATTERN.test(recipient)) {
+            if (
+                !NEAR_ACCOUNT_PATTERN.test(recipient) &&
+                !NEAR_IMPLICIT_ACCOUNT_PATTERN.test(recipient) &&
+                !EVM_ADDRESS_PATTERN.test(recipient)
+            ) {
                 throw new SwapValidationError(
                     'INVALID_RECIPIENT',
                     'INTENTS recipient must be a valid NEAR account id',

@@ -18,6 +18,18 @@ describe('SwapAddressValidationService recipient validation', () => {
         ).toThrow(expect.objectContaining({ code: 'INVALID_RECIPIENT' }));
     });
 
+    it.each(['INTENTS', 'CONFIDENTIAL_INTENTS'] as const)(
+        'accepts an EVM implicit account as a %s recipient',
+        (recipientType) => {
+            expect(() =>
+                service.assertExternalRecipient('0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9', recipientType, 'near'),
+            ).not.toThrow();
+            expect(() => service.assertExternalRecipient('0xnot-an-address', recipientType, 'near')).toThrow(
+                expect.objectContaining({ code: 'INVALID_RECIPIENT' }),
+            );
+        },
+    );
+
     it('fails closed for destination networks without an address validator', () => {
         expect(() => service.assertExternalRecipient('future-address', 'DESTINATION_CHAIN', 'future-chain')).toThrow(
             expect.objectContaining({ code: 'UNSUPPORTED_RECIPIENT_NETWORK' }),

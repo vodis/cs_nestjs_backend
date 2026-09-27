@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { OneClickTokenDto } from './dto/one-click-token.dto';
 import { ConfigService } from '@nestjs/config';
+import type { OneClickSwapStatus } from '../../modules/swaps/domain/models/swap-settlement-status';
 
 export type OneClickQuoteRequest = {
     dry: boolean;
@@ -41,9 +42,6 @@ export type OneClickSubmitIntentResponse = {
     intentHash: string;
     correlationId: string;
 };
-
-export type OneClickSwapStatus =
-    'KNOWN_DEPOSIT_TX' | 'PENDING_DEPOSIT' | 'INCOMPLETE_DEPOSIT' | 'PROCESSING' | 'SUCCESS' | 'REFUNDED' | 'FAILED';
 
 @Injectable()
 export class OneClickApiHttpClient {

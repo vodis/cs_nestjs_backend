@@ -1,4 +1,5 @@
 import type { SwapExecutionMode } from '../../domain/models/swap-quote';
+import type { OneClickTerminalStatus } from '../../domain/models/swap-settlement-status';
 
 export const SWAP_EXECUTION_STORE = Symbol('SWAP_EXECUTION_STORE');
 
@@ -10,6 +11,7 @@ export type StoredSwapPreparation = {
     userChainType: 'evm' | 'near';
     executionPayload: Record<string, unknown>;
     expiresAt: Date;
+    settlementStatus?: OneClickTerminalStatus | null;
 };
 
 export type SwapExecutionClaim =
@@ -20,6 +22,7 @@ export type SwapExecutionClaim =
 export interface SwapExecutionStorePort {
     createPreparation(input: Omit<StoredSwapPreparation, 'id'>): Promise<StoredSwapPreparation>;
     findPreparation(id: string): Promise<StoredSwapPreparation | undefined>;
+    recordTerminalSettlement(preparationId: string, status: OneClickTerminalStatus): Promise<OneClickTerminalStatus>;
     claimExecution(input: {
         preparationId: string;
         userId: string;

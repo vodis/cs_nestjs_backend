@@ -37,7 +37,7 @@ type CreateSwapsAppOptions = {
     providers?: QuoteProviderPort[];
     maxSlippageBps?: number;
     solverRelay?: Pick<SolverRelayApiHttpClient, 'publishIntent'>;
-    oneClick?: Pick<OneClickApiHttpClient, 'submitIntent'>;
+    oneClick?: Partial<Pick<OneClickApiHttpClient, 'submitIntent' | 'getSwapStatus'>>;
     authenticated?: boolean;
     walletOwned?: boolean;
     preparations?: StoredSwapPreparation[];
@@ -125,6 +125,11 @@ async function createSwapsApp(options: CreateSwapsAppOptions = {}): Promise<INes
             return preparation;
         }),
         findPreparation: jest.fn(async (id) => preparations.get(id)),
+        recordTerminalSettlement: jest.fn(async (id, status) => {
+            const preparation = preparations.get(id)!;
+            preparation.settlementStatus ??= status;
+            return preparation.settlementStatus;
+        }),
         claimExecution: jest.fn(async (input): Promise<SwapExecutionClaim> => {
             const existing = executions.get(input.idempotencyKey);
             if (existing) {
@@ -205,6 +210,43 @@ async function createSwapsApp(options: CreateSwapsAppOptions = {}): Promise<INes
 }
 
 describe('Swaps (e2e)', () => {
+    describe('GET /api/v1/swaps/status/:preparationId', () => {
+        let app: INestApplication;
+
+        afterEach(async () => {
+            if (app) {
+                await app.close();
+            }
+        });
+
+        it('returns a durable terminal status on repeated requests', async () => {
+            const preparationId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+            const getSwapStatus = jest.fn().mockResolvedValue({ status: 'SUCCESS' });
+            app = await createSwapsApp({
+                preparations: [
+                    {
+                        id: preparationId,
+                        providerId: 'one-click',
+                        executionMode: 'intent_sign',
+                        userAddress: EVM_SIGNER,
+                        userChainType: 'evm',
+                        executionPayload: { depositAddress: 'deposit.near' },
+                        expiresAt: new Date(Date.now() + 60_000),
+                    },
+                ],
+                oneClick: { getSwapStatus },
+            });
+
+            for (let index = 0; index < 2; index++) {
+                await request(app.getHttpServer())
+                    .get(`/api/v1/swaps/status/${preparationId}`)
+                    .expect(200)
+                    .expect(({ body }) => expect(body).toEqual({ data: { status: 'SUCCESS' } }));
+            }
+            expect(getSwapStatus).toHaveBeenCalledTimes(1);
+        });
+    });
+
     describe('POST /api/v1/swaps/prepare — success', () => {
         let app: INestApplication;
 

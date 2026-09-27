@@ -59,6 +59,60 @@ describe('SequelizeSwapExecutionStore', () => {
         expect(events.map(({ status }) => status)).toEqual(['attempted', 'succeeded']);
     });
 
+    it('records a terminal settlement once and keeps the first confirmed outcome', async () => {
+        const preparation = await store.createPreparation({
+            providerId: 'one-click',
+            executionMode: 'intent_sign',
+            userAddress: 'alice.near',
+            userChainType: 'near',
+            executionPayload: { depositAddress: 'deposit.near' },
+            expiresAt: new Date(Date.now() + 60_000),
+        });
+        const userId = '11111111-1111-4111-8111-111111111111';
+        const claim = await store.claimExecution({
+            preparationId: preparation.id,
+            userId,
+            idempotencyKey: 'settlement-key-1',
+            requestFingerprint: 'a'.repeat(64),
+            providerId: 'one-click',
+            traceId: 'trace-settlement',
+        });
+        await store.markSucceeded(claim.executionId, 'intent-hash');
+
+        await expect(store.recordTerminalSettlement(preparation.id, 'SUCCESS')).resolves.toBe('SUCCESS');
+        await expect(store.recordTerminalSettlement(preparation.id, 'FAILED')).resolves.toBe('SUCCESS');
+        await expect(store.findPreparation(preparation.id)).resolves.toMatchObject({ settlementStatus: 'SUCCESS' });
+        const events = await ProductEvent.findAll({ where: { eventName: 'swap.settlement' } });
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({
+            eventName: 'swap.settlement',
+            status: 'succeeded',
+            userId,
+            requestId: 'trace-settlement',
+        });
+        expect(events[0].metadata).toEqual({
+            preparationId: preparation.id,
+            providerId: 'one-click',
+            settlementStatus: 'SUCCESS',
+            executionId: claim.executionId,
+            intentHash: 'intent-hash',
+        });
+    });
+
+    it('records a failed settlement with its reason code', async () => {
+        const preparation = await store.createPreparation({
+            providerId: 'one-click',
+            executionMode: 'intent_sign',
+            userAddress: 'alice.near',
+            userChainType: 'near',
+            executionPayload: { depositAddress: 'deposit.near' },
+            expiresAt: new Date(Date.now() + 60_000),
+        });
+        await expect(store.recordTerminalSettlement(preparation.id, 'REFUNDED')).resolves.toBe('REFUNDED');
+        const event = await ProductEvent.findOne({ where: { eventName: 'swap.settlement' } });
+        expect(event).toMatchObject({ status: 'failed', reasonCode: 'REFUNDED', userId: null });
+    });
+
     it('rejects an idempotency key reused with a different fingerprint', async () => {
         const preparation = await store.createPreparation({
             providerId: 'one-click',

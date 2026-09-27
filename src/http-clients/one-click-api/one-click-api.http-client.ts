@@ -8,13 +8,13 @@ export type OneClickQuoteRequest = {
     swapType: 'EXACT_INPUT' | 'EXACT_OUTPUT';
     slippageTolerance: number;
     originAsset: string;
-    depositType: 'ORIGIN_CHAIN' | 'INTENTS';
+    depositType: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
     destinationAsset: string;
     amount: string;
     recipient: string;
-    recipientType: 'DESTINATION_CHAIN' | 'INTENTS';
+    recipientType: 'DESTINATION_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
     refundTo: string;
-    refundType: 'ORIGIN_CHAIN' | 'INTENTS';
+    refundType: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
     deadline: string;
 };
 
@@ -41,6 +41,9 @@ export type OneClickSubmitIntentResponse = {
     intentHash: string;
     correlationId: string;
 };
+
+export type OneClickSwapStatus =
+    'KNOWN_DEPOSIT_TX' | 'PENDING_DEPOSIT' | 'INCOMPLETE_DEPOSIT' | 'PROCESSING' | 'SUCCESS' | 'REFUNDED' | 'FAILED';
 
 @Injectable()
 export class OneClickApiHttpClient {
@@ -78,6 +81,14 @@ export class OneClickApiHttpClient {
                 headers: this.authHeaders(),
             },
         );
+        return data;
+    }
+
+    async getSwapStatus(depositAddress: string, depositMemo?: string): Promise<{ status: OneClickSwapStatus }> {
+        const { data } = await this.httpServer.axiosRef.get<{ status: OneClickSwapStatus }>('v0/status', {
+            headers: this.authHeaders(),
+            params: { depositAddress, ...(depositMemo ? { depositMemo } : {}) },
+        });
         return data;
     }
 

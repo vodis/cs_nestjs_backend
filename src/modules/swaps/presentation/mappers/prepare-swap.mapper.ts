@@ -6,6 +6,7 @@ import { ApprovedPreparePackageDto } from '../dto/prepare-swap-response.dto';
 export class PrepareSwapMapper {
     static toCommand(dto: PrepareSwapRequestDto): SwapQuoteCommand {
         return {
+            providerId: dto.providerId,
             originAsset: dto.originAsset,
             destinationAsset: dto.destinationAsset,
             amount: dto.amount,

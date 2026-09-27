@@ -4,6 +4,11 @@ import { IsIn, IsISO8601, IsNumber, IsOptional, IsString, Matches, Min } from 'c
 const deadlineExample = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
 export class PrepareSwapRequestDto {
+    @ApiPropertyOptional({ enum: ['one-click', 'solver-relay'] })
+    @IsOptional()
+    @IsIn(['one-click', 'solver-relay'])
+    providerId?: 'one-click' | 'solver-relay';
+
     @ApiProperty({ example: 'nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near' })
     @IsString()
     originAsset: string;
@@ -43,20 +48,20 @@ export class PrepareSwapRequestDto {
     @Matches(/^\S+$/, { message: 'recipient must not contain whitespace' })
     recipient?: string;
 
-    @ApiPropertyOptional({ enum: ['DESTINATION_CHAIN', 'INTENTS'] })
+    @ApiPropertyOptional({ enum: ['DESTINATION_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'] })
     @IsOptional()
-    @IsIn(['DESTINATION_CHAIN', 'INTENTS'])
-    recipientType?: 'DESTINATION_CHAIN' | 'INTENTS';
+    @IsIn(['DESTINATION_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'])
+    recipientType?: 'DESTINATION_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
 
-    @ApiPropertyOptional({ enum: ['ORIGIN_CHAIN', 'INTENTS'] })
+    @ApiPropertyOptional({ enum: ['ORIGIN_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'] })
     @IsOptional()
-    @IsIn(['ORIGIN_CHAIN', 'INTENTS'])
-    depositType?: 'ORIGIN_CHAIN' | 'INTENTS';
+    @IsIn(['ORIGIN_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'])
+    depositType?: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
 
-    @ApiPropertyOptional({ enum: ['ORIGIN_CHAIN', 'INTENTS'] })
+    @ApiPropertyOptional({ enum: ['ORIGIN_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'] })
     @IsOptional()
-    @IsIn(['ORIGIN_CHAIN', 'INTENTS'])
-    refundType?: 'ORIGIN_CHAIN' | 'INTENTS';
+    @IsIn(['ORIGIN_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'])
+    refundType?: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
 
     @ApiProperty({ example: 'evm' })
     @IsIn(['evm', 'near'])

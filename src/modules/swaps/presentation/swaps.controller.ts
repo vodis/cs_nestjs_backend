@@ -1,10 +1,21 @@
-import { BadRequestException, Body, Controller, Headers, Post, UseGuards } from '@nestjs/common';
+import {
+    BadRequestException,
+    Body,
+    Controller,
+    Get,
+    Headers,
+    Param,
+    ParseUUIDPipe,
+    Post,
+    UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiResponse } from '@nestjs/swagger';
 import { CurrentUser } from '../../../api/auth/current-user.decorator';
 import { PrivyAuthGuard, RequirePrivyBearer } from '../../../api/auth/privy-auth.guard';
 import type { AuthenticatedUser } from '../../../api/auth/types';
 import { ExecuteSwapUseCase } from '../application/use-cases/execute-swap.use-case';
 import { PrepareSwapUseCase } from '../application/use-cases/prepare-swap.use-case';
+import { GetSwapStatusUseCase } from '../application/use-cases/get-swap-status.use-case';
 import { SwapValidationError } from '../domain/errors/swap-validation.error';
 import { ExecuteSwapRequestDto } from './dto/execute-swap-request.dto';
 import { ExecuteSwapResponseDto } from './dto/execute-swap-response.dto';
@@ -17,6 +28,7 @@ export class SwapsController {
     constructor(
         private readonly prepareSwapUseCase: PrepareSwapUseCase,
         private readonly executeSwapUseCase: ExecuteSwapUseCase,
+        private readonly getSwapStatusUseCase: GetSwapStatusUseCase,
     ) {}
 
     @Post('prepare')
@@ -44,6 +56,17 @@ export class SwapsController {
 
             throw error;
         }
+    }
+
+    @Get('status/:preparationId')
+    @UseGuards(PrivyAuthGuard)
+    @RequirePrivyBearer()
+    @ApiBearerAuth()
+    async getSwapStatus(
+        @Param('preparationId', ParseUUIDPipe) preparationId: string,
+        @CurrentUser() user: AuthenticatedUser,
+    ): Promise<{ data: { status: string } }> {
+        return { data: await this.getSwapStatusUseCase.execute(preparationId, user) };
     }
 
     @Post('execute')

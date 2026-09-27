@@ -7,6 +7,7 @@ import { SwapQuoteCommand } from '../../domain/models/swap-quote-request';
 import { SwapValidationError } from '../../domain/errors/swap-validation.error';
 import { ProductEventsService } from '../../../../api/product-events/product-events.service';
 import { SwapExecutionStorePort } from '../ports/swap-execution-store.port';
+import { SwapWalletAuthorizationPort } from '../ports/swap-wallet-authorization.port';
 
 describe('PrepareSwapUseCase', () => {
     const command: SwapQuoteCommand = {
@@ -47,11 +48,35 @@ describe('PrepareSwapUseCase', () => {
         createPreparation: jest.fn(async (input) => ({ id: 'preparation-1', ...input })),
     } as unknown as SwapExecutionStorePort;
 
+    const actor = { id: 'user-1', privyUserId: 'privy-user', sessionId: 'session-1', passkeyEnabled: false };
+    const walletAuthorization = {
+        isOwnedByUser: jest.fn().mockResolvedValue(true),
+    } as jest.Mocked<SwapWalletAuthorizationPort>;
+
     const createUseCase = (providers: QuoteProviderPort[]) =>
-        new PrepareSwapUseCase(assetRegistry, providers, configService, productEvents, executionStore);
+        new PrepareSwapUseCase(
+            assetRegistry,
+            providers,
+            configService,
+            productEvents,
+            executionStore,
+            walletAuthorization,
+        );
 
     beforeEach(() => {
         jest.clearAllMocks();
+    });
+
+    it('rejects an unlinked signer before requesting a quote or storing a preparation', async () => {
+        const provider: QuoteProviderPort = { providerId: 'one-click', requestQuotes: jest.fn() };
+        walletAuthorization.isOwnedByUser.mockResolvedValueOnce(false);
+
+        await expect(createUseCase([provider]).execute(command, actor)).rejects.toMatchObject({
+            response: { code: 'SWAP_WALLET_NOT_AUTHORIZED' },
+        });
+        expect(walletAuthorization.isOwnedByUser).toHaveBeenCalledWith(actor.id, command.signerId, command.authMethod);
+        expect(provider.requestQuotes).not.toHaveBeenCalled();
+        expect(executionStore.createPreparation).not.toHaveBeenCalled();
     });
 
     it('aggregates quotes from multiple providers and returns the best approved package', async () => {
@@ -88,7 +113,7 @@ describe('PrepareSwapUseCase', () => {
             },
         ];
 
-        const result = await createUseCase(providers).execute(command);
+        const result = await createUseCase(providers).execute(command, actor);
 
         expect(result.providerId).toBe('solver-relay');
         expect(result.quoteHashes).toEqual(['0xquote-hash']);
@@ -142,14 +167,17 @@ describe('PrepareSwapUseCase', () => {
         };
         const useCase = createUseCase([internalProvider, recipientProvider]);
 
-        const result = await useCase.execute({
-            ...command,
-            depositType: 'ORIGIN_CHAIN',
-            refundType: 'ORIGIN_CHAIN',
-            destinationAsset,
-            recipient: 'BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z',
-            recipientType: 'DESTINATION_CHAIN',
-        });
+        const result = await useCase.execute(
+            {
+                ...command,
+                depositType: 'ORIGIN_CHAIN',
+                refundType: 'ORIGIN_CHAIN',
+                destinationAsset,
+                recipient: 'BYPsjxa3YuZESQz1dKuBw1QSFCSpecsm8nCQhY5xbU1Z',
+                recipientType: 'DESTINATION_CHAIN',
+            },
+            actor,
+        );
 
         expect(internalProvider.requestQuotes).not.toHaveBeenCalled();
         expect(recipientProvider.requestQuotes).toHaveBeenCalled();
@@ -181,7 +209,7 @@ describe('PrepareSwapUseCase', () => {
             ]),
         };
         const solver: QuoteProviderPort = { providerId: 'solver-relay', requestQuotes: jest.fn() };
-        const result = await createUseCase([oneClick, solver]).execute({ ...command, providerId: 'one-click' });
+        const result = await createUseCase([oneClick, solver]).execute({ ...command, providerId: 'one-click' }, actor);
         expect(result.providerId).toBe('one-click');
         expect(solver.requestQuotes).not.toHaveBeenCalled();
     });
@@ -194,11 +222,14 @@ describe('PrepareSwapUseCase', () => {
         };
 
         await expect(
-            createUseCase([provider]).execute({
-                ...command,
-                destinationAsset: 'nep141:sol-usdc.omft.near',
-                recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b8',
-            }),
+            createUseCase([provider]).execute(
+                {
+                    ...command,
+                    destinationAsset: 'nep141:sol-usdc.omft.near',
+                    recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b8',
+                },
+                actor,
+            ),
         ).rejects.toMatchObject({ code: 'INVALID_RECIPIENT' } satisfies Partial<SwapValidationError>);
 
         expect(provider.requestQuotes).not.toHaveBeenCalled();
@@ -221,10 +252,13 @@ describe('PrepareSwapUseCase', () => {
             ]),
         };
 
-        await createUseCase([internalProvider]).execute({
-            ...command,
-            signerId: command.signerId.toUpperCase().replace('0X', '0x'),
-        });
+        await createUseCase([internalProvider]).execute(
+            {
+                ...command,
+                signerId: command.signerId.toUpperCase().replace('0X', '0x'),
+            },
+            actor,
+        );
 
         expect(internalProvider.requestQuotes).toHaveBeenCalled();
     });
@@ -252,7 +286,7 @@ describe('PrepareSwapUseCase', () => {
             },
         ];
 
-        const result = await createUseCase(providers).execute(command);
+        const result = await createUseCase(providers).execute(command, actor);
 
         expect(result.providerId).toBe('solver-relay');
     });
@@ -269,7 +303,9 @@ describe('PrepareSwapUseCase', () => {
             },
         ];
 
-        await expect(createUseCase(providers).execute(command)).rejects.toBeInstanceOf(ServiceUnavailableException);
+        await expect(createUseCase(providers).execute(command, actor)).rejects.toBeInstanceOf(
+            ServiceUnavailableException,
+        );
     });
 
     it('rejects unsupported wallet auth methods before requesting provider quotes', async () => {
@@ -279,11 +315,14 @@ describe('PrepareSwapUseCase', () => {
         };
 
         await expect(
-            createUseCase([provider]).execute({
-                ...command,
-                signerId: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-                authMethod: 'stellar' as 'near',
-            }),
+            createUseCase([provider]).execute(
+                {
+                    ...command,
+                    signerId: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+                    authMethod: 'stellar' as 'near',
+                },
+                actor,
+            ),
         ).rejects.toMatchObject({
             code: 'UNSUPPORTED_AUTH_METHOD',
         } satisfies Partial<SwapValidationError>);
@@ -298,11 +337,14 @@ describe('PrepareSwapUseCase', () => {
         };
 
         await expect(
-            createUseCase([provider]).execute({
-                ...command,
-                signerId: 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-                authMethod: 'near',
-            }),
+            createUseCase([provider]).execute(
+                {
+                    ...command,
+                    signerId: 'UQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+                    authMethod: 'near',
+                },
+                actor,
+            ),
         ).rejects.toMatchObject({
             code: 'INVALID_SIGNER',
         } satisfies Partial<SwapValidationError>);

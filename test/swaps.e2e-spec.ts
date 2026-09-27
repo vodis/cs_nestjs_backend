@@ -256,6 +256,20 @@ describe('Swaps (e2e)', () => {
             }
         });
 
+        it('requires a bearer session before preparation', async () => {
+            app = await createSwapsApp({ authenticated: false });
+            await request(app.getHttpServer()).post('/api/v1/swaps/prepare').send(validPreparePayload()).expect(401);
+        });
+
+        it('rejects an unlinked signer before preparation (staging-2026-09-27)', async () => {
+            app = await createSwapsApp({ walletOwned: false });
+            const response = await request(app.getHttpServer())
+                .post('/api/v1/swaps/prepare')
+                .send(validPreparePayload())
+                .expect(403);
+            expect(response.body.code).toBe('SWAP_WALLET_NOT_AUTHORIZED');
+        });
+
         it('returns an approved prepare package for EVM intent signing', async () => {
             app = await createSwapsApp();
 

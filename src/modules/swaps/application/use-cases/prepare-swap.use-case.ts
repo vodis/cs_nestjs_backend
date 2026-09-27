@@ -42,6 +42,15 @@ export class PrepareSwapUseCase {
     async execute(command: SwapQuoteCommand, actor: AuthenticatedUser): Promise<ApprovedPreparePackage> {
         this.validationService.validate(command, { maxSlippageBps: this.getMaxSlippageBps() });
         if (!(await this.walletAuthorization.isOwnedByUser(actor.id, command.signerId, command.authMethod))) {
+            await this.productEvents.recordBestEffort({
+                eventName: 'swap.quote',
+                source: 'backend',
+                status: 'failed',
+                reasonCode: 'wallet_not_authorized',
+                userId: actor.id,
+                sessionId: actor.sessionId,
+                metadata: this.swapMetadata(command),
+            });
             throw new ForbiddenException({
                 code: 'SWAP_WALLET_NOT_AUTHORIZED',
                 message: 'Swap preparation requires an active wallet owned by the authenticated user',

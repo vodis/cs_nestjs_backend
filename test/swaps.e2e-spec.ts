@@ -15,6 +15,7 @@ import { ASSET_REGISTRY_PORT } from '../src/modules/swaps/application/ports/asse
 import { QUOTE_PROVIDERS, QuoteProviderPort } from '../src/modules/swaps/application/ports/quote-provider.port';
 import { SwapQuote } from '../src/modules/swaps/domain/models/swap-quote';
 import { PrivyAuthGuard } from '../src/api/auth/privy-auth.guard';
+import { PrivyAuthService } from '../src/api/auth/privy-auth.service';
 import {
     SWAP_EXECUTION_STORE,
     StoredSwapPreparation,
@@ -39,6 +40,7 @@ type CreateSwapsAppOptions = {
     solverRelay?: Pick<SolverRelayApiHttpClient, 'publishIntent'>;
     oneClick?: Partial<Pick<OneClickApiHttpClient, 'submitIntent' | 'getSwapStatus'>>;
     authenticated?: boolean;
+    useRealAuthGuard?: boolean;
     walletOwned?: boolean;
     preparations?: StoredSwapPreparation[];
 };
@@ -170,7 +172,7 @@ async function createSwapsApp(options: CreateSwapsAppOptions = {}): Promise<INes
             return true;
         },
     };
-    const moduleFixture: TestingModule = await Test.createTestingModule({
+    let moduleBuilder = Test.createTestingModule({
         imports: [
             ConfigModule.forRoot({
                 isGlobal: true,
@@ -192,13 +194,23 @@ async function createSwapsApp(options: CreateSwapsAppOptions = {}): Promise<INes
         .useValue(options.solverRelay ?? { publishIntent: jest.fn() })
         .overrideProvider(OneClickApiHttpClient)
         .useValue(options.oneClick ?? { submitIntent: jest.fn() })
-        .overrideGuard(PrivyAuthGuard)
-        .useValue(authGuard)
+        .overrideProvider(PrivyAuthService)
+        .useValue({
+            authenticateToken: jest.fn().mockResolvedValue({
+                id: '11111111-1111-4111-8111-111111111111',
+                privyUserId: 'privy-user',
+                sessionId: 'session-1',
+                passkeyEnabled: false,
+            }),
+        })
         .overrideProvider(SWAP_EXECUTION_STORE)
         .useValue(executionStore)
         .overrideProvider(SWAP_WALLET_AUTHORIZATION)
-        .useValue(walletAuthorization)
-        .compile();
+        .useValue(walletAuthorization);
+    if (!options.useRealAuthGuard) {
+        moduleBuilder = moduleBuilder.overrideGuard(PrivyAuthGuard).useValue(authGuard);
+    }
+    const moduleFixture: TestingModule = await moduleBuilder.compile();
 
     const app = moduleFixture.createNestApplication();
     app.enableVersioning({ type: VersioningType.URI });
@@ -257,8 +269,18 @@ describe('Swaps (e2e)', () => {
         });
 
         it('requires a bearer session before preparation', async () => {
-            app = await createSwapsApp({ authenticated: false });
+            app = await createSwapsApp({ useRealAuthGuard: true });
             await request(app.getHttpServer()).post('/api/v1/swaps/prepare').send(validPreparePayload()).expect(401);
+            await request(app.getHttpServer())
+                .post('/api/v1/swaps/prepare')
+                .set('Cookie', 'privy-token=cookie-token')
+                .send(validPreparePayload())
+                .expect(401);
+            await request(app.getHttpServer())
+                .post('/api/v1/swaps/prepare')
+                .set('Authorization', 'Bearer valid-token')
+                .send(validPreparePayload())
+                .expect(201);
         });
 
         it('rejects an unlinked signer before preparation (staging-2026-09-27)', async () => {

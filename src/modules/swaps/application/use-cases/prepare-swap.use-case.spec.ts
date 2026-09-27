@@ -75,6 +75,15 @@ describe('PrepareSwapUseCase', () => {
             response: { code: 'SWAP_WALLET_NOT_AUTHORIZED' },
         });
         expect(walletAuthorization.isOwnedByUser).toHaveBeenCalledWith(actor.id, command.signerId, command.authMethod);
+        expect(productEvents.recordBestEffort).toHaveBeenCalledWith(
+            expect.objectContaining({
+                eventName: 'swap.quote',
+                status: 'failed',
+                reasonCode: 'wallet_not_authorized',
+                userId: actor.id,
+                sessionId: actor.sessionId,
+            }),
+        );
         expect(provider.requestQuotes).not.toHaveBeenCalled();
         expect(executionStore.createPreparation).not.toHaveBeenCalled();
     });

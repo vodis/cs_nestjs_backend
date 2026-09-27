@@ -2,19 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { OneClickTokenDto } from './dto/one-click-token.dto';
 import { ConfigService } from '@nestjs/config';
+import type { OneClickSwapStatus } from '../../modules/swaps/domain/models/swap-settlement-status';
 
 export type OneClickQuoteRequest = {
     dry: boolean;
     swapType: 'EXACT_INPUT' | 'EXACT_OUTPUT';
     slippageTolerance: number;
     originAsset: string;
-    depositType: 'ORIGIN_CHAIN' | 'INTENTS';
+    depositType: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
     destinationAsset: string;
     amount: string;
     recipient: string;
-    recipientType: 'DESTINATION_CHAIN' | 'INTENTS';
+    recipientType: 'DESTINATION_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
     refundTo: string;
-    refundType: 'ORIGIN_CHAIN' | 'INTENTS';
+    refundType: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
     deadline: string;
 };
 
@@ -78,6 +79,14 @@ export class OneClickApiHttpClient {
                 headers: this.authHeaders(),
             },
         );
+        return data;
+    }
+
+    async getSwapStatus(depositAddress: string, depositMemo?: string): Promise<{ status: OneClickSwapStatus }> {
+        const { data } = await this.httpServer.axiosRef.get<{ status: OneClickSwapStatus }>('v0/status', {
+            headers: this.authHeaders(),
+            params: { depositAddress, ...(depositMemo ? { depositMemo } : {}) },
+        });
         return data;
     }
 

@@ -10,6 +10,7 @@ import { ASSET_REGISTRY_PORT } from './application/ports/asset-registry.port';
 import { QUOTE_PROVIDERS } from './application/ports/quote-provider.port';
 import { ExecuteSwapUseCase } from './application/use-cases/execute-swap.use-case';
 import { PrepareSwapUseCase } from './application/use-cases/prepare-swap.use-case';
+import { GetSwapStatusUseCase } from './application/use-cases/get-swap-status.use-case';
 import { AssetRegistryAdapter } from './infrastructure/adapters/asset-registry.adapter';
 import { OneClickQuoteProvider } from './infrastructure/providers/one-click-quote.provider';
 import { OneClickExecutionProvider } from './infrastructure/providers/one-click-execution.provider';
@@ -26,6 +27,7 @@ import { SequelizeSwapExecutionStore } from './infrastructure/repositories/seque
     controllers: [SwapsController],
     providers: [
         PrepareSwapUseCase,
+        GetSwapStatusUseCase,
         ExecuteSwapUseCase,
         AssetRegistryAdapter,
         OneClickExecutionProvider,

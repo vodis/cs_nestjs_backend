@@ -157,6 +157,35 @@ describe('PrepareSwapUseCase', () => {
         expect(executionStore.createPreparation).not.toHaveBeenCalled();
     });
 
+    it('honors the MFE selected 1Click provider for an internal recipient', async () => {
+        const oneClick: QuoteProviderPort = {
+            providerId: 'one-click',
+            requestQuotes: jest.fn().mockResolvedValue([
+                {
+                    providerId: 'one-click',
+                    executionMode: 'intent_sign',
+                    quoteHashes: [],
+                    originAsset: command.originAsset,
+                    destinationAsset: command.destinationAsset,
+                    amountIn: '1000000',
+                    amountOut: '2000000000000000000000000',
+                    expirationTime: command.deadline,
+                    executionPackage: {
+                        providerId: 'one-click',
+                        mode: 'intent_sign',
+                        protocol: 'near-intents',
+                        requiredAction: 'sign',
+                        payload: { intent: { standard: 'erc191', payload: '{}' } },
+                    },
+                },
+            ]),
+        };
+        const solver: QuoteProviderPort = { providerId: 'solver-relay', requestQuotes: jest.fn() };
+        const result = await createUseCase([oneClick, solver]).execute({ ...command, providerId: 'one-click' });
+        expect(result.providerId).toBe('one-click');
+        expect(solver.requestQuotes).not.toHaveBeenCalled();
+    });
+
     it('rejects a foreign recipient that is invalid for the destination network', async () => {
         const provider: QuoteProviderPort = {
             providerId: 'one-click',

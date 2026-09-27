@@ -4,9 +4,26 @@ import { OneClickApiHttpClient } from './one-click-api.http-client';
 
 describe('OneClickApiHttpClient', () => {
     const post = jest.fn();
+    const get = jest.fn();
 
     beforeEach(() => {
         post.mockReset();
+        get.mockReset();
+    });
+
+    it('queries swap status with the stored deposit address and memo', async () => {
+        const httpService = { axiosRef: { get } } as unknown as HttpService;
+        const configService = {
+            get: jest.fn((key: string) => (key === 'ONE_CLICK_API_KEY' ? 'api-key' : undefined)),
+        } as unknown as ConfigService;
+        const client = new OneClickApiHttpClient(httpService, configService);
+        get.mockResolvedValue({ data: { status: 'PROCESSING' } });
+
+        await expect(client.getSwapStatus('deposit.near', 'memo-1')).resolves.toEqual({ status: 'PROCESSING' });
+        expect(get).toHaveBeenCalledWith('v0/status', {
+            headers: { 'X-API-Key': 'api-key' },
+            params: { depositAddress: 'deposit.near', depositMemo: 'memo-1' },
+        });
     });
 
     it('uses X-API-Key authentication and calls the signed intent endpoints', async () => {

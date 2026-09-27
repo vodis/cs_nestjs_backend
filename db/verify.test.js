@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const { REQUIRED_TABLES, verifyState } = require('./verify');
 const balanceNetworkMigration = require('./migrations/20260830000100-add-balance-cache-network');
 const swapExecutionMigration = require('./migrations/20260923000100-create-swap-execution-state');
+const swapSettlementMigration = require('./migrations/20260927000100-add-swap-settlement-status');
 
 test('reports pending migrations and missing required tables', () => {
   const result = verifyState(
@@ -112,4 +113,21 @@ test('swap execution migration creates reversible idempotency state', async () =
     ['dropTable', 'swap_executions'],
     ['dropTable', 'swap_preparations'],
   ]);
+});
+
+test('swap settlement migration adds and removes the terminal status column', async () => {
+  const calls = [];
+  const queryInterface = {
+    addColumn: async (...args) => calls.push(['addColumn', ...args]),
+    removeColumn: async (...args) => calls.push(['removeColumn', ...args]),
+  };
+
+  await swapSettlementMigration.up(queryInterface, { STRING: 'STRING' });
+  assert.deepEqual(calls, [
+    ['addColumn', 'swap_preparations', 'settlement_status', { type: 'STRING', allowNull: true }],
+  ]);
+
+  calls.length = 0;
+  await swapSettlementMigration.down(queryInterface);
+  assert.deepEqual(calls, [['removeColumn', 'swap_preparations', 'settlement_status']]);
 });

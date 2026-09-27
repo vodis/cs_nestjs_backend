@@ -36,6 +36,22 @@ calling `POST /api/v1/swaps/execute`. Execution requires a Privy bearer token,
 an active linked wallet matching `userAddress`, and an `Idempotency-Key` header
 containing 8–128 letters, digits, dots, underscores, colons, or hyphens.
 Successful replays return the stored intent hash without resubmitting upstream.
+The optional `providerId` on prepare lets the wallet MFE request the 1Click
+route explicitly; the backend validates the request and forwards it to that
+registered provider.
+After submission, the authenticated `GET /api/v1/swaps/status/:preparationId`
+endpoint checks wallet ownership and queries 1Click using the stored quote's
+deposit address and memo. `intentHash` means 1Click accepted the signed intent;
+only a later `SUCCESS` status confirms settlement. The backend's idempotency
+claim prevents duplicate submissions through this API, while 1Click controls
+the actual spend of the user's Intents balance.
+Terminal settlement outcomes are recorded with an audit event and remain
+available through the status endpoint if 1Click becomes unavailable. `INTENTS`
+and `CONFIDENTIAL_INTENTS` recipients may be NEAR named accounts, NEAR implicit
+accounts, or EVM implicit accounts.
+Apply the nullable `swap_preparations.settlement_status` migration before deploying
+this version. The previous app version can run with the column present; reversing
+the migration removes recorded settlement outcomes.
 
 Production secrets and runtime env are injected by the orchestrator when it creates the container. Updating orchestrator env requires a redeploy; restarting an existing container is not enough to apply changed env.
 

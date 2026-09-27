@@ -20,6 +20,8 @@ type OneClickQuotePayload = {
     signature?: string;
     depositAddress?: string;
     deposit_address?: string;
+    depositMemo?: string;
+    deposit_memo?: string;
 };
 
 type OneClickQuoteResponse = {
@@ -49,7 +51,8 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
         }
 
         const depositAddress = quote.depositAddress ?? quote.deposit_address;
-        const isIntentDeposit = (command.depositType ?? this.defaultAccountType(command)) === 'INTENTS';
+        const depositMemo = quote.depositMemo ?? quote.deposit_memo;
+        const isIntentDeposit = (command.depositType ?? this.defaultAccountType(command)) !== 'ORIGIN_CHAIN';
         const generatedIntent =
             isIntentDeposit && depositAddress
                 ? await this.oneClickApiHttpClient.generateIntent({
@@ -78,6 +81,7 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
             quoteId: quote.quoteId ?? quote.quote_id ?? response.correlationId,
             signature: quote.signature ?? response.signature,
             depositAddress,
+            depositMemo,
         };
 
         return [
@@ -100,6 +104,7 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
                               intent: generatedIntent.intent,
                               correlationId: generatedIntent.correlationId,
                               depositAddress,
+                              depositMemo,
                           },
                       }
                     : depositAddress
@@ -111,6 +116,7 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
                             payload: {
                                 quoteId: providerMeta.quoteId,
                                 depositAddress,
+                                depositMemo,
                                 expiresAt: expirationTime,
                             },
                         }

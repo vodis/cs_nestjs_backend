@@ -64,7 +64,7 @@ export class PrepareSwapUseCase {
         const allowedModes =
             command.depositType === 'ORIGIN_CHAIN'
                 ? (['deposit_address'] as const)
-                : command.depositType === 'INTENTS'
+                : command.depositType === 'INTENTS' || command.depositType === 'CONFIDENTIAL_INTENTS'
                   ? (['intent_sign'] as const)
                   : undefined;
         const bestQuote = this.quoteSelectionPolicy.selectBestExecutableQuote(quotes, command.swapType, allowedModes);
@@ -115,9 +115,11 @@ export class PrepareSwapUseCase {
     }
 
     private async collectQuotes(command: SwapQuoteCommand) {
-        const providers = this.validationService.isExternalRecipient(command)
-            ? this.quoteProviders.filter((provider) => provider.supportsExternalRecipient)
-            : this.quoteProviders;
+        const providers = this.quoteProviders.filter(
+            (provider) =>
+                (!command.providerId || provider.providerId === command.providerId) &&
+                (!this.validationService.isExternalRecipient(command) || provider.supportsExternalRecipient),
+        );
         const settled = await Promise.allSettled(providers.map((provider) => provider.requestQuotes(command)));
 
         return settled
@@ -136,6 +138,7 @@ export class PrepareSwapUseCase {
 
     private swapMetadata(command: SwapQuoteCommand): Record<string, unknown> {
         return {
+            requestedProviderId: command.providerId,
             originAsset: command.originAsset,
             destinationAsset: command.destinationAsset,
             swapType: command.swapType,

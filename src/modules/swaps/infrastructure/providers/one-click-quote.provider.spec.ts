@@ -105,6 +105,42 @@ describe('OneClickQuoteProvider', () => {
         expect(client.createQuote).toHaveBeenCalledWith(expect.objectContaining({ dry: false }));
     });
 
+    it('generates a signed intent for a confidential Intents balance', async () => {
+        const client = {
+            createQuote: jest.fn().mockResolvedValue({
+                amountIn: '1000000',
+                amountOut: '900000',
+                depositAddress: 'private-deposit.near',
+                depositMemo: 'private-memo',
+            }),
+            generateIntent: jest.fn().mockResolvedValue({
+                intent: { standard: 'nep413', payload: { message: 'provider-generated' } },
+                correlationId: 'private-correlation',
+            }),
+        } as unknown as OneClickApiHttpClient;
+        const provider = new OneClickQuoteProvider(client);
+
+        const quotes = await provider.requestQuotes({
+            ...command,
+            depositType: 'CONFIDENTIAL_INTENTS',
+            refundType: 'CONFIDENTIAL_INTENTS',
+        });
+
+        expect(client.createQuote).toHaveBeenCalledWith(
+            expect.objectContaining({
+                depositType: 'CONFIDENTIAL_INTENTS',
+                refundType: 'CONFIDENTIAL_INTENTS',
+            }),
+        );
+        expect(client.generateIntent).toHaveBeenCalledWith(
+            expect.objectContaining({ depositAddress: 'private-deposit.near' }),
+        );
+        expect(quotes[0]).toEqual(expect.objectContaining({ executionMode: 'intent_sign' }));
+        expect(quotes[0].executionPackage?.payload).toEqual(
+            expect.objectContaining({ depositAddress: 'private-deposit.near', depositMemo: 'private-memo' }),
+        );
+    });
+
     it.each([
         ['near', 'alice.near', 'INTENTS'],
         ['evm', '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9', 'ORIGIN_CHAIN'],

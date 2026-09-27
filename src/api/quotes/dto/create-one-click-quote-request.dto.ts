@@ -42,20 +42,20 @@ export class CreateOneClickQuoteRequestDto {
     @Matches(/^\S+$/, { message: 'recipient must not contain whitespace' })
     recipient?: string;
 
-    @ApiPropertyOptional({ enum: ['DESTINATION_CHAIN', 'INTENTS'] })
+    @ApiPropertyOptional({ enum: ['DESTINATION_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'] })
     @IsOptional()
-    @IsIn(['DESTINATION_CHAIN', 'INTENTS'])
-    recipientType?: 'DESTINATION_CHAIN' | 'INTENTS';
+    @IsIn(['DESTINATION_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'])
+    recipientType?: 'DESTINATION_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
 
-    @ApiPropertyOptional({ enum: ['ORIGIN_CHAIN', 'INTENTS'] })
+    @ApiPropertyOptional({ enum: ['ORIGIN_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'] })
     @IsOptional()
-    @IsIn(['ORIGIN_CHAIN', 'INTENTS'])
-    depositType?: 'ORIGIN_CHAIN' | 'INTENTS';
+    @IsIn(['ORIGIN_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'])
+    depositType?: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
 
-    @ApiPropertyOptional({ enum: ['ORIGIN_CHAIN', 'INTENTS'] })
+    @ApiPropertyOptional({ enum: ['ORIGIN_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'] })
     @IsOptional()
-    @IsIn(['ORIGIN_CHAIN', 'INTENTS'])
-    refundType?: 'ORIGIN_CHAIN' | 'INTENTS';
+    @IsIn(['ORIGIN_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'])
+    refundType?: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
 
     @ApiProperty({ example: 'evm' })
     @IsIn(['evm', 'near'])

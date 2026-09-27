@@ -5,6 +5,7 @@ import { SEQUELIZE } from '../../../../database/database.tokens';
 import { ProductEvent } from '../../../../database/models/product-event.model';
 import { SwapExecution } from '../../../../database/models/swap-execution.model';
 import { SwapPreparation } from '../../../../database/models/swap-preparation.model';
+import type { OneClickTerminalStatus } from '../../domain/models/swap-settlement-status';
 import {
     StoredSwapPreparation,
     SwapExecutionClaim,
@@ -23,6 +24,44 @@ export class SequelizeSwapExecutionStore implements SwapExecutionStorePort {
     async findPreparation(id: string): Promise<StoredSwapPreparation | undefined> {
         const row = await SwapPreparation.findByPk(id);
         return row ? this.toPreparation(row) : undefined;
+    }
+
+    async recordTerminalSettlement(
+        preparationId: string,
+        status: OneClickTerminalStatus,
+    ): Promise<OneClickTerminalStatus> {
+        return this.sequelize.transaction(async (transaction) => {
+            const row = await SwapPreparation.findByPk(preparationId, { transaction, lock: transaction.LOCK.UPDATE });
+            if (!row) {
+                throw new Error(`Swap preparation ${preparationId} was not found`);
+            }
+            if (row.settlementStatus) {
+                return row.settlementStatus;
+            }
+            const execution = await SwapExecution.findOne({
+                where: { preparationId, status: 'succeeded' },
+                transaction,
+            });
+            await row.update({ settlementStatus: status }, { transaction });
+            await ProductEvent.create(
+                {
+                    eventName: 'swap.settlement',
+                    source: 'backend',
+                    status: status === 'SUCCESS' ? 'succeeded' : 'failed',
+                    userId: execution?.userId ?? null,
+                    requestId: execution?.traceId ?? null,
+                    reasonCode: status === 'SUCCESS' ? null : status,
+                    metadata: {
+                        preparationId,
+                        providerId: row.providerId,
+                        settlementStatus: status,
+                        ...(execution ? { executionId: execution.id, intentHash: execution.intentHash } : {}),
+                    },
+                },
+                { transaction },
+            );
+            return status;
+        });
     }
 
     async claimExecution(input: {
@@ -126,6 +165,7 @@ export class SequelizeSwapExecutionStore implements SwapExecutionStorePort {
             userChainType: row.userChainType,
             executionPayload: row.executionPayload,
             expiresAt: row.expiresAt,
+            settlementStatus: row.settlementStatus,
         };
     }
 }

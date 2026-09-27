@@ -1,5 +1,6 @@
 import { Column, CreatedAt, DataType, Model, Table } from 'sequelize-typescript';
 import type { SwapExecutionMode } from '../../modules/swaps/domain/models/swap-quote';
+import type { OneClickTerminalStatus } from '../../modules/swaps/domain/models/swap-settlement-status';
 
 @Table({ tableName: 'swap_preparations', underscored: true, updatedAt: false })
 export class SwapPreparation extends Model<SwapPreparation> {
@@ -23,6 +24,9 @@ export class SwapPreparation extends Model<SwapPreparation> {
 
     @Column({ type: DataType.DATE, allowNull: false })
     declare expiresAt: Date;
+
+    @Column({ type: DataType.STRING, allowNull: true })
+    declare settlementStatus?: OneClickTerminalStatus | null;
 
     @CreatedAt
     declare createdAt: Date;

@@ -1,4 +1,10 @@
-import { BadGatewayException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+    BadGatewayException,
+    ForbiddenException,
+    Inject,
+    Injectable,
+    ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProductEventsService } from '../../../../api/product-events/product-events.service';
 import { ApprovedPreparePackage } from '../../domain/models/approved-prepare-package';
@@ -10,6 +16,8 @@ import { PreparePackageBuilder } from '../services/prepare-package.builder';
 import { SwapQuoteSelectionPolicy } from '../policies/swap-quote-selection.policy';
 import { SwapSlippagePolicy } from '../policies/swap-slippage.policy';
 import { SWAP_EXECUTION_STORE, SwapExecutionStorePort } from '../ports/swap-execution-store.port';
+import { SWAP_WALLET_AUTHORIZATION, SwapWalletAuthorizationPort } from '../ports/swap-wallet-authorization.port';
+import type { AuthenticatedUser } from '../../../../api/auth/types';
 
 @Injectable()
 export class PrepareSwapUseCase {
@@ -27,10 +35,27 @@ export class PrepareSwapUseCase {
         private readonly productEvents: ProductEventsService,
         @Inject(SWAP_EXECUTION_STORE)
         private readonly executionStore: SwapExecutionStorePort,
+        @Inject(SWAP_WALLET_AUTHORIZATION)
+        private readonly walletAuthorization: SwapWalletAuthorizationPort,
     ) {}
 
-    async execute(command: SwapQuoteCommand): Promise<ApprovedPreparePackage> {
+    async execute(command: SwapQuoteCommand, actor: AuthenticatedUser): Promise<ApprovedPreparePackage> {
         this.validationService.validate(command, { maxSlippageBps: this.getMaxSlippageBps() });
+        if (!(await this.walletAuthorization.isOwnedByUser(actor.id, command.signerId, command.authMethod))) {
+            await this.productEvents.recordBestEffort({
+                eventName: 'swap.quote',
+                source: 'backend',
+                status: 'failed',
+                reasonCode: 'wallet_not_authorized',
+                userId: actor.id,
+                sessionId: actor.sessionId,
+                metadata: this.swapMetadata(command),
+            });
+            throw new ForbiddenException({
+                code: 'SWAP_WALLET_NOT_AUTHORIZED',
+                message: 'Swap preparation requires an active wallet owned by the authenticated user',
+            });
+        }
 
         const [originAsset, destinationAsset] = await Promise.all([
             this.assetRegistry.findById(command.originAsset),

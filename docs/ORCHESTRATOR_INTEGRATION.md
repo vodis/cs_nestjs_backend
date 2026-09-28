@@ -204,6 +204,16 @@ create a new account.
 
 ## Privy wallet ownership boundary
 
+Executable `POST /api/v1/swaps/prepare` requires a Privy bearer session and an
+active wallet link for `signerId` and `authMethod`. It returns
+`SWAP_WALLET_NOT_AUTHORIZED` before requesting an executable quote when the
+wallet is not linked. `POST /api/v1/swaps/execute` repeats this check; clients
+must not treat its typed 403 as an ambiguous provider submission. A network
+failure or unclassified submit response remains uncertain and requires status
+reconciliation before signing again.
+Denied preparation attempts record a `swap.quote` failure event with the
+authenticated user, session, and `wallet_not_authorized` reason code.
+
 The cross-repository decision is canonical in
 [`cs_orchestrator/docs/architecture/privy-wallet-ownership.md`](https://github.com/vodis/cs_orchestrator/blob/main/docs/architecture/privy-wallet-ownership.md).
 

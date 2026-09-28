@@ -32,15 +32,21 @@ export class SwapsController {
     ) {}
 
     @Post('prepare')
+    @UseGuards(PrivyAuthGuard)
+    @RequirePrivyBearer()
+    @ApiBearerAuth()
     @ApiResponse({
         status: 201,
         description:
             'Validate swap inputs, aggregate quotes from registered providers, and return an approved prepare package',
         type: PrepareSwapResponseDto,
     })
-    async prepareSwap(@Body() dto: PrepareSwapRequestDto): Promise<PrepareSwapResponseDto> {
+    async prepareSwap(
+        @Body() dto: PrepareSwapRequestDto,
+        @CurrentUser() user: AuthenticatedUser,
+    ): Promise<PrepareSwapResponseDto> {
         try {
-            const packageResult = await this.prepareSwapUseCase.execute(PrepareSwapMapper.toCommand(dto));
+            const packageResult = await this.prepareSwapUseCase.execute(PrepareSwapMapper.toCommand(dto), user);
 
             return {
                 data: PrepareSwapMapper.toResponseDto(packageResult),

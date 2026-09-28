@@ -31,10 +31,13 @@ pnpm run build
 ### Swap execution contract
 
 For signed-intent swaps, `POST /api/v1/swaps/prepare` returns a short-lived `preparationId` inside
-`executionPackage.payload`. Clients must return that payload unchanged when
-calling `POST /api/v1/swaps/execute`. Execution requires a Privy bearer token,
-an active linked wallet matching `userAddress`, and an `Idempotency-Key` header
-containing 8–128 letters, digits, dots, underscores, colons, or hyphens.
+`executionPackage.payload`. Preparation requires a Privy bearer token and an
+active linked wallet matching `signerId` and `authMethod`; an unlinked wallet
+receives `SWAP_WALLET_NOT_AUTHORIZED` before signing. Clients must return that
+payload unchanged when calling `POST /api/v1/swaps/execute`. Execution requires
+a Privy bearer token, an active linked wallet matching `userAddress`, and an
+`Idempotency-Key` header containing 8–128 letters, digits, dots, underscores,
+colons, or hyphens.
 Successful replays return the stored intent hash without resubmitting upstream.
 The optional `providerId` on prepare lets the wallet MFE request the 1Click
 route explicitly; the backend validates the request and forwards it to that

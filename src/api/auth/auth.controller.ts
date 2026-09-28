@@ -2,6 +2,8 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } fro
 import type { Request } from 'express';
 import { PrivySessionDto } from './dto/privy-session.dto';
 import { BindWalletDto } from './dto/wallet-binding.dto';
+import { WalletLinkChallengeDto, VerifyWalletLinkChallengeDto } from './dto/wallet-link.dto';
+import { WalletLinkService } from './wallet-link.service';
 import { CurrentUser } from './current-user.decorator';
 import { PrivyAuthGuard } from './privy-auth.guard';
 import { PrivyAuthService } from './privy-auth.service';
@@ -56,7 +58,10 @@ function serializeUser(user: AuthenticatedUser) {
 
 @Controller({ version: '1' })
 export class AuthController {
-    constructor(private readonly authService: PrivyAuthService) {}
+    constructor(
+        private readonly authService: PrivyAuthService,
+        private readonly walletLink: WalletLinkService,
+    ) {}
 
     @Post('auth/privy/session')
     async upsertPrivySession(@Req() request: RequestWithCookies, @Body() body: PrivySessionDto) {
@@ -104,6 +109,22 @@ export class AuthController {
     @UseGuards(PrivyAuthGuard)
     async bindWallet(@CurrentUser() user: AuthenticatedUser, @Body() body: BindWalletDto) {
         const wallet = await this.authService.bindWallet(user, body);
+        return { wallet: serializeWallet(wallet) };
+    }
+
+    @Post('wallets/link/challenge')
+    @UseGuards(PrivyAuthGuard)
+    createWalletLinkChallenge(@CurrentUser() user: AuthenticatedUser, @Body() body: WalletLinkChallengeDto) {
+        return this.walletLink.createChallenge(user, body.chainType, body.address);
+    }
+
+    @Post('wallets/link/verify')
+    @UseGuards(PrivyAuthGuard)
+    async verifyWalletLinkChallenge(
+        @CurrentUser() user: AuthenticatedUser,
+        @Body() body: VerifyWalletLinkChallengeDto,
+    ) {
+        const wallet = await this.walletLink.verifyChallenge(user, body);
         return { wallet: serializeWallet(wallet) };
     }
 

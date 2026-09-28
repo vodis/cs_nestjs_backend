@@ -30,6 +30,24 @@ pnpm run build
 
 ### Swap execution contract
 
+An authenticated NEAR wallet must be linked before executable swap preparation.
+`POST /api/v1/wallets/link/challenge` accepts `{chainType: "near", address}` and returns a five-minute
+NEP-413 challenge (`challengeId`, `message`, `recipient`, base64 `nonce`). The
+wallet signs those exact fields and sends `{challengeId, chainType: "near", proof: {publicKey, signature}}`
+to `POST /api/v1/wallets/link/verify`. The shared link service delegates proof
+verification to the NEAR verifier; other networks require their own verifier. It
+checks that the key currently has full access to the named NEAR account before
+reactivating or creating its wallet link. Challenges are user-bound and exact-proof
+retries are idempotent while the link remains active and the challenge is retained.
+A removed link needs a new proof. Expired challenges are retained for 24 hours,
+then cleaned up hourly across users.
+Apply `20260928000100-create-wallet-link-challenges.js` before deploying this
+API; the previous app version remains compatible with the additional table and
+nullable verification marker. Legacy NEAR links have no marker and cannot
+authorize swaps until the owner completes the new proof flow.
+Disconnecting a browser wallet clears only the local connection; deleting a
+wallet link revokes swap authorization until a new proof is completed.
+
 For signed-intent swaps, `POST /api/v1/swaps/prepare` returns a short-lived `preparationId` inside
 `executionPackage.payload`. Preparation requires a Privy bearer token and an
 active linked wallet matching `signerId` and `authMethod`; an unlinked wallet

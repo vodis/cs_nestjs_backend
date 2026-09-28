@@ -6,6 +6,7 @@ import { AuthAuditEvent } from './models/auth-audit-event.model';
 import { BalanceCacheEntry } from './models/balance-cache-entry.model';
 import { ProductEvent } from './models/product-event.model';
 import { WalletLink } from './models/wallet-link.model';
+import { WalletLinkChallenge } from './models/wallet-link-challenge.model';
 import { SEQUELIZE } from './database.tokens';
 import { InvestmentProfile } from './models/investment-profile.model';
 import { AgentConnection } from './models/agent-connection.model';
@@ -17,6 +18,7 @@ import { SwapExecution } from './models/swap-execution.model';
 const models = [
     AppUser,
     WalletLink,
+    WalletLinkChallenge,
     BalanceCacheEntry,
     AuthAuditEvent,
     ProductEvent,

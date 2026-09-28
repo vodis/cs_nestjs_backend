@@ -287,6 +287,7 @@ export class PrivyAuthService {
                 {
                     status: 'deleted',
                     deletedAt: now,
+                    ownershipVerifiedAt: null,
                     isPrimary: false,
                 },
                 { transaction },
@@ -399,6 +400,7 @@ export class PrivyAuthService {
                 source,
                 status: 'active',
                 deletedAt: null,
+                ownershipVerifiedAt: null,
                 isPrimary: wallet.isPrimary ?? true,
             },
             transaction,
@@ -412,6 +414,7 @@ export class PrivyAuthService {
                 source,
                 status: 'active',
                 deletedAt: null,
+                ownershipVerifiedAt: null,
                 isPrimary: wallet.isPrimary ?? walletLink.isPrimary,
             },
             { transaction },

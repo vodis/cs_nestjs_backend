@@ -40,6 +40,9 @@ export class WalletLink extends Model<WalletLink> {
     @Column({ type: DataType.DATE, allowNull: true })
     declare deletedAt?: Date | null;
 
+    @Column({ type: DataType.DATE, allowNull: true })
+    declare ownershipVerifiedAt?: Date | null;
+
     @CreatedAt
     declare createdAt: Date;
 

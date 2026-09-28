@@ -12,6 +12,7 @@ export class SwapWalletAuthorizationAdapter implements SwapWalletAuthorizationPo
                 address: address.trim().toLowerCase(),
                 status: 'active',
                 chainType: { [Op.in]: chainType === 'evm' ? ['evm', 'ethereum'] : ['near'] },
+                ...(chainType === 'near' ? { ownershipVerifiedAt: { [Op.ne]: null } } : {}),
             },
         });
         return Boolean(wallet);

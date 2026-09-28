@@ -310,6 +310,7 @@ describe('PrivyAuthService account lifecycle', () => {
             walletType: 'embedded',
             source: 'privy',
             status: 'active',
+            ownershipVerifiedAt: new Date(),
             isPrimary: true,
         });
         const second = await WalletLink.create({
@@ -341,6 +342,7 @@ describe('PrivyAuthService account lifecycle', () => {
         expect(result.promotedWallet?.id).toBe(second.id);
         expect(first.status).toBe('deleted');
         expect(first.deletedAt).toBeInstanceOf(Date);
+        expect(first.ownershipVerifiedAt).toBeNull();
         expect(first.isPrimary).toBe(false);
         expect(second.isPrimary).toBe(true);
         expect(visibleWallets.map((wallet) => wallet.id)).toEqual([second.id]);
@@ -361,6 +363,7 @@ describe('PrivyAuthService account lifecycle', () => {
             status: 'deleted',
             isPrimary: false,
             deletedAt: new Date('2026-06-22T12:00:00Z'),
+            ownershipVerifiedAt: new Date('2026-06-22T11:00:00Z'),
         });
 
         const rebound = await service.bindWallet(
@@ -382,6 +385,7 @@ describe('PrivyAuthService account lifecycle', () => {
         expect(rebound.id).toBe(deleted.id);
         expect(deleted.status).toBe('active');
         expect(deleted.deletedAt).toBeNull();
+        expect(deleted.ownershipVerifiedAt).toBeNull();
         expect(deleted.isPrimary).toBe(true);
     });
 });

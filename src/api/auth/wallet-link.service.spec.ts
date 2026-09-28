@@ -70,7 +70,11 @@ describe('WalletLinkService wallet-link incident regression', () => {
         ]);
     });
 
-    afterEach(async () => sequelize.close());
+    afterEach(async () => {
+        service.onModuleDestroy();
+        jest.useRealTimers();
+        await sequelize.close();
+    });
 
     const actor = (id: string) => ({
         id,
@@ -90,6 +94,7 @@ describe('WalletLinkService wallet-link incident regression', () => {
 
         expect(wallet.address).toBe('alice.near');
         expect(wallet.status).toBe('active');
+        expect(wallet.isPrimary).toBe(true);
         expect(wallet.ownershipVerifiedAt).toBeInstanceOf(Date);
         expect(rpc).toHaveBeenCalledWith(
             'near:mainnet',
@@ -111,6 +116,61 @@ describe('WalletLinkService wallet-link incident regression', () => {
             service.verifyChallenge(actor(user.id), { challengeId: challenge.challengeId, chainType: 'near', proof }),
         ).resolves.toMatchObject({ id: wallet.id });
         expect(await WalletLink.count()).toBe(1);
+    });
+
+    it('preserves an existing primary wallet when linking a NEAR wallet', async () => {
+        const primary = await WalletLink.create({
+            userId: user.id,
+            address: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9',
+            privyWalletId: 'privy-wallet-1',
+            chainType: 'ethereum',
+            walletType: 'embedded',
+            source: 'privy',
+            status: 'active',
+            isPrimary: true,
+        });
+        const challenge = await service.createChallenge(actor(user.id), 'near', 'alice.near');
+        const wallet = await service.verifyChallenge(actor(user.id), {
+            challengeId: challenge.challengeId,
+            chainType: 'near',
+            proof: signChallenge(challenge),
+        });
+
+        expect(wallet.isPrimary).toBe(false);
+        await primary.reload();
+        expect(primary.isPrimary).toBe(true);
+    });
+
+    it('removes old challenges for inactive users while retaining recent challenges', async () => {
+        const inactiveUser = await AppUser.create({ privyUserId: 'did:privy:inactive-user', status: 'active' });
+        const old = await service.createChallenge(actor(inactiveUser.id), 'near', 'alice.near');
+        const recent = await service.createChallenge(actor(inactiveUser.id), 'near', 'bob.near');
+        const now = new Date();
+        await WalletLinkChallenge.update(
+            { expiresAt: new Date(now.getTime() - 25 * 60 * 60 * 1000) },
+            { where: { id: old.challengeId } },
+        );
+        await WalletLinkChallenge.update(
+            { expiresAt: new Date(now.getTime() - 23 * 60 * 60 * 1000) },
+            { where: { id: recent.challengeId } },
+        );
+
+        jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+        await service.onModuleInit();
+
+        expect(await WalletLinkChallenge.findByPk(old.challengeId)).toBeNull();
+        expect(await WalletLinkChallenge.findByPk(recent.challengeId)).not.toBeNull();
+
+        const later = await WalletLinkChallenge.create({
+            id: '00000000-0000-4000-8000-000000000001',
+            userId: inactiveUser.id,
+            chainType: 'near',
+            address: 'charlie.near',
+            nonce: 'nonce',
+            expiresAt: new Date(now.getTime() - 25 * 60 * 60 * 1000),
+        });
+        await jest.advanceTimersByTimeAsync(60 * 60 * 1000);
+        expect(await WalletLinkChallenge.findByPk(later.id)).toBeNull();
     });
 
     it('rejects tampering, a different user, and a function-call key without creating a link', async () => {
@@ -170,6 +230,7 @@ describe('WalletLinkService wallet-link incident regression', () => {
         });
         expect(relinked.id).toBe(wallet.id);
         expect(relinked.status).toBe('active');
+        expect(relinked.isPrimary).toBe(true);
         expect(await WalletLink.count()).toBe(1);
     });
 

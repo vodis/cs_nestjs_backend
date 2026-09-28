@@ -38,7 +38,9 @@ to `POST /api/v1/wallets/link/verify`. The shared link service delegates proof
 verification to the NEAR verifier; other networks require their own verifier. It
 checks that the key currently has full access to the named NEAR account before
 reactivating or creating its wallet link. Challenges are user-bound and exact-proof
-retries are idempotent while the link remains active. A removed link needs a new proof.
+retries are idempotent while the link remains active and the challenge is retained.
+A removed link needs a new proof. Expired challenges are retained for 24 hours,
+then cleaned up hourly across users.
 Apply `20260928000100-create-wallet-link-challenges.js` before deploying this
 API; the previous app version remains compatible with the additional table and
 nullable verification marker. Legacy NEAR links have no marker and cannot

@@ -20,6 +20,7 @@ module.exports = {
       updated_at: { type: Sequelize.DATE, allowNull: false },
     });
     await queryInterface.addIndex('wallet_link_challenges', ['user_id', 'expires_at']);
+    await queryInterface.addIndex('wallet_link_challenges', ['expires_at']);
   },
 
   async down(queryInterface) {

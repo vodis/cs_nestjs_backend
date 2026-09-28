@@ -6,6 +6,9 @@ import {
     HttpStatus,
     Inject,
     Injectable,
+    Logger,
+    OnModuleDestroy,
+    OnModuleInit,
 } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'crypto';
 import { Op } from 'sequelize';
@@ -19,20 +22,42 @@ import type { AuthenticatedUser } from './types';
 import { WALLET_OWNERSHIP_VERIFIERS, WalletOwnershipVerifier } from './wallet-ownership-verifier';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const CHALLENGE_RETENTION_MS = 24 * 60 * 60 * 1000;
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 @Injectable()
-export class WalletLinkService {
+export class WalletLinkService implements OnModuleInit, OnModuleDestroy {
+    private readonly logger = new Logger(WalletLinkService.name);
+    private cleanupTimer?: NodeJS.Timeout;
+
     constructor(
         @Inject(SEQUELIZE) private readonly sequelize: Sequelize,
         @Inject(WALLET_OWNERSHIP_VERIFIERS) private readonly verifiers: WalletOwnershipVerifier[],
     ) {}
 
+    async onModuleInit(): Promise<void> {
+        await this.pruneExpiredChallenges();
+        this.cleanupTimer = setInterval(() => {
+            void this.pruneExpiredChallenges().catch((error: unknown) =>
+                this.logger.error('Wallet-link challenge cleanup failed', error),
+            );
+        }, CLEANUP_INTERVAL_MS);
+        this.cleanupTimer.unref();
+    }
+
+    onModuleDestroy(): void {
+        if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+    }
+
+    async pruneExpiredChallenges(now = new Date()): Promise<number> {
+        return WalletLinkChallenge.destroy({
+            where: { expiresAt: { [Op.lt]: new Date(now.getTime() - CHALLENGE_RETENTION_MS) } },
+        });
+    }
+
     async createChallenge(user: AuthenticatedUser, chainType: string, address: string) {
         const verifier = this.verifier(chainType);
         const account = verifier.normalizeAddress(address);
-        await WalletLinkChallenge.destroy({
-            where: { userId: user.id, expiresAt: { [Op.lt]: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
-        });
         const outstanding = await WalletLinkChallenge.count({
             where: { userId: user.id, consumedAt: null, expiresAt: { [Op.gt]: new Date() } },
         });
@@ -62,7 +87,7 @@ export class WalletLinkService {
         await verifier.verify(challenge, input.proof);
 
         return this.sequelize.transaction(async (transaction) => {
-            const account = await AppUser.findByPk(user.id, { transaction });
+            const account = await AppUser.findByPk(user.id, { transaction, lock: transaction.LOCK.UPDATE });
             if (account?.status !== 'active') throw new ForbiddenException('Account is not active');
             const current = await WalletLinkChallenge.findByPk(challenge.id, {
                 transaction,
@@ -73,6 +98,10 @@ export class WalletLinkService {
             if (current.expiresAt.getTime() <= Date.now())
                 throw new ConflictException('Wallet-link challenge is expired');
 
+            const primaryWallet = await WalletLink.findOne({
+                where: { userId: user.id, status: 'active', isPrimary: true },
+                transaction,
+            });
             const [wallet] = await WalletLink.findOrCreate({
                 where: { userId: user.id, address: challenge.address },
                 defaults: {
@@ -84,7 +113,7 @@ export class WalletLinkService {
                     walletType: 'external',
                     source: input.chainType,
                     status: 'active',
-                    isPrimary: false,
+                    isPrimary: !primaryWallet,
                 },
                 transaction,
             });
@@ -99,6 +128,7 @@ export class WalletLinkService {
                     walletType: 'external',
                     source: input.chainType,
                     ownershipVerifiedAt: new Date(),
+                    isPrimary: !primaryWallet || primaryWallet.id === wallet.id,
                 },
                 { transaction },
             );

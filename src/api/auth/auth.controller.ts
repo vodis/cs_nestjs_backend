@@ -31,6 +31,7 @@ function serializeWallet(wallet: {
     status: string;
     isPrimary: boolean;
     deletedAt?: Date | null;
+    ownershipVerifiedAt?: Date | null;
 }) {
     return {
         id: wallet.id,
@@ -42,6 +43,7 @@ function serializeWallet(wallet: {
         status: wallet.status,
         isPrimary: wallet.isPrimary,
         deletedAt: wallet.deletedAt?.toISOString() ?? null,
+        ...(wallet.chainType === 'near' ? { ownershipVerified: Boolean(wallet.ownershipVerifiedAt) } : {}),
     };
 }
 

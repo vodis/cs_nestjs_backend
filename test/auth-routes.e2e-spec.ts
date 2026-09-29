@@ -101,10 +101,9 @@ describe('Auth routes (e2e)', () => {
             .get('/api/v1/wallets')
             .set('Authorization', 'Bearer privy-token')
             .expect(200);
-        expect(response.body.wallets.map((linked: { ownershipVerified: boolean }) => linked.ownershipVerified)).toEqual([
-            false,
-            true,
-        ]);
+        expect(response.body.wallets.map((linked: { ownershipVerified: boolean }) => linked.ownershipVerified)).toEqual(
+            [false, true],
+        );
     });
 
     it('routes an authenticated NEAR wallet challenge to the ownership service', async () => {

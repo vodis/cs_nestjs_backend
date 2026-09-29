@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { AxiosError } from 'axios';
 import {
     OneClickApiHttpClient,
     OneClickQuoteRequest,
@@ -44,12 +43,6 @@ export class QuotesService {
                     message: error.message,
                     details: error.details,
                 });
-            }
-
-            const axiosError = error as AxiosError;
-
-            if (axiosError.response?.status && axiosError.response.status >= 400 && axiosError.response.status < 500) {
-                throw new BadRequestException(axiosError.response.data);
             }
 
             throw error;

@@ -1,6 +1,7 @@
 import { HttpService } from '@nestjs/axios';
+import { HttpException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OneClickApiHttpClient } from './one-click-api.http-client';
+import { OneClickApiHttpClient, OneClickQuoteRequest } from './one-click-api.http-client';
 
 describe('OneClickApiHttpClient', () => {
     const post = jest.fn();
@@ -90,5 +91,69 @@ describe('OneClickApiHttpClient', () => {
         expect(post).toHaveBeenCalledWith('v0/quote', expect.any(Object), {
             headers: { Authorization: 'Bearer jwt-token' },
         });
+    });
+
+    it('turns a rejected signed intent into a safe, definitive error', async () => {
+        const httpService = { axiosRef: { post } } as unknown as HttpService;
+        const configService = { get: jest.fn(() => 'staging-secret') } as unknown as ConfigService;
+        const client = new OneClickApiHttpClient(httpService, configService);
+        post.mockRejectedValue({
+            isAxiosError: true,
+            response: { status: 400, data: { message: 'signedData must match MultiPayload schema' } },
+            config: { headers: { Authorization: 'Bearer staging-secret' }, data: 'signed-payload' },
+        });
+
+        const error = await client.submitIntent({ type: 'swap_transfer', signedData: {} }).catch((caught) => caught);
+        expect(error.getStatus()).toBe(400);
+        expect(error.getResponse()).toMatchObject({ code: 'ONE_CLICK_SUBMISSION_REJECTED' });
+        expect(JSON.stringify(error)).not.toMatch(/staging-secret|signed-payload/);
+    });
+
+    it('preserves the existing v1 quote validation response without exposing the request', async () => {
+        const httpService = { axiosRef: { post } } as unknown as HttpService;
+        const configService = { get: jest.fn(() => 'staging-secret') } as unknown as ConfigService;
+        const client = new OneClickApiHttpClient(httpService, configService);
+        const providerError = { message: 'Unsupported asset pair', error: 'Bad Request', statusCode: 400 };
+        post.mockRejectedValue({
+            isAxiosError: true,
+            response: { status: 400, data: providerError },
+            config: { headers: { Authorization: 'Bearer staging-secret' } },
+        });
+
+        const request: OneClickQuoteRequest = {
+            dry: true,
+            swapType: 'EXACT_INPUT',
+            slippageTolerance: 50,
+            originAsset: 'nep141:wrap.near',
+            depositType: 'INTENTS',
+            destinationAsset: 'nep141:usdt.tether-token.near',
+            amount: '1000',
+            recipient: 'alice.near',
+            recipientType: 'INTENTS',
+            refundTo: 'alice.near',
+            refundType: 'INTENTS',
+            deadline: '2026-09-21T22:25:31.847Z',
+        };
+        const error = await client.createQuote(request).catch((caught) => caught);
+        if (!(error instanceof HttpException)) throw error;
+        expect(error.getStatus()).toBe(400);
+        expect(error.getResponse()).toEqual(providerError);
+        expect(JSON.stringify(error)).not.toContain('staging-secret');
+    });
+
+    it('does not expose a 1Click request or credential after an uncertain upstream failure', async () => {
+        const httpService = { axiosRef: { post } } as unknown as HttpService;
+        const configService = { get: jest.fn(() => 'staging-secret') } as unknown as ConfigService;
+        const client = new OneClickApiHttpClient(httpService, configService);
+        post.mockRejectedValue({
+            isAxiosError: true,
+            response: { status: 502 },
+            config: { headers: { Authorization: 'Bearer staging-secret' }, data: 'signed-payload' },
+        });
+
+        const error = await client.submitIntent({ type: 'swap_transfer', signedData: {} }).catch((caught) => caught);
+        expect(error.getStatus()).toBe(502);
+        expect(error.getResponse()).toMatchObject({ code: 'ONE_CLICK_UPSTREAM_ERROR' });
+        expect(JSON.stringify(error)).not.toMatch(/staging-secret|signed-payload/);
     });
 });

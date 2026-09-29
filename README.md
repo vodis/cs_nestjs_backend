@@ -61,6 +61,11 @@ a Privy bearer token, an active linked wallet matching `userAddress`, and an
 `Idempotency-Key` header containing 8–128 letters, digits, dots, underscores,
 colons, or hyphens.
 Successful replays return the stored intent hash without resubmitting upstream.
+An HTTP 400 from 1Click's signed-intent endpoint is returned as
+`ONE_CLICK_SUBMISSION_REJECTED`; the signed intent was rejected and the client
+must not describe the response as lost. Other upstream failures return
+`ONE_CLICK_UPSTREAM_ERROR` and require status reconciliation before another
+attempt. Provider errors are mapped without logging credentials or signed data.
 The optional `providerId` on prepare lets the wallet MFE request the 1Click
 route explicitly; the backend validates the request and forwards it to that
 registered provider.

@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Injectable } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { isAxiosError } from 'axios';
+import type { AxiosResponse } from 'axios';
 import { OneClickTokenDto } from './dto/one-click-token.dto';
 import { ConfigService } from '@nestjs/config';
 import type { OneClickSwapStatus } from '../../modules/swaps/domain/models/swap-settlement-status';
@@ -51,43 +53,68 @@ export class OneClickApiHttpClient {
     ) {}
 
     async getTokens(): Promise<OneClickTokenDto[]> {
-        const { data } = await this.httpServer.axiosRef.get('v0/tokens');
-        return data;
+        return this.safeResponse(this.httpServer.axiosRef.get('v0/tokens'));
     }
 
     async createQuote(payload: OneClickQuoteRequest): Promise<unknown> {
-        const { data } = await this.httpServer.axiosRef.post('v0/quote', payload, { headers: this.authHeaders() });
-        return data;
+        return this.safeResponse(
+            this.httpServer.axiosRef.post('v0/quote', payload, { headers: this.authHeaders() }),
+            'quote',
+        );
     }
 
     async generateIntent(payload: OneClickGenerateIntentRequest): Promise<OneClickGenerateIntentResponse> {
-        const { data } = await this.httpServer.axiosRef.post<OneClickGenerateIntentResponse>(
-            'v0/generate-intent',
-            payload,
-            {
+        return this.safeResponse(
+            this.httpServer.axiosRef.post<OneClickGenerateIntentResponse>('v0/generate-intent', payload, {
                 headers: this.authHeaders(),
-            },
+            }),
         );
-        return data;
     }
 
     async submitIntent(payload: OneClickSubmitIntentRequest): Promise<OneClickSubmitIntentResponse> {
-        const { data } = await this.httpServer.axiosRef.post<OneClickSubmitIntentResponse>(
-            'v0/submit-intent',
-            payload,
-            {
+        return this.safeResponse(
+            this.httpServer.axiosRef.post<OneClickSubmitIntentResponse>('v0/submit-intent', payload, {
                 headers: this.authHeaders(),
-            },
+            }),
+            'submit',
         );
-        return data;
     }
 
     async getSwapStatus(depositAddress: string, depositMemo?: string): Promise<{ status: OneClickSwapStatus }> {
-        const { data } = await this.httpServer.axiosRef.get<{ status: OneClickSwapStatus }>('v0/status', {
-            headers: this.authHeaders(),
-            params: { depositAddress, ...(depositMemo ? { depositMemo } : {}) },
-        });
-        return data;
+        return this.safeResponse(
+            this.httpServer.axiosRef.get<{ status: OneClickSwapStatus }>('v0/status', {
+                headers: this.authHeaders(),
+                params: { depositAddress, ...(depositMemo ? { depositMemo } : {}) },
+            }),
+        );
+    }
+
+    private async safeResponse<T>(request: Promise<AxiosResponse<T>>, rejection?: 'quote' | 'submit'): Promise<T> {
+        try {
+            const { data } = await request;
+            return data;
+        } catch (error) {
+            // Axios errors contain authorization headers and signed request bodies.
+            if (
+                isAxiosError(error) &&
+                error.response &&
+                rejection === 'quote' &&
+                error.response.status >= 400 &&
+                error.response.status < 500
+            ) {
+                throw new BadRequestException(error.response.data);
+            }
+            if (isAxiosError(error) && error.response?.status === 400 && rejection === 'submit') {
+                throw new BadRequestException({
+                    code: 'ONE_CLICK_SUBMISSION_REJECTED',
+                    message: '1Click rejected the signed intent',
+                });
+            }
+            throw new BadGatewayException({
+                code: 'ONE_CLICK_UPSTREAM_ERROR',
+                message: '1Click request failed',
+            });
+        }
     }
 
     private authHeaders(): Record<string, string> | undefined {

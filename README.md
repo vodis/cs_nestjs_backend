@@ -31,6 +31,10 @@ pnpm run build
 ### Swap execution contract
 
 An authenticated NEAR wallet must be linked before executable swap preparation.
+Wallet responses expose `ownershipVerified` for NEAR links so clients can show
+whether the explicit ownership proof is still required. This flag is derived
+from the stored verification marker; the backend continues to enforce proof
+for swap authorization.
 `POST /api/v1/wallets/link/challenge` accepts `{chainType: "near", address}` and returns a five-minute
 NEP-413 challenge (`challengeId`, `message`, `recipient`, base64 `nonce`). The
 wallet signs those exact fields and sends `{challengeId, chainType: "near", proof: {publicKey, signature}}`

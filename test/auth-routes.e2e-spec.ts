@@ -19,6 +19,7 @@ describe('Auth routes (e2e)', () => {
     const authService = {
         authenticateToken: jest.fn(),
         enablePasskey: jest.fn(),
+        walletsForUser: jest.fn(),
     };
     const nearWalletLink = {
         createChallenge: jest.fn(),
@@ -78,6 +79,31 @@ describe('Auth routes (e2e)', () => {
             .send({ chainType: 'near', address: 'alice.near' })
             .expect(401);
         expect(nearWalletLink.createChallenge).not.toHaveBeenCalled();
+    });
+
+    it('reports whether NEAR links have a verified ownership proof', async () => {
+        const wallet = {
+            id: 'wallet-1',
+            privyWalletId: 'alice.near',
+            address: 'alice.near',
+            chainType: 'near',
+            walletType: 'external',
+            source: 'near',
+            status: 'active',
+            isPrimary: false,
+            deletedAt: null,
+        };
+        authService.walletsForUser.mockResolvedValue([
+            { ...wallet, ownershipVerifiedAt: null },
+            { ...wallet, id: 'wallet-2', address: 'bob.near', ownershipVerifiedAt: new Date() },
+        ]);
+        const response = await request(app.getHttpServer())
+            .get('/api/v1/wallets')
+            .set('Authorization', 'Bearer privy-token')
+            .expect(200);
+        expect(response.body.wallets.map((linked: { ownershipVerified: boolean }) => linked.ownershipVerified)).toEqual(
+            [false, true],
+        );
     });
 
     it('routes an authenticated NEAR wallet challenge to the ownership service', async () => {

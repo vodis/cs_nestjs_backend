@@ -12,6 +12,13 @@ describe('QuotesService', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        assetsService.findAssetById.mockResolvedValue({
+            assetId: 'nep141:wrap.near',
+            defuseAssetId: 'nep141:wrap.near',
+            symbol: 'NEAR',
+            decimals: 24,
+            blockchain: 'near',
+        });
     });
 
     it('maps client quote payload to 1Click quote request', async () => {
@@ -28,6 +35,7 @@ describe('QuotesService', () => {
             userAddress: '0x380B8Fa1eBFe8a652Dbb55c5a7DEc2C683BbD8b9',
             authMethod: 'evm',
             swapType: 'EXACT_INPUT',
+            recipientType: 'INTENTS',
             isConfidential: false,
             isAuthenticated: true,
         });
@@ -41,7 +49,7 @@ describe('QuotesService', () => {
             destinationAsset: 'nep141:wrap.near',
             amount: '1000000',
             recipient: '0x380B8Fa1eBFe8a652Dbb55c5a7DEc2C683BbD8b9',
-            recipientType: 'DESTINATION_CHAIN',
+            recipientType: 'INTENTS',
             refundTo: '0x380B8Fa1eBFe8a652Dbb55c5a7DEc2C683BbD8b9',
             refundType: 'ORIGIN_CHAIN',
             deadline: '2026-06-05T22:16:58.776Z',
@@ -156,25 +164,27 @@ describe('QuotesService', () => {
         expect(oneClickApiHttpClient.createQuote).not.toHaveBeenCalled();
     });
 
-    it('treats checksummed and lowercase EVM signer recipients as equivalent', async () => {
+    it('validates same-account recipients against the destination network (Sep 30 swap)', async () => {
         oneClickApiHttpClient.createQuote.mockResolvedValue({ quote: { amountOut: '1' } });
         const service = new QuotesService(oneClickApiHttpClient, assetsService);
 
-        await service.createOneClickQuote({
-            dry: true,
-            slippageTolerance: 50,
-            originAsset: 'nep141:eth-usdc.omft.near',
-            destinationAsset: 'nep141:wrap.near',
-            amount: '1000000',
-            deadline: '2026-10-05T22:16:58.776Z',
-            userAddress: '0x380B8Fa1eBFe8a652Dbb55c5a7DEc2C683BbD8b9',
-            recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9',
-            recipientType: 'DESTINATION_CHAIN',
-            authMethod: 'evm',
-            swapType: 'EXACT_INPUT',
-        });
+        await expect(
+            service.createOneClickQuote({
+                dry: true,
+                slippageTolerance: 50,
+                originAsset: 'nep141:eth-usdc.omft.near',
+                destinationAsset: 'nep141:wrap.near',
+                amount: '1000000',
+                deadline: '2026-10-05T22:16:58.776Z',
+                userAddress: '0x380B8Fa1eBFe8a652Dbb55c5a7DEc2C683BbD8b9',
+                recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9',
+                recipientType: 'DESTINATION_CHAIN',
+                authMethod: 'evm',
+                swapType: 'EXACT_INPUT',
+            }),
+        ).rejects.toMatchObject({ response: expect.objectContaining({ code: 'INVALID_RECIPIENT' }) });
 
-        expect(assetsService.findAssetById).not.toHaveBeenCalled();
-        expect(oneClickApiHttpClient.createQuote).toHaveBeenCalled();
+        expect(assetsService.findAssetById).toHaveBeenCalled();
+        expect(oneClickApiHttpClient.createQuote).not.toHaveBeenCalled();
     });
 });

@@ -15,6 +15,8 @@ import { ASSET_REGISTRY_PORT } from '../src/modules/swaps/application/ports/asse
 import { QUOTE_PROVIDERS, QuoteProviderPort } from '../src/modules/swaps/application/ports/quote-provider.port';
 import { SwapQuote } from '../src/modules/swaps/domain/models/swap-quote';
 import { PrivyAuthGuard } from '../src/api/auth/privy-auth.guard';
+import { WalletLinkService } from '../src/api/auth/wallet-link.service';
+import { ProductEventsService } from '../src/api/product-events/product-events.service';
 import { PrivyAuthService } from '../src/api/auth/privy-auth.service';
 import {
     SWAP_EXECUTION_STORE,
@@ -73,7 +75,7 @@ function validPreparePayload(overrides: Record<string, unknown> = {}) {
         deadline: futureDeadline(),
         signerId: EVM_SIGNER,
         recipient: EVM_SIGNER,
-        recipientType: 'DESTINATION_CHAIN',
+        recipientType: 'INTENTS',
         authMethod: 'evm',
         ...overrides,
     };
@@ -122,7 +124,10 @@ async function createSwapsApp(options: CreateSwapsAppOptions = {}): Promise<INes
     let preparationSequence = 0;
     const executionStore: SwapExecutionStorePort = {
         createPreparation: jest.fn(async (input) => {
-            const preparation = { id: `preparation-${++preparationSequence}`, ...input };
+            const preparation = {
+                id: `00000000-0000-4000-8000-${String(++preparationSequence).padStart(12, '0')}`,
+                ...input,
+            };
             preparations.set(preparation.id, preparation);
             return preparation;
         }),
@@ -186,6 +191,11 @@ async function createSwapsApp(options: CreateSwapsAppOptions = {}): Promise<INes
             SwapsModule,
         ],
     })
+        // These HTTP contract tests replace persistence ports and must not start DB maintenance jobs.
+        .overrideProvider(WalletLinkService)
+        .useValue({})
+        .overrideProvider(ProductEventsService)
+        .useValue({ recordBestEffort: jest.fn() })
         .overrideProvider(ASSET_REGISTRY_PORT)
         .useValue(defaultAssetRegistry(options.assets))
         .overrideProvider(QUOTE_PROVIDERS)
@@ -402,7 +412,9 @@ describe('Swaps (e2e)', () => {
         });
 
         it('returns a deposit-address execution package when origin-chain custody is requested', async () => {
+            const getSwapStatus = jest.fn().mockResolvedValue({ status: 'SUCCESS' });
             app = await createSwapsApp({
+                oneClick: { getSwapStatus },
                 providers: [
                     {
                         providerId: 'one-click',
@@ -433,6 +445,10 @@ describe('Swaps (e2e)', () => {
                 .post('/api/v1/swaps/prepare')
                 .send(
                     validPreparePayload({
+                        signerId: NEAR_SIGNER,
+                        recipient: NEAR_SIGNER,
+                        recipientType: 'DESTINATION_CHAIN',
+                        authMethod: 'near',
                         depositType: 'ORIGIN_CHAIN',
                         refundType: 'ORIGIN_CHAIN',
                     }),
@@ -447,8 +463,14 @@ describe('Swaps (e2e)', () => {
                 requiredAction: 'deposit',
                 payload: {
                     depositAddress: 'one-click-deposit.near',
+                    preparationId: '00000000-0000-4000-8000-000000000001',
                 },
             });
+            await request(app.getHttpServer())
+                .get('/api/v1/swaps/status/00000000-0000-4000-8000-000000000001')
+                .expect(200)
+                .expect({ data: { status: 'SUCCESS' } });
+            expect(getSwapStatus).toHaveBeenCalledWith('one-click-deposit.near', undefined);
         });
 
         it('succeeds when one provider fails but another returns executable quotes', async () => {
@@ -830,6 +852,7 @@ describe('Swaps (e2e)', () => {
                     validPreparePayload({
                         destinationAsset: SOL_DESTINATION_ASSET,
                         recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b8',
+                        recipientType: 'DESTINATION_CHAIN',
                     }),
                 )
                 .expect(400);

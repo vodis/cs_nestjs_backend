@@ -27,7 +27,11 @@ export class PreparePackageBuilder {
             amountIn: quote.amountIn,
             amountOut: quote.amountOut,
             slippageTolerance: command.slippageTolerance,
-            quoteExpiration: quote.expirationTime,
+            // A provider's late-deposit window must not extend the user's authorization.
+            quoteExpiration:
+                Date.parse(quote.expirationTime) > Date.parse(command.deadline)
+                    ? command.deadline
+                    : quote.expirationTime,
             providerId: quote.providerId,
             executionPackage:
                 quote.executionPackage ??

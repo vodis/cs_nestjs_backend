@@ -21,19 +21,17 @@ export class QuotesService {
         try {
             const request = this.toOneClickQuoteRequest(dto);
 
-            if (!this.addressValidationService.areEquivalent(dto.authMethod, request.recipient, dto.userAddress)) {
-                const destinationAsset = await this.assetsService.findAssetById(dto.destinationAsset);
-                if (!destinationAsset) {
-                    throw new SwapValidationError('UNSUPPORTED_ASSET', 'Asset is not in the server allowlist', {
-                        assetId: dto.destinationAsset,
-                    });
-                }
-                this.addressValidationService.assertExternalRecipient(
-                    request.recipient,
-                    request.recipientType,
-                    destinationAsset.blockchain,
-                );
+            const destinationAsset = await this.assetsService.findAssetById(dto.destinationAsset);
+            if (!destinationAsset) {
+                throw new SwapValidationError('UNSUPPORTED_ASSET', 'Asset is not in the server allowlist', {
+                    assetId: dto.destinationAsset,
+                });
             }
+            this.addressValidationService.assertExternalRecipient(
+                request.recipient,
+                request.recipientType,
+                destinationAsset.blockchain,
+            );
 
             return await this.oneClickApiHttpClient.createQuote(request);
         } catch (error) {

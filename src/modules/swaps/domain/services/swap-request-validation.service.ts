@@ -30,10 +30,6 @@ export class SwapRequestValidationService {
     }
 
     assertExternalRecipientSupported(command: SwapQuoteCommand, destinationAsset: AssetRegistryEntry): void {
-        if (this.addressValidationService.areEquivalent(command.authMethod, command.recipient, command.signerId)) {
-            return;
-        }
-
         this.addressValidationService.assertExternalRecipient(
             command.recipient,
             command.recipientType,

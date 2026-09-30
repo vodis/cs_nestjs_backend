@@ -19,7 +19,7 @@ describe('PrepareSwapUseCase', () => {
         deadline: new Date(Date.now() + 60_000).toISOString(),
         signerId: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9',
         recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b9',
-        recipientType: 'DESTINATION_CHAIN',
+        recipientType: 'INTENTS',
         depositType: 'INTENTS',
         refundType: 'INTENTS',
         authMethod: 'evm',
@@ -191,7 +191,10 @@ describe('PrepareSwapUseCase', () => {
         expect(internalProvider.requestQuotes).not.toHaveBeenCalled();
         expect(recipientProvider.requestQuotes).toHaveBeenCalled();
         expect(result.providerId).toBe('one-click');
-        expect(executionStore.createPreparation).not.toHaveBeenCalled();
+        expect(result.executionPackage.payload.preparationId).toBe('preparation-1');
+        expect(executionStore.createPreparation).toHaveBeenCalledWith(
+            expect.objectContaining({ executionMode: 'deposit_address' }),
+        );
     });
 
     it('honors the MFE selected 1Click provider for an internal recipient', async () => {
@@ -236,6 +239,7 @@ describe('PrepareSwapUseCase', () => {
                     ...command,
                     destinationAsset: 'nep141:sol-usdc.omft.near',
                     recipient: '0x380b8fa1ebfe8a652dbb55c5a7dec2c683bbd8b8',
+                    recipientType: 'DESTINATION_CHAIN',
                 },
                 actor,
             ),

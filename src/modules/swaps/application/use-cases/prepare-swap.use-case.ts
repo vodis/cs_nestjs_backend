@@ -108,7 +108,7 @@ export class PrepareSwapUseCase {
                 message: 'Selected swap quote has an invalid or expired execution deadline',
             });
         }
-        if (packageResult.executionPackage.mode === 'intent_sign') {
+        if (['intent_sign', 'deposit_address'].includes(packageResult.executionPackage.mode)) {
             const preparation = await this.executionStore.createPreparation({
                 providerId: packageResult.providerId,
                 executionMode: packageResult.executionPackage.mode,

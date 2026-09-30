@@ -52,7 +52,7 @@ authorize swaps until the owner completes the new proof flow.
 Disconnecting a browser wallet clears only the local connection; deleting a
 wallet link revokes swap authorization until a new proof is completed.
 
-For signed-intent swaps, `POST /api/v1/swaps/prepare` returns a short-lived `preparationId` inside
+For signed-intent and origin-chain deposit swaps, `POST /api/v1/swaps/prepare` returns a short-lived `preparationId` inside
 `executionPackage.payload`. Preparation requires a Privy bearer token and an
 active linked wallet matching `signerId` and `authMethod`; an unlinked wallet
 receives `SWAP_WALLET_NOT_AUTHORIZED` before signing. Clients must return that
@@ -75,6 +75,18 @@ deposit address and memo. `intentHash` means 1Click accepted the signed intent;
 only a later `SUCCESS` status confirms settlement. The backend's idempotency
 claim prevents duplicate submissions through this API, while 1Click controls
 the actual spend of the user's Intents balance.
+Native NEAR wallet swaps request `depositType: ORIGIN_CHAIN` and
+`refundType: ORIGIN_CHAIN`, with `recipientType: DESTINATION_CHAIN` for USDC
+paid to the NEAR wallet. An Intents transfer spends only the balance already
+held by `intents.near`, not the wallet's native NEAR. Deposit preparations also
+receive a stored `preparationId` for authenticated settlement tracking; a wallet
+transfer hash is not evidence of swap success. Preparation expiry is capped at
+the requested deadline, even if 1Click returns a longer late-deposit window.
+Recipient validation applies to self-transfers as well as other recipients.
+Amounts remain atomic integer strings and slippage remains in basis points.
+No database migration is required for these routing and expiry corrections;
+deploy the backend before the coordinated host and wallet MFE updates.
+
 Terminal settlement outcomes are recorded with an audit event and remain
 available through the status endpoint if 1Click becomes unavailable. `INTENTS`
 and `CONFIDENTIAL_INTENTS` recipients may be NEAR named accounts, NEAR implicit

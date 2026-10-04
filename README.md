@@ -109,3 +109,19 @@ master  -> production environment
 ```
 
 See [docs/ORCHESTRATOR_INTEGRATION.md](./docs/ORCHESTRATOR_INTEGRATION.md) for CI/deploy contract details.
+
+### Active wallet persistence
+
+`WalletLink.isPrimary` is the account's persisted wallet preference. Registration
+and session restoration preserve the existing primary, including legacy requests
+with `isPrimary: true`; select explicitly with
+`PATCH /api/v1/wallets/:walletId/primary`. Registration selects a wallet only when
+no active primary exists. Selection, binding and removal lock the user's row.
+Removing the primary promotes the oldest active wallet (ID breaks timestamp ties).
+
+`POST /api/v1/wallets` accepts optional `restoreOnly: true` for automatic binding;
+it rejects removed links instead of reactivating them. Session-attached wallet
+restoration applies the same rule. Explicit binding retains relinking support.
+No schema migration is needed. Deploy this protection before the wallet MFE and
+host selection-capability updates; provider connection status is never a reason
+to change the backend preference.

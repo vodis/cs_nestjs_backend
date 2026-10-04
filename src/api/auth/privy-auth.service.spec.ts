@@ -388,4 +388,79 @@ describe('PrivyAuthService account lifecycle', () => {
         expect(deleted.ownershipVerifiedAt).toBeNull();
         expect(deleted.isPrimary).toBe(true);
     });
+    it('active-wallet persistence: repeated embedded registration and login preserve the selected NEAR wallet', async () => {
+        const user = await AppUser.create({ privyUserId: 'did:privy:user-1', status: 'active' });
+        const actor = { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false };
+        const embedded = {
+            address: '0xa000000000000000000000000000000000000001',
+            chainType: 'ethereum' as const,
+            walletType: 'embedded' as const,
+        };
+        const first = await service.bindWallet(actor, embedded);
+        expect(first.isPrimary).toBe(true);
+        const near = await WalletLink.create({
+            userId: user.id,
+            address: 'active.near',
+            privyWalletId: 'near',
+            chainType: 'near',
+            walletType: 'external',
+            source: 'near',
+            status: 'active',
+            isPrimary: false,
+        });
+        await service.setPrimaryWallet(actor, near.id);
+        for (let reload = 0; reload < 3; reload++) {
+            const rebound = await service.bindWallet(actor, { ...embedded, isPrimary: true });
+            expect(rebound.isPrimary).toBe(false);
+            const session = await service.upsertSession('token', { wallet: { ...embedded, isPrimary: true } });
+            expect(session.wallets.filter((wallet) => wallet.isPrimary).map((wallet) => wallet.id)).toEqual([near.id]);
+        }
+        const another = await service.bindWallet(actor, {
+            ...embedded,
+            address: '0xb000000000000000000000000000000000000001',
+        });
+        expect(another.isPrimary).toBe(false);
+        await service.deleteWallet(actor, near.id);
+        expect(
+            (await service.walletsForUser(user.id)).filter((wallet) => wallet.isPrimary).map((wallet) => wallet.id),
+        ).toEqual([first.id]);
+    });
+
+    it('active-wallet persistence: automatic restore cannot resurrect a removed embedded wallet', async () => {
+        const user = await AppUser.create({ privyUserId: 'did:privy:user-1', status: 'active' });
+        const actor = { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false };
+        const input = {
+            address: '0xa000000000000000000000000000000000000001',
+            chainType: 'ethereum' as const,
+            walletType: 'embedded' as const,
+        };
+        const wallet = await service.bindWallet(actor, input);
+        await service.deleteWallet(actor, wallet.id);
+        expect(await service.walletsForUser(user.id)).toEqual([]);
+        await expect(service.bindWallet(actor, { ...input, restoreOnly: true })).rejects.toThrow('Removed wallet');
+        await expect(service.upsertSession('token', { wallet: input })).rejects.toThrow('Removed wallet');
+        expect(await service.walletsForUser(user.id)).toEqual([]);
+        expect((await service.bindWallet(actor, input)).isPrimary).toBe(true);
+    });
+    it('active-wallet removal breaks equal creation timestamps by wallet ID', async () => {
+        const user = await AppUser.create({ privyUserId: 'did:privy:user-1', status: 'active' });
+        const actor = { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false };
+        const primary = await service.bindWallet(actor, { address: '0xa000000000000000000000000000000000000001' });
+        for (const suffix of ['2', '1']) {
+            await WalletLink.create({
+                id: `00000000-0000-4000-8000-00000000000${suffix}`,
+                userId: user.id,
+                privyWalletId: suffix,
+                address: `${suffix}.near`,
+                chainType: 'near',
+                walletType: 'external',
+                source: 'near',
+                status: 'active',
+                isPrimary: false,
+                createdAt: new Date('2026-01-01T00:00:00Z'),
+            });
+        }
+        await service.deleteWallet(actor, primary.id);
+        expect((await service.walletsForUser(user.id)).find((wallet) => wallet.isPrimary)?.address).toBe('1.near');
+    });
 });

@@ -39,5 +39,10 @@ export class BindWalletDto {
 
     @IsOptional()
     @IsBoolean()
+    /** @deprecated Selection changes use PATCH wallets/:walletId/primary. */
     isPrimary?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    restoreOnly?: boolean;
 }

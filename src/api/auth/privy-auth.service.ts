@@ -59,7 +59,11 @@ export class PrivyAuthService {
 
         return this.sequelize.transaction(async (transaction) => {
             const now = new Date();
-            let user = await AppUser.findOne({ where: { privyUserId: claims.sub }, transaction });
+            let user = await AppUser.findOne({
+                where: { privyUserId: claims.sub },
+                transaction,
+                lock: transaction.LOCK.UPDATE,
+            });
 
             if (user?.status === 'deleted') {
                 throw new ForbiddenException('Privy account is deleted');
@@ -101,7 +105,7 @@ export class PrivyAuthService {
             );
 
             if (body.wallet) {
-                await this.upsertWallet(user.id, body.wallet, transaction);
+                await this.upsertWallet(user.id, { ...body.wallet, restoreOnly: true }, transaction);
             }
 
             await AuthAuditEvent.create(
@@ -215,8 +219,6 @@ export class PrivyAuthService {
     async bindWallet(user: AuthenticatedUser, body: BindWalletDto): Promise<WalletLink> {
         await this.walletOwnership.assertOwned(user.privyUserId, body);
         return this.sequelize.transaction(async (transaction) => {
-            await this.assertActiveUser(user.id, transaction);
-
             const wallet = await this.upsertWallet(user.id, body, transaction);
             await AuthAuditEvent.create(
                 {
@@ -297,7 +299,10 @@ export class PrivyAuthService {
             if (wasPrimary) {
                 promotedWallet = await WalletLink.findOne({
                     where: { userId: user.id, status: 'active' },
-                    order: [['createdAt', 'ASC']],
+                    order: [
+                        ['createdAt', 'ASC'],
+                        ['id', 'ASC'],
+                    ],
                     transaction,
                 });
 
@@ -389,6 +394,15 @@ export class PrivyAuthService {
         const walletType = wallet.walletType || 'embedded';
         const source = this.resolveWalletSource(walletType, wallet.source);
         const address = this.normalizeWalletAddress(wallet.address, chainType);
+        await this.assertActiveUser(userId, transaction);
+        const existing = await WalletLink.findOne({ where: { userId, address }, transaction });
+        if ('restoreOnly' in wallet && wallet.restoreOnly && existing?.status === 'deleted') {
+            throw new NotFoundException('Removed wallet must be explicitly linked again');
+        }
+        const primary = await WalletLink.findOne({
+            where: { userId, status: 'active', isPrimary: true },
+            transaction,
+        });
         const [walletLink] = await WalletLink.findOrCreate({
             where: { userId, address },
             defaults: {
@@ -401,7 +415,7 @@ export class PrivyAuthService {
                 status: 'active',
                 deletedAt: null,
                 ownershipVerifiedAt: null,
-                isPrimary: wallet.isPrimary ?? true,
+                isPrimary: !primary,
             },
             transaction,
         });
@@ -415,7 +429,7 @@ export class PrivyAuthService {
                 status: 'active',
                 deletedAt: null,
                 ownershipVerifiedAt: null,
-                isPrimary: wallet.isPrimary ?? walletLink.isPrimary,
+                isPrimary: !primary || primary.id === walletLink.id,
             },
             { transaction },
         );
@@ -429,7 +443,7 @@ export class PrivyAuthService {
     }
 
     private async assertActiveUser(userId: string, transaction: Transaction): Promise<void> {
-        const appUser = await AppUser.findByPk(userId, { transaction });
+        const appUser = await AppUser.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
         if (!appUser || appUser.status !== 'active') {
             throw new UnauthorizedException('Authenticated Privy user is not active');
         }

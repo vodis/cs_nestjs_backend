@@ -26,26 +26,35 @@ describe('swap wallet ownership regression', () => {
             verifier.verify({ ...challenge, address: Wallet.createRandom().address.toLowerCase() }, { signature }),
         ).rejects.toThrow('ownership');
     });
-    it('verifies TON signatures with the on-chain key and rejects changed domain, timestamp and payload', async () => {
-        const ton = new TonCenterService(new HttpService(), new ConfigService());
-        const verifier = new TonWalletProofVerifier(ton);
-        const keys = generateKeyPairSync('ed25519');
-        const publicKey = keys.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32);
-        jest.spyOn(ton, 'getWalletPublicKey').mockResolvedValue(publicKey);
-        const address = new Address(0, Buffer.alloc(32, 1)).toString({ bounceable: false });
-        const challenge = { id: 'challenge', address, nonce: 'nonce', expiresAt: new Date(Date.now() + 300000) };
-        const timestamp = Math.floor(Date.now() / 1000);
-        const domain = 'wallets.craftscript.com';
-        const message = verifier.challenge(challenge.id, address, challenge.nonce).message;
-        const signature = sign(null, tonOwnershipDigest(address, domain, timestamp, message), keys.privateKey).toString(
-            'base64',
-        );
-        const proof = { address, domain, timestamp, signature };
-        await expect(verifier.verify(challenge, proof)).resolves.toBeUndefined();
-        await expect(verifier.verify(challenge, { ...proof, domain: 'attacker.example' })).rejects.toThrow('context');
-        await expect(verifier.verify(challenge, { ...proof, timestamp: timestamp - 301 })).rejects.toThrow('context');
-        await expect(verifier.verify({ ...challenge, nonce: 'other' }, proof)).rejects.toThrow('signature');
-        jest.spyOn(ton, 'getWalletPublicKey').mockResolvedValue(Buffer.alloc(32, 2));
-        await expect(verifier.verify(challenge, proof)).rejects.toThrow('signature');
-    });
+    it.each(['wallets.craftscript.com', 'staging-wallets.craftscript.com'])(
+        'verifies TON proofs for the %s manifest and rejects invalid contexts',
+        async (domain) => {
+            const ton = new TonCenterService(new HttpService(), new ConfigService());
+            const verifier = new TonWalletProofVerifier(ton);
+            const keys = generateKeyPairSync('ed25519');
+            const publicKey = keys.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32);
+            jest.spyOn(ton, 'getWalletPublicKey').mockResolvedValue(publicKey);
+            const address = new Address(0, Buffer.alloc(32, 1)).toString({ bounceable: false });
+            const challenge = { id: 'challenge', address, nonce: 'nonce', expiresAt: new Date(Date.now() + 300000) };
+            const timestamp = Math.floor(Date.now() / 1000);
+            const message = verifier.challenge(challenge.id, address, challenge.nonce).message;
+            const signature = sign(
+                null,
+                tonOwnershipDigest(address, domain, timestamp, message),
+                keys.privateKey,
+            ).toString('base64');
+            const proof = { address, domain, timestamp, signature };
+            await expect(verifier.verify(challenge, proof)).resolves.toBeUndefined();
+            await expect(verifier.verify(challenge, { ...proof, domain: 'attacker.example' })).rejects.toThrow(
+                'context',
+            );
+            await expect(verifier.verify(challenge, { ...proof, domain: 'localhost:5002' })).rejects.toThrow('context');
+            await expect(verifier.verify(challenge, { ...proof, timestamp: timestamp - 301 })).rejects.toThrow(
+                'context',
+            );
+            await expect(verifier.verify({ ...challenge, nonce: 'other' }, proof)).rejects.toThrow('signature');
+            jest.spyOn(ton, 'getWalletPublicKey').mockResolvedValue(Buffer.alloc(32, 2));
+            await expect(verifier.verify(challenge, proof)).rejects.toThrow('signature');
+        },
+    );
 });

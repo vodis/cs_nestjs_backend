@@ -4,6 +4,9 @@ export class AssetDto {
     @ApiProperty()
     assetId: string;
 
+    @ApiPropertyOptional()
+    balanceAssetId?: string;
+
     @ApiProperty()
     defuseAssetId: string;
 

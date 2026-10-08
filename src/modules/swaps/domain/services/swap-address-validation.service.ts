@@ -1,3 +1,4 @@
+import { Address } from '@ton/core';
 import { SwapValidationError } from '../errors/swap-validation.error';
 import { SwapAuthMethod } from '../models/swap-quote-request';
 
@@ -49,10 +50,10 @@ export class SwapAddressValidationService {
     }
 
     assertSupportedAuthMethod(authMethod: string): asserts authMethod is SwapAuthMethod {
-        if (authMethod !== 'evm' && authMethod !== 'near') {
+        if (authMethod !== 'evm' && authMethod !== 'near' && authMethod !== 'ton') {
             throw new SwapValidationError(
                 'UNSUPPORTED_AUTH_METHOD',
-                'Only EVM and NEAR wallets are supported for 1Click quotes',
+                'Only EVM, NEAR and TON wallets are supported for 1Click quotes',
                 { authMethod },
             );
         }
@@ -61,6 +62,13 @@ export class SwapAddressValidationService {
     assertSignerAddress(authMethod: string, signerId: string): asserts authMethod is SwapAuthMethod {
         this.assertSupportedAuthMethod(authMethod);
 
+        if (authMethod === 'ton') {
+            try {
+                Address.parse(signerId);
+            } catch {
+                throw new SwapValidationError('INVALID_SIGNER', 'Invalid TON wallet address');
+            }
+        }
         if (authMethod === 'evm' && !EVM_ADDRESS_PATTERN.test(signerId)) {
             throw new SwapValidationError('INVALID_SIGNER', 'EVM signerId must be a 0x-prefixed 20-byte address', {
                 signerId,
@@ -124,6 +132,14 @@ export class SwapAddressValidationService {
         }
 
         const blockchain = destinationBlockchain.toLowerCase();
+        if (blockchain === 'ton') {
+            try {
+                Address.parse(recipient);
+                return;
+            } catch {
+                throw new SwapValidationError('INVALID_RECIPIENT', 'Invalid TON recipient');
+            }
+        }
         const pattern = EVM_BLOCKCHAINS.has(blockchain)
             ? EVM_ADDRESS_PATTERN
             : DESTINATION_ADDRESS_PATTERNS[blockchain];

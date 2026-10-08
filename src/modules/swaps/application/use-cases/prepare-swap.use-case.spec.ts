@@ -53,6 +53,7 @@ describe('PrepareSwapUseCase', () => {
         isOwnedByUser: jest.fn().mockResolvedValue(true),
     } as jest.Mocked<SwapWalletAuthorizationPort>;
 
+    const funding = { prepare: jest.fn() };
     const createUseCase = (providers: QuoteProviderPort[]) =>
         new PrepareSwapUseCase(
             assetRegistry,
@@ -61,6 +62,7 @@ describe('PrepareSwapUseCase', () => {
             productEvents,
             executionStore,
             walletAuthorization,
+            funding,
         );
 
     beforeEach(() => {
@@ -143,6 +145,48 @@ describe('PrepareSwapUseCase', () => {
         });
         expect(result.signatureStandard).toBe('erc191');
         expect(result.executionPackage.payload.preparationId).toBe('preparation-1');
+    });
+
+    it('funds exact-output swaps with quoted source atomics, never destination atomics', async () => {
+        const provider: QuoteProviderPort = {
+            providerId: 'one-click',
+            requestQuotes: jest.fn().mockResolvedValue([
+                {
+                    providerId: 'one-click',
+                    executionMode: 'deposit_address',
+                    quoteHashes: [],
+                    originAsset: command.originAsset,
+                    destinationAsset: command.destinationAsset,
+                    amountIn: '146146',
+                    amountOut: '60000000000000000000000',
+                    expirationTime: command.deadline,
+                    executionPackage: {
+                        providerId: 'one-click',
+                        mode: 'deposit_address',
+                        protocol: '1click',
+                        requiredAction: 'deposit',
+                        payload: { depositAddress: command.signerId },
+                    },
+                },
+            ]),
+        };
+        await createUseCase([provider]).execute(
+            {
+                ...command,
+                swapType: 'EXACT_OUTPUT',
+                amount: '60000000000000000000000',
+                depositType: 'ORIGIN_CHAIN',
+                refundType: 'ORIGIN_CHAIN',
+                sourceAssetId: command.originAsset,
+                network: 'eip155:1',
+            },
+            actor,
+        );
+        expect(funding.prepare).toHaveBeenCalledWith(
+            expect.objectContaining({ amount: '146146' }),
+            expect.anything(),
+            expect.anything(),
+        );
     });
 
     it('uses only recipient-capable providers for a foreign destination address', async () => {

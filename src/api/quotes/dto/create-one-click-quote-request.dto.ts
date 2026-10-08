@@ -58,8 +58,8 @@ export class CreateOneClickQuoteRequestDto {
     refundType?: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
 
     @ApiProperty({ example: 'evm' })
-    @IsIn(['evm', 'near'])
-    authMethod: 'evm' | 'near';
+    @IsIn(['evm', 'near', 'ton'])
+    authMethod: 'evm' | 'near' | 'ton';
 
     @ApiProperty({ example: 'EXACT_INPUT' })
     @IsIn(['EXACT_INPUT', 'EXACT_OUTPUT'])

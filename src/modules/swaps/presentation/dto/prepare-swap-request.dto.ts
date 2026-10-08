@@ -4,6 +4,14 @@ import { IsIn, IsISO8601, IsNumber, IsOptional, IsString, Matches, Min } from 'c
 const deadlineExample = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
 export class PrepareSwapRequestDto {
+    @IsOptional()
+    @IsString()
+    sourceAssetId?: string;
+
+    @IsOptional()
+    @IsString()
+    network?: string;
+
     @ApiPropertyOptional({ enum: ['one-click', 'solver-relay'] })
     @IsOptional()
     @IsIn(['one-click', 'solver-relay'])
@@ -64,8 +72,8 @@ export class PrepareSwapRequestDto {
     refundType?: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
 
     @ApiProperty({ example: 'evm' })
-    @IsIn(['evm', 'near'])
-    authMethod: 'evm' | 'near';
+    @IsIn(['evm', 'near', 'ton'])
+    authMethod: 'evm' | 'near' | 'ton';
 
     @ApiPropertyOptional({ example: 60000, description: 'Minimum quote validity in milliseconds' })
     @IsOptional()

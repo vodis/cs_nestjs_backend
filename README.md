@@ -125,3 +125,34 @@ restoration applies the same rule. Explicit binding retains relinking support.
 No schema migration is needed. Deploy this protection before the wallet MFE and
 host selection-capability updates; provider connection status is never a reason
 to change the backend preference.
+
+### Wallet-funded token swaps
+
+Prepare accepts `sourceAssetId` and CAIP-2 `network`. For origin-chain deposits,
+the BFF uses the selected quote's `amountIn` (including exact-output requests)
+and registered origin metadata to persist versioned `executionPackage.payload.funding`.
+It validates destination/memo, wallet network, exact asset identity, token balance,
+and native gas/storage reserve before returning a transfer descriptor. Supported
+adapters cover NEAR native/NEP-141, nine registered EVM mainnets native/ERC-20,
+and TON mainnet native/jettons. Missing contracts only imply native assets for
+explicit known provider route IDs; display symbols are not authoritative.
+TON jetton wallets are resolved server-side and checked against owner/master.
+NEAR reserves storage plus 100 Tgas; TON reserves 0.01 TON beyond the native
+amount or 0.05 TON jetton attachment. Wallet/provider fees may still change.
+
+External EVM and TON signers require stored ownership verification. Their existing
+single-use wallet-link challenges validate EIP-191 and TON Connect text signatures,
+respectively. TON binds the expected wallet/domain/timestamp/challenge and resolves
+the public key from the deployed wallet's on-chain getter; undeployed wallets cannot
+complete this proof. TON funding supports origin-chain deposits only.
+
+No schema migration is needed for the additive funding payload. Deploy BFF first,
+then MFE, then host advertising `walletFundingVersion: '1.0.0'`. Old clients retain
+the native NEAR path. A host rollback disables new token funding without deleting
+preparations or disrupting status reconciliation. A quote never bypasses ownership,
+funding checks, expiry, confirmation or settlement checks.
+
+The assets API provides optional `balanceAssetId` for native provider routes.
+The host matches it to native RPC holdings while preserving `assetId` for quotes
+and execution. Native classification is backend-owned and never inferred from
+a missing contract or display symbol.

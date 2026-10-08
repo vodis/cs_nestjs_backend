@@ -1,3 +1,6 @@
+import { TonCenterService } from '../balances/ton/ton-center.service';
+import { TonWalletProofVerifier } from './ton-wallet-proof.verifier';
+import { EvmWalletProofVerifier } from './evm-wallet-proof.verifier';
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { DatabaseModule } from '../../database/database.module';
@@ -27,10 +30,17 @@ import {
         PrivyTokenService,
         WalletLinkService,
         NearWalletProofVerifier,
+        EvmWalletProofVerifier,
+        TonWalletProofVerifier,
+        TonCenterService,
         {
             provide: WALLET_OWNERSHIP_VERIFIERS,
-            useFactory: (near: NearWalletProofVerifier) => [near],
-            inject: [NearWalletProofVerifier],
+            useFactory: (near: NearWalletProofVerifier, evm: EvmWalletProofVerifier, ton: TonWalletProofVerifier) => [
+                near,
+                evm,
+                ton,
+            ],
+            inject: [NearWalletProofVerifier, EvmWalletProofVerifier, TonWalletProofVerifier],
         },
         ChainRpcService,
         PrivyWalletOwnershipService,

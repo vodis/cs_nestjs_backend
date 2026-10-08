@@ -8,7 +8,7 @@ export type StoredSwapPreparation = {
     providerId: string;
     executionMode: SwapExecutionMode;
     userAddress: string;
-    userChainType: 'evm' | 'near';
+    userChainType: 'evm' | 'near' | 'ton';
     executionPayload: Record<string, unknown>;
     expiresAt: Date;
     settlementStatus?: OneClickTerminalStatus | null;

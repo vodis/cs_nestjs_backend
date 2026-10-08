@@ -17,7 +17,7 @@ export class SwapPreparation extends Model<SwapPreparation> {
     declare userAddress: string;
 
     @Column({ type: DataType.STRING, allowNull: false })
-    declare userChainType: 'evm' | 'near';
+    declare userChainType: 'evm' | 'near' | 'ton';
 
     @Column({ type: DataType.JSONB, allowNull: false })
     declare executionPayload: Record<string, unknown>;

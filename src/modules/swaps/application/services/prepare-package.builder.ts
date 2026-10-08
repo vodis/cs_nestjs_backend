@@ -12,7 +12,8 @@ export class PreparePackageBuilder {
         );
 
         const intents = [{ intent: 'token_diff' as const, diff: tokenDeltas }];
-        const signatureStandard = command.authMethod === 'near' ? 'nep413' : 'erc191';
+        const signatureStandard =
+            command.authMethod === 'ton' ? 'none' : command.authMethod === 'near' ? 'nep413' : 'erc191';
 
         return {
             quoteHashes: quote.quoteHashes,
@@ -44,7 +45,7 @@ export class PreparePackageBuilder {
         quote: SwapQuote,
         tokenDeltas: Record<string, string>,
         intents: { intent: 'token_diff'; diff: Record<string, string> }[],
-        signatureStandard: 'erc191' | 'nep413',
+        signatureStandard: 'erc191' | 'nep413' | 'none',
     ): SwapExecutionPackage {
         if (quote.executionMode === 'deposit_address') {
             return {

@@ -21,7 +21,14 @@ export class QuotesService {
         try {
             const request = this.toOneClickQuoteRequest(dto);
 
-            const destinationAsset = await this.assetsService.findAssetById(dto.destinationAsset);
+            const [originAsset, destinationAsset] = await Promise.all([
+                this.assetsService.findAssetById(dto.originAsset),
+                this.assetsService.findAssetById(dto.destinationAsset),
+            ]);
+            if (!originAsset)
+                throw new SwapValidationError('UNSUPPORTED_ASSET', 'Asset is not in the server allowlist', {
+                    assetId: dto.originAsset,
+                });
             if (!destinationAsset) {
                 throw new SwapValidationError('UNSUPPORTED_ASSET', 'Asset is not in the server allowlist', {
                     assetId: dto.destinationAsset,

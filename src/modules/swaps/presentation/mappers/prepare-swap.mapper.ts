@@ -7,6 +7,8 @@ export class PrepareSwapMapper {
     static toCommand(dto: PrepareSwapRequestDto): SwapQuoteCommand {
         return {
             providerId: dto.providerId,
+            sourceAssetId: dto.sourceAssetId,
+            network: dto.network,
             originAsset: dto.originAsset,
             destinationAsset: dto.destinationAsset,
             amount: dto.amount,

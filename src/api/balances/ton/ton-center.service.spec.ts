@@ -38,4 +38,15 @@ describe('TonCenterService', () => {
         get.mockResolvedValueOnce({ data: { ok: true, result: 1.5 } });
         await expect(service.getNativeBalance('ton:mainnet', 'EQ-owner')).rejects.toThrow('invalid native balance');
     });
+    it('binds the resolved jetton wallet to its owner and master', async () => {
+        const owner = `0:${'11'.repeat(32)}`;
+        const jetton = `0:${'22'.repeat(32)}`;
+        const address = `0:${'33'.repeat(32)}`;
+        get.mockResolvedValueOnce({ data: { jetton_wallets: [{ address, owner, jetton }] } });
+        await expect(service.getJettonWalletAddress('ton:mainnet', owner, jetton)).resolves.toBe(address);
+        get.mockResolvedValueOnce({ data: { jetton_wallets: [{ address, owner: address, jetton }] } });
+        await expect(service.getJettonWalletAddress('ton:mainnet', owner, jetton)).rejects.toThrow('different jetton');
+        get.mockResolvedValueOnce({ data: { jetton_wallets: [] } });
+        await expect(service.getJettonWalletAddress('ton:mainnet', owner, jetton)).rejects.toThrow('No funded');
+    });
 });

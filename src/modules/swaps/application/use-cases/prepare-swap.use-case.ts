@@ -1,3 +1,4 @@
+import { WALLET_FUNDING, WalletFundingPort } from '../ports/wallet-funding.port';
 import {
     BadGatewayException,
     ForbiddenException,
@@ -37,6 +38,7 @@ export class PrepareSwapUseCase {
         private readonly executionStore: SwapExecutionStorePort,
         @Inject(SWAP_WALLET_AUTHORIZATION)
         private readonly walletAuthorization: SwapWalletAuthorizationPort,
+        @Inject(WALLET_FUNDING) private readonly funding: WalletFundingPort,
     ) {}
 
     async execute(command: SwapQuoteCommand, actor: AuthenticatedUser): Promise<ApprovedPreparePackage> {
@@ -101,6 +103,13 @@ export class PrepareSwapUseCase {
         );
 
         const packageResult = this.preparePackageBuilder.build(command, bestQuote);
+        if (packageResult.executionPackage.mode === 'deposit_address' && command.sourceAssetId) {
+            packageResult.executionPackage.payload.funding = await this.funding.prepare(
+                { ...command, amount: bestQuote.amountIn },
+                originAsset!,
+                packageResult.executionPackage,
+            );
+        }
         const expiresAt = new Date(packageResult.quoteExpiration);
         if (!Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) {
             throw new BadGatewayException({
@@ -173,6 +182,6 @@ export class PrepareSwapUseCase {
     }
 
     private normalizeAddress(address: string): string {
-        return address.trim().toLowerCase();
+        return address.startsWith('0x') ? address.trim().toLowerCase() : address.trim();
     }
 }

@@ -1,3 +1,4 @@
+import { EVM_NETWORKS, NATIVE_ROUTES } from './native-asset-routes';
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OneClickApiHttpClient } from '../../http-clients/one-click-api/one-click-api.http-client';
@@ -77,6 +78,12 @@ export class AssetsService {
         return {
             assetId: token.assetId,
             defuseAssetId: token.assetId,
+            ...(token.assetId === NATIVE_ROUTES[token.blockchain]
+                ? {
+                      balanceAssetId:
+                          token.blockchain === 'ton' ? 'ton:native' : `${EVM_NETWORKS[token.blockchain]}/native`,
+                  }
+                : {}),
             symbol: token.symbol,
             name: metadata?.name,
             icon: metadata?.icon || undefined,

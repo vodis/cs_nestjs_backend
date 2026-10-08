@@ -15,7 +15,7 @@ export type ApprovedPreparePackage = {
     signerId: string;
     deadline: string;
     authMethod: SwapAuthMethod;
-    signatureStandard: SignatureStandard;
+    signatureStandard: SignatureStandard | 'none';
     originAsset: string;
     destinationAsset: string;
     amountIn: string;

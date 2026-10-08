@@ -21,6 +21,7 @@ export class AssetRegistryAdapter implements AssetRegistryPort {
             decimals: asset.decimals,
             blockchain: asset.blockchain,
             price: asset.price,
+            contractAddress: asset.contractAddress,
         };
     }
 }

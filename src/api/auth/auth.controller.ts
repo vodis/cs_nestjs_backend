@@ -43,7 +43,7 @@ function serializeWallet(wallet: {
         status: wallet.status,
         isPrimary: wallet.isPrimary,
         deletedAt: wallet.deletedAt?.toISOString() ?? null,
-        ...(wallet.chainType === 'near' ? { ownershipVerified: Boolean(wallet.ownershipVerifiedAt) } : {}),
+        ownershipVerified: Boolean(wallet.ownershipVerifiedAt),
     };
 }
 

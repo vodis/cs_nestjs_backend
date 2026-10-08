@@ -12,6 +12,11 @@ export class SwapRequestValidationService {
 
     validate(command: SwapQuoteCommand, policy: SwapValidationPolicy): void {
         this.addressValidationService.assertSignerAddress(command.authMethod, command.signerId);
+        if (
+            command.authMethod === 'ton' &&
+            (command.depositType !== 'ORIGIN_CHAIN' || command.refundType !== 'ORIGIN_CHAIN')
+        )
+            throw new SwapValidationError('UNSUPPORTED_AUTH_METHOD', 'TON supports origin-chain funding only');
         this.assertDeadline(command.deadline);
         this.assertSlippageTolerance(command.slippageTolerance, policy.maxSlippageBps);
 

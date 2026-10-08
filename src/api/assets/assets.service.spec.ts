@@ -55,6 +55,18 @@ describe('AssetsService', () => {
         });
     });
 
+    it('provides native balance IDs from explicit provider routes without trusting symbols', async () => {
+        const service = createService(
+            jest.fn().mockResolvedValue([
+                { assetId: 'nep141:eth.omft.near', decimals: 18, blockchain: 'eth', symbol: 'ETH' },
+                { assetId: 'nep245:v2_1.omni.hot.tg:1117_', decimals: 9, blockchain: 'ton', symbol: 'GRAM' },
+                { assetId: 'unknown', decimals: 18, blockchain: 'eth', symbol: 'ETH' },
+            ]),
+        );
+        const { data } = await service.getAssets();
+        expect(data.map((asset) => asset.balanceAssetId)).toEqual(['eip155:1/native', 'ton:native', undefined]);
+    });
+
     it('returns cached data within ttl without a second upstream call', async () => {
         const getTokens = jest.fn().mockResolvedValue([validToken]);
         const service = createService(getTokens);

@@ -1,3 +1,8 @@
+import { HttpModule } from '@nestjs/axios';
+import { ChainRpcService } from '../../api/balances/rpc/chain-rpc.service';
+import { TonCenterService } from '../../api/balances/ton/ton-center.service';
+import { WALLET_FUNDING } from './application/ports/wallet-funding.port';
+import { WalletFundingAdapter } from './infrastructure/adapters/wallet-funding.adapter';
 import { Module } from '@nestjs/common';
 import { AssetsModule } from '../../api/assets/assets.module';
 import { ProductEventsModule } from '../../api/product-events/product-events.module';
@@ -23,10 +28,21 @@ import { SwapWalletAuthorizationAdapter } from './infrastructure/adapters/swap-w
 import { SequelizeSwapExecutionStore } from './infrastructure/repositories/sequelize-swap-execution-store';
 
 @Module({
-    imports: [AssetsModule, AuthModule, DatabaseModule, OneClickApiModule, SolverRelayApiModule, ProductEventsModule],
+    imports: [
+        HttpModule,
+        AssetsModule,
+        AuthModule,
+        DatabaseModule,
+        OneClickApiModule,
+        SolverRelayApiModule,
+        ProductEventsModule,
+    ],
     controllers: [SwapsController],
     providers: [
         PrepareSwapUseCase,
+        ChainRpcService,
+        TonCenterService,
+        { provide: WALLET_FUNDING, useClass: WalletFundingAdapter },
         GetSwapStatusUseCase,
         ExecuteSwapUseCase,
         AssetRegistryAdapter,

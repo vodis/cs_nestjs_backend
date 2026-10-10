@@ -53,7 +53,7 @@ describe('PrepareSwapUseCase', () => {
         isOwnedByUser: jest.fn().mockResolvedValue(true),
     } as jest.Mocked<SwapWalletAuthorizationPort>;
 
-    const funding = { prepare: jest.fn() };
+    const funding = { prepare: jest.fn(), nativeMaximum: jest.fn() };
     const createUseCase = (providers: QuoteProviderPort[]) =>
         new PrepareSwapUseCase(
             assetRegistry,

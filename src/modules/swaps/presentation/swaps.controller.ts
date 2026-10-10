@@ -1,4 +1,9 @@
+import { SwapAttemptDto } from './dto/swap-attempt.dto';
+import { GetSpendableSwapUseCase } from '../application/use-cases/get-spendable-swap.use-case';
+import { SpendableSwapDto } from './dto/spendable-swap.dto';
+import { ListSwapHistoryUseCase, RecordSwapAttemptUseCase } from '../application/use-cases/swap-history.use-cases';
 import {
+    Query,
     BadRequestException,
     Body,
     Controller,
@@ -29,6 +34,9 @@ export class SwapsController {
         private readonly prepareSwapUseCase: PrepareSwapUseCase,
         private readonly executeSwapUseCase: ExecuteSwapUseCase,
         private readonly getSwapStatusUseCase: GetSwapStatusUseCase,
+        private readonly listHistory: ListSwapHistoryUseCase,
+        private readonly recordAttempt: RecordSwapAttemptUseCase,
+        private readonly spendable: GetSpendableSwapUseCase,
     ) {}
 
     @Post('prepare')
@@ -62,6 +70,39 @@ export class SwapsController {
 
             throw error;
         }
+    }
+
+    @Post('spendable')
+    @UseGuards(PrivyAuthGuard)
+    @RequirePrivyBearer()
+    async getSpendable(@Body() input: SpendableSwapDto, @CurrentUser() user: AuthenticatedUser) {
+        return { data: await this.spendable.execute(input, user.id) };
+    }
+
+    @Get('policy')
+    getPolicy() {
+        return { data: { maxSlippageBps: this.prepareSwapUseCase.getMaxSlippageBps() } };
+    }
+
+    @Get('history')
+    @UseGuards(PrivyAuthGuard)
+    @RequirePrivyBearer()
+    @ApiBearerAuth()
+    async getHistory(@CurrentUser() user: AuthenticatedUser, @Query('before') before?: unknown) {
+        return { data: await this.listHistory.execute(user.id, before) };
+    }
+
+    @Post(':preparationId/attempt')
+    @UseGuards(PrivyAuthGuard)
+    @RequirePrivyBearer()
+    @ApiBearerAuth()
+    async startAttempt(
+        @Param('preparationId', ParseUUIDPipe) id: string,
+        @CurrentUser() user: AuthenticatedUser,
+        @Body() input: SwapAttemptDto,
+    ) {
+        await this.recordAttempt.execute(user.id, id, input.state);
+        return { data: { preparationId: id } };
     }
 
     @Get('status/:preparationId')

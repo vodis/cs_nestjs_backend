@@ -80,9 +80,12 @@ export class OneClickApiHttpClient {
         );
     }
 
-    async getSwapStatus(depositAddress: string, depositMemo?: string): Promise<{ status: OneClickSwapStatus }> {
+    async getSwapStatus(
+        depositAddress: string,
+        depositMemo?: string,
+    ): Promise<{ status: OneClickSwapStatus; swapDetails?: unknown }> {
         return this.safeResponse(
-            this.httpServer.axiosRef.get<{ status: OneClickSwapStatus }>('v0/status', {
+            this.httpServer.axiosRef.get<{ status: OneClickSwapStatus; swapDetails?: unknown }>('v0/status', {
                 headers: this.authHeaders(),
                 params: { depositAddress, ...(depositMemo ? { depositMemo } : {}) },
             }),

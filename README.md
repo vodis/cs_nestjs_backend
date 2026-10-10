@@ -156,3 +156,34 @@ The assets API provides optional `balanceAssetId` for native provider routes.
 The host matches it to native RPC holdings while preserving `assetId` for quotes
 and execution. Native classification is backend-owned and never inferred from
 a missing contract or display symbol.
+
+### Swap UX, indicative previews and History
+
+Apply `20261010000100-add-swap-history.js` before deploying this backend. It adds
+nullable preparing-user, display-details and attempt timestamp fields plus a
+history index. Old preparations are not backfilled into account History.
+Application rollback may leave these additive columns in place. Removing the
+migration deletes new recovery metadata and must not be part of an app rollback.
+
+- Public `POST /api/v1/quotes/preview` forces dry indicative Intents pricing and
+  allowlisted assets; it returns amounts and a 30-second display lifetime only.
+  These estimates exclude destination delivery fees and cannot fund a swap. Dry
+  previews accept valid basis-point tolerances; executable preparation enforces
+  the configured slippage policy.
+- Public `GET /api/v1/swaps/policy` exposes the configured slippage maximum.
+- Authenticated `POST /api/v1/swaps/spendable` validates native asset, wallet
+  ownership and network and returns an estimated Max after gas/storage reserves.
+  EVM reserves twice the sampled self-transfer gas cost; NEAR reserves storage
+  and 150 Tgas; TON reserves 0.02 TON. Final preparation still validates the
+  actual transfer and may reject if fees change or the real route costs more.
+- Authenticated `POST /api/v1/swaps/:preparationId/attempt` records approval or
+  submission progress before wallet I/O. It cannot assert settlement success.
+- Authenticated `GET /api/v1/swaps/history?before=<timestamp>|<id>` returns up
+  to 50 attempted preparations for the preparing user, with stable pagination.
+  It never returns execution payloads or signatures. Settlement stores valid
+  actual amounts and HTTPS transaction references separately from quote amounts.
+- Exact-output quote selection minimizes input; exact-input maximizes output.
+  Provider validation errors remain distinguishable from an upstream outage.
+
+Deploy the backend first, then the coordinated wallet MFE and Angular host.
+No migration or live transfer is run by the local implementation/test workflow.

@@ -28,6 +28,15 @@ export class SwapPreparation extends Model<SwapPreparation> {
     @Column({ type: DataType.STRING, allowNull: true })
     declare settlementStatus?: OneClickTerminalStatus | null;
 
+    @Column({ type: DataType.UUID, allowNull: true })
+    declare userId?: string;
+
+    @Column({ type: DataType.JSONB, allowNull: true })
+    declare historyData?: import('../../modules/swaps/domain/models/swap-history').SwapHistoryDetails;
+
+    @Column({ type: DataType.DATE, allowNull: true })
+    declare attemptStartedAt?: Date;
+
     @CreatedAt
     declare createdAt: Date;
 }

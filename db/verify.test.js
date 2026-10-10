@@ -131,3 +131,31 @@ test('swap settlement migration adds and removes the terminal status column', as
   await swapSettlementMigration.down(queryInterface);
   assert.deepEqual(calls, [['removeColumn', 'swap_preparations', 'settlement_status']]);
 });
+
+
+test('swap history migration preserves legacy rows through expansion and rollback', async () => {
+  const { Sequelize, DataTypes } = require('sequelize');
+  const migration = require('./migrations/20261010000100-add-swap-history');
+  const db = new Sequelize({ dialect: 'sqlite', storage: ':memory:', logging: false });
+  const query = db.getQueryInterface();
+  try {
+    await query.createTable('swap_preparations', {
+      id: { type: DataTypes.UUID, primaryKey: true },
+      created_at: { type: DataTypes.DATE },
+    });
+    const id = '11111111-1111-4111-8111-111111111111';
+    await query.bulkInsert('swap_preparations', [{ id, created_at: new Date() }]);
+    await migration.up(query, DataTypes);
+    const columns = await query.describeTable('swap_preparations');
+    for (const key of ['user_id', 'history_data', 'attempt_started_at']) assert.equal(columns[key].allowNull, true);
+    assert.ok((await query.showIndex('swap_preparations')).some((index) => index.name === 'swap_history_user_created'));
+    const [rows] = await db.query('SELECT id, user_id, history_data, attempt_started_at FROM swap_preparations');
+    assert.deepEqual(rows, [{ id, user_id: null, history_data: null, attempt_started_at: null }]);
+    await migration.down(query);
+    assert.deepEqual(Object.keys(await query.describeTable('swap_preparations')).sort(), ['created_at', 'id']);
+    const [retained] = await db.query('SELECT id FROM swap_preparations');
+    assert.deepEqual(retained, [{ id }]);
+  } finally {
+    await db.close();
+  }
+});

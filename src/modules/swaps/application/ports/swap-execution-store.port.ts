@@ -4,6 +4,9 @@ import type { OneClickTerminalStatus } from '../../domain/models/swap-settlement
 export const SWAP_EXECUTION_STORE = Symbol('SWAP_EXECUTION_STORE');
 
 export type StoredSwapPreparation = {
+    userId?: string;
+    historyData?: import('../../domain/models/swap-history').SwapHistoryDetails;
+
     id: string;
     providerId: string;
     executionMode: SwapExecutionMode;
@@ -22,7 +25,11 @@ export type SwapExecutionClaim =
 export interface SwapExecutionStorePort {
     createPreparation(input: Omit<StoredSwapPreparation, 'id'>): Promise<StoredSwapPreparation>;
     findPreparation(id: string): Promise<StoredSwapPreparation | undefined>;
-    recordTerminalSettlement(preparationId: string, status: OneClickTerminalStatus): Promise<OneClickTerminalStatus>;
+    recordTerminalSettlement(
+        preparationId: string,
+        status: OneClickTerminalStatus,
+        receipt?: import('../../domain/models/swap-history').SwapReceipt,
+    ): Promise<OneClickTerminalStatus>;
     claimExecution(input: {
         preparationId: string;
         userId: string;

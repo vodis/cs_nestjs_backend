@@ -25,7 +25,9 @@ export class SwapQuoteSelectionPolicy {
         const sorted = [...executableQuotes].sort((left, right) => {
             const leftValue = BigInt(swapType === 'EXACT_INPUT' ? left.amountOut : left.amountIn);
             const rightValue = BigInt(swapType === 'EXACT_INPUT' ? right.amountOut : right.amountIn);
-            return leftValue > rightValue ? -1 : leftValue < rightValue ? 1 : 0;
+            if (leftValue === rightValue) return 0;
+            const preferLeft = swapType === 'EXACT_INPUT' ? leftValue > rightValue : leftValue < rightValue;
+            return preferLeft ? -1 : 1;
         });
 
         return sorted[0];

@@ -1,3 +1,4 @@
+import { parseSwapReceipt } from '../../domain/models/swap-history';
 import { BadGatewayException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { AuthenticatedUser } from '../../../../api/auth/types';
 import { OneClickApiHttpClient } from '../../../../http-clients/one-click-api/one-click-api.http-client';
@@ -18,6 +19,8 @@ export class GetSwapStatusUseCase {
         if (!preparation || preparation.providerId !== 'one-click') {
             throw new NotFoundException('Swap preparation was not found');
         }
+        if (preparation.userId && preparation.userId !== actor.id)
+            throw new NotFoundException('Swap preparation was not found');
         const owned = await this.walletAuthorization.isOwnedByUser(
             actor.id,
             preparation.userAddress,
@@ -53,7 +56,11 @@ export class GetSwapStatusUseCase {
         }
         if (isOneClickTerminalStatus(response.status)) {
             return {
-                status: await this.executionStore.recordTerminalSettlement(preparationId, response.status),
+                status: await this.executionStore.recordTerminalSettlement(
+                    preparationId,
+                    response.status,
+                    ...(response.swapDetails ? [parseSwapReceipt(response.swapDetails)] : []),
+                ),
             };
         }
         return { status: response.status };

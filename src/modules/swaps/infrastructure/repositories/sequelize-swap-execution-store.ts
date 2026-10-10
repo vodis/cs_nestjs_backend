@@ -29,6 +29,7 @@ export class SequelizeSwapExecutionStore implements SwapExecutionStorePort {
     async recordTerminalSettlement(
         preparationId: string,
         status: OneClickTerminalStatus,
+        receipt?: import('../../domain/models/swap-history').SwapReceipt,
     ): Promise<OneClickTerminalStatus> {
         return this.sequelize.transaction(async (transaction) => {
             const row = await SwapPreparation.findByPk(preparationId, { transaction, lock: transaction.LOCK.UPDATE });
@@ -42,7 +43,13 @@ export class SequelizeSwapExecutionStore implements SwapExecutionStorePort {
                 where: { preparationId, status: 'succeeded' },
                 transaction,
             });
-            await row.update({ settlementStatus: status }, { transaction });
+            await row.update(
+                {
+                    settlementStatus: status,
+                    ...(receipt && row.historyData ? { historyData: { ...row.historyData, receipt } } : {}),
+                },
+                { transaction },
+            );
             await ProductEvent.create(
                 {
                     eventName: 'swap.settlement',
@@ -158,6 +165,8 @@ export class SequelizeSwapExecutionStore implements SwapExecutionStorePort {
 
     private toPreparation(row: SwapPreparation): StoredSwapPreparation {
         return {
+            userId: row.userId,
+            historyData: row.historyData,
             id: row.id,
             providerId: row.providerId,
             executionMode: row.executionMode,

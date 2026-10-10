@@ -30,6 +30,14 @@ describe('SwapQuoteSelectionPolicy', () => {
         expect(selected.quoteHashes).toEqual(['hash-better']);
     });
 
+    it('minimizes the input for an exact-output quote without losing integer precision', () => {
+        const selected = policy.selectBestExecutableQuote(
+            [baseQuote({ amountIn: '9007199254740993' }), baseQuote({ amountIn: '9007199254740992' })],
+            'EXACT_OUTPUT',
+        );
+        expect(selected.amountIn).toBe('9007199254740992');
+    });
+
     it('selects deposit-address quotes when they are the best executable option', () => {
         const selected = policy.selectBestExecutableQuote(
             [

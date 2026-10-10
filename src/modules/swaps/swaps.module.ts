@@ -1,3 +1,7 @@
+import { ListSwapHistoryUseCase, RecordSwapAttemptUseCase } from './application/use-cases/swap-history.use-cases';
+import { SwapHistoryPort } from './application/ports/swap-history.port';
+import { GetSpendableSwapUseCase } from './application/use-cases/get-spendable-swap.use-case';
+import { SwapHistoryRepository } from './infrastructure/repositories/swap-history.repository';
 import { HttpModule } from '@nestjs/axios';
 import { ChainRpcService } from '../../api/balances/rpc/chain-rpc.service';
 import { TonCenterService } from '../../api/balances/ton/ton-center.service';
@@ -39,6 +43,10 @@ import { SequelizeSwapExecutionStore } from './infrastructure/repositories/seque
     ],
     controllers: [SwapsController],
     providers: [
+        { provide: SwapHistoryPort, useClass: SwapHistoryRepository },
+        ListSwapHistoryUseCase,
+        RecordSwapAttemptUseCase,
+        GetSpendableSwapUseCase,
         PrepareSwapUseCase,
         ChainRpcService,
         TonCenterService,

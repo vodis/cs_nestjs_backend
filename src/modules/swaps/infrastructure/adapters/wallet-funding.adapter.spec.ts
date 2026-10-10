@@ -42,6 +42,7 @@ describe('wallet funding preparation', () => {
     let tokenBalance: string;
     let nativeBalance: string;
     const rpc = { request: jest.fn() };
+    const ton = { getNativeBalance: jest.fn() };
     beforeEach(async () => {
         tokenBalance = '146146';
         nativeBalance = '10000000000000000000000000';
@@ -74,11 +75,35 @@ describe('wallet funding preparation', () => {
             providers: [
                 WalletFundingAdapter,
                 { provide: ChainRpcService, useValue: rpc },
-                { provide: TonCenterService, useValue: {} },
+                { provide: TonCenterService, useValue: ton },
             ],
         }).compile();
         adapter = module.get(WalletFundingAdapter);
     });
+    it('subtracts storage and a gas buffer from native Max and clamps exhausted balances to zero', async () => {
+        expect(await adapter.nativeMaximum('near:mainnet', 'alice.near')).toBe(
+            (BigInt(nativeBalance) - 100n * 10000000000000000000n - 100000000n * 150000000000000n).toString(),
+        );
+        nativeBalance = '1';
+        expect(await adapter.nativeMaximum('near:mainnet', 'alice.near')).toBe('0');
+        await expect(adapter.nativeMaximum('unsupported:1', 'alice.near')).rejects.toThrow('not supported');
+    });
+
+    it('reserves twice the sampled EVM gas cost using atomic integers', async () => {
+        rpc.request.mockImplementation(async (_network: string, method: string) => ({
+            result: method === 'eth_getBalance' ? '0x10000000000000001' : method === 'eth_gasPrice' ? '0xa' : '0x5208',
+        }));
+        expect(await adapter.nativeMaximum('eip155:1', '0x123')).toBe(
+            (0x10000000000000001n - 10n * 21000n * 2n).toString(),
+        );
+    });
+
+    it('reserves TON fees and clamps a smaller native balance to zero', async () => {
+        ton.getNativeBalance.mockResolvedValueOnce('100000000').mockResolvedValueOnce('10000000');
+        expect(await adapter.nativeMaximum('ton:mainnet', 'wallet')).toBe('80000000');
+        expect(await adapter.nativeMaximum('ton:mainnet', 'wallet')).toBe('0');
+    });
+
     it('binds USDC atomics, token contract, network and required storage to the prepared deposit', async () => {
         await expect(adapter.prepare(command, asset, execution)).resolves.toMatchObject({
             kind: 'near-token',

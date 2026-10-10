@@ -17,6 +17,7 @@ export type WalletFunding = {
     jettonWallet?: string;
 };
 export interface WalletFundingPort {
+    nativeMaximum(network: string, account: string): Promise<string>;
     prepare(
         command: SwapQuoteCommand,
         asset: AssetRegistryEntry,

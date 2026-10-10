@@ -1,6 +1,8 @@
+import { SwapValidationError } from '../../domain/errors/swap-validation.error';
 import { WALLET_FUNDING, WalletFundingPort } from '../ports/wallet-funding.port';
 import {
     BadGatewayException,
+    BadRequestException,
     ForbiddenException,
     Inject,
     Injectable,
@@ -125,6 +127,20 @@ export class PrepareSwapUseCase {
                 userChainType: packageResult.authMethod,
                 executionPayload: packageResult.executionPackage.payload,
                 expiresAt,
+                userId: actor.id,
+                historyData: {
+                    sourceAssetId: command.sourceAssetId ?? command.originAsset,
+                    destinationAssetId: command.destinationAsset,
+                    sourceSymbol: originAsset!.symbol,
+                    destinationSymbol: destinationAsset!.symbol,
+                    sourceDecimals: originAsset!.decimals,
+                    destinationDecimals: destinationAsset!.decimals,
+                    amountIn: bestQuote.amountIn,
+                    amountOut: bestQuote.amountOut,
+                    network: command.network ?? originAsset!.blockchain,
+                    destinationNetwork: destinationAsset!.blockchain,
+                    recipient: command.recipient ?? command.signerId,
+                },
             });
             packageResult.executionPackage = {
                 ...packageResult.executionPackage,
@@ -156,16 +172,29 @@ export class PrepareSwapUseCase {
         );
         const settled = await Promise.allSettled(providers.map((provider) => provider.requestQuotes(command)));
 
-        return settled
+        if (!settled.some((result) => result.status === 'fulfilled')) {
+            const rejected = settled.find(
+                (result) => result.status === 'rejected' && result.reason instanceof BadRequestException,
+            );
+            if (rejected?.status === 'rejected') throw rejected.reason;
+            return [];
+        }
+        const quotes = settled
             .filter(
                 (result): result is PromiseFulfilledResult<Awaited<ReturnType<QuoteProviderPort['requestQuotes']>>> => {
                     return result.status === 'fulfilled';
                 },
             )
             .flatMap((result) => result.value);
+        if (!quotes.length)
+            throw new SwapValidationError(
+                'INSUFFICIENT_LIQUIDITY',
+                'No route is available for this amount. Try a smaller amount or another token.',
+            );
+        return quotes;
     }
 
-    private getMaxSlippageBps(): number {
+    getMaxSlippageBps(): number {
         const configured = Number(this.configService.get('SWAP_MAX_SLIPPAGE_BPS') || 1000);
         return Number.isFinite(configured) && configured > 0 ? configured : 1000;
     }

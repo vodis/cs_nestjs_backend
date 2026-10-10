@@ -1,3 +1,5 @@
+import { WalletLinkService } from '../src/api/auth/wallet-link.service';
+import { WsAdapter } from '@nestjs/platform-ws';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, RequestMethod } from '@nestjs/common';
 import * as request from 'supertest';
@@ -13,9 +15,14 @@ describe('Health (e2e)', () => {
 
         const moduleFixture: TestingModule = await Test.createTestingModule({
             imports: [AppModule],
-        }).compile();
+        })
+            // Liveness does not exercise persistence or DB maintenance jobs.
+            .overrideProvider(WalletLinkService)
+            .useValue({})
+            .compile();
 
         app = moduleFixture.createNestApplication();
+        app.useWebSocketAdapter(new WsAdapter(app));
         app.setGlobalPrefix('/api', {
             exclude: [{ path: '/health', method: RequestMethod.GET }],
         });

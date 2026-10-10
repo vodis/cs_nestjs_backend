@@ -1,3 +1,4 @@
+import { SwapHistoryPort } from '../src/modules/swaps/application/ports/swap-history.port';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
     ExecutionContext,
@@ -45,6 +46,7 @@ type CreateSwapsAppOptions = {
     useRealAuthGuard?: boolean;
     walletOwned?: boolean;
     preparations?: StoredSwapPreparation[];
+    history?: SwapHistoryPort;
 };
 
 function futureDeadline(msFromNow = 60_000): string {
@@ -213,6 +215,13 @@ async function createSwapsApp(options: CreateSwapsAppOptions = {}): Promise<INes
                 passkeyEnabled: false,
             }),
         })
+        .overrideProvider(SwapHistoryPort)
+        .useValue(
+            options.history ?? {
+                list: jest.fn().mockResolvedValue({ items: [], nextCursor: null }),
+                startAttempt: jest.fn(),
+            },
+        )
         .overrideProvider(SWAP_EXECUTION_STORE)
         .useValue(executionStore)
         .overrideProvider(SWAP_WALLET_AUTHORIZATION)
@@ -232,6 +241,55 @@ async function createSwapsApp(options: CreateSwapsAppOptions = {}): Promise<INes
 }
 
 describe('Swaps (e2e)', () => {
+    describe('History and native Max HTTP boundaries', () => {
+        let app: INestApplication;
+        afterEach(async () => app?.close());
+
+        it('requires authentication for history, attempts and native Max', async () => {
+            app = await createSwapsApp({ authenticated: false });
+            await request(app.getHttpServer()).get('/api/v1/swaps/history').expect(401);
+            await request(app.getHttpServer())
+                .post('/api/v1/swaps/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/attempt')
+                .send({})
+                .expect(401);
+            await request(app.getHttpServer()).post('/api/v1/swaps/spendable').send({}).expect(401);
+        });
+
+        it('rejects malformed cursors and untrusted attempt states before storage', async () => {
+            const history = { list: jest.fn(), startAttempt: jest.fn() };
+            app = await createSwapsApp({ history });
+            for (const query of [
+                'before=x',
+                'before=x&before=y',
+                'before=2026-10-10T00%3A00%3A00.000Z%7C------------------------------------',
+            ]) {
+                await request(app.getHttpServer()).get(`/api/v1/swaps/history?${query}`).expect(400);
+            }
+            await request(app.getHttpServer())
+                .post('/api/v1/swaps/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/attempt')
+                .send({ state: 'SUCCESS' })
+                .expect(400);
+            expect(history.list).not.toHaveBeenCalled();
+            expect(history.startAttempt).not.toHaveBeenCalled();
+        });
+
+        it('uses only the authenticated account for listing and progress records', async () => {
+            const history = {
+                list: jest.fn().mockResolvedValue({ items: [], nextCursor: null }),
+                startAttempt: jest.fn(),
+            };
+            app = await createSwapsApp({ history });
+            await request(app.getHttpServer()).get('/api/v1/swaps/history?userId=other').expect(200);
+            const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+            await request(app.getHttpServer())
+                .post(`/api/v1/swaps/${id}/attempt`)
+                .send({ userId: 'other', state: 'SUBMITTED' })
+                .expect(201);
+            expect(history.list).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', undefined);
+            expect(history.startAttempt).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', id, 'SUBMITTED');
+        });
+    });
+
     describe('GET /api/v1/swaps/status/:preparationId', () => {
         let app: INestApplication;
 
@@ -1012,7 +1070,7 @@ describe('Swaps (e2e)', () => {
             expect(response.body.message).toMatch(/temporarily unavailable/i);
         });
 
-        it('returns 503 when providers respond with empty quote lists', async () => {
+        it('returns a recoverable liquidity error when providers respond with empty quote lists', async () => {
             app = await createSwapsApp({
                 providers: [
                     {
@@ -1025,9 +1083,9 @@ describe('Swaps (e2e)', () => {
             const response = await request(app.getHttpServer())
                 .post('/api/v1/swaps/prepare')
                 .send(validPreparePayload())
-                .expect(503);
+                .expect(400);
 
-            expect(response.body.message).toMatch(/temporarily unavailable/i);
+            expect(response.body.code).toBe('INSUFFICIENT_LIQUIDITY');
         });
     });
 });

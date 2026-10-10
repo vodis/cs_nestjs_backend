@@ -17,6 +17,44 @@ export class WalletFundingAdapter implements WalletFundingPort {
         private readonly ton: TonCenterService,
     ) {}
 
+    /** Conservative native Max estimate; final preparation validates the actual transfer again. */
+    async nativeMaximum(network: string, account: string): Promise<string> {
+        let balance: bigint;
+        let reserve: bigint;
+        if (network === 'near:mainnet') {
+            const [state, protocol, gas] = await Promise.all([
+                this.rpc.request<{ amount: string; locked: string; storage_usage: number }>(network, 'query', {
+                    request_type: 'view_account',
+                    finality: 'final',
+                    account_id: account,
+                }),
+                this.rpc.request<{ runtime_config: { storage_amount_per_byte: string } }>(
+                    network,
+                    'EXPERIMENTAL_protocol_config',
+                    { finality: 'final' },
+                ),
+                this.rpc.request<{ gas_price: string }>(network, 'gas_price', [null]),
+            ]);
+            balance = BigInt(state.result.amount);
+            const storage =
+                BigInt(state.result.storage_usage) * BigInt(protocol.result.runtime_config.storage_amount_per_byte) -
+                BigInt(state.result.locked);
+            reserve = (storage > 0n ? storage : 0n) + BigInt(gas.result.gas_price) * 150_000_000_000_000n;
+        } else if (network === 'ton:mainnet') {
+            balance = BigInt(await this.ton.getNativeBalance(network, account));
+            reserve = 20_000_000n;
+        } else if (Object.values(EVM_NETWORKS).includes(network)) {
+            const [state, price, gas] = await Promise.all([
+                this.rpc.request<string>(network, 'eth_getBalance', [account, 'latest']),
+                this.rpc.request<string>(network, 'eth_gasPrice', []),
+                this.rpc.request<string>(network, 'eth_estimateGas', [{ from: account, to: account, value: '0x0' }]),
+            ]);
+            balance = BigInt(state.result);
+            reserve = BigInt(price.result) * BigInt(gas.result) * 2n;
+        } else throw new BadRequestException('Native Max is not supported on this network');
+        return (balance > reserve ? balance - reserve : 0n).toString();
+    }
+
     async prepare(
         command: SwapQuoteCommand,
         asset: AssetRegistryEntry,

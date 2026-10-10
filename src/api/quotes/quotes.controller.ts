@@ -1,3 +1,4 @@
+import { PreviewSwapDto } from './dto/preview-swap.dto';
 import { Body, Controller, Post } from '@nestjs/common';
 import { ApiResponse } from '@nestjs/swagger';
 import { CreateOneClickQuoteRequestDto } from './dto/create-one-click-quote-request.dto';
@@ -7,6 +8,11 @@ import { QuotesService } from './quotes.service';
 @Controller({ version: '1', path: 'quotes' })
 export class QuotesController {
     constructor(private readonly quotesService: QuotesService) {}
+
+    @Post('preview')
+    async preview(@Body() dto: PreviewSwapDto) {
+        return { data: await this.quotesService.preview(dto) };
+    }
 
     @Post('one-click')
     @ApiResponse({

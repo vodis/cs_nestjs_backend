@@ -137,7 +137,14 @@ explicit read-only target: `network` is mandatory, `walletId` is returned as
 `null`, and the result is not written to the user's cache. Requested assets
 must exist in the backend asset allowlist.
 
-NEAR and EVM reads use the resilient JSON-RPC provider pool. EVM token reads
+NEAR, EVM and Solana reads use the resilient JSON-RPC provider pool. Solana
+mainnet uses `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` and is verified using
+`getGenesisHash`. Bitcoin mainnet uses the optional backend-only HTTPS
+`BITCOIN_ESPLORA_URL`; its genesis check precedes balance and fee reads. Missing
+configuration disables Bitcoin funding without changing existing networks.
+Treat credential-bearing provider paths as S3; never expose them to clients.
+
+ EVM token reads
 use authoritative contract metadata and ERC-20 `balanceOf`; native reads use
 the network-specific native asset. TON uses the server-side TON Center adapter:
 API v2 for native nanotons and API v3 owner/master filtering for allowlisted

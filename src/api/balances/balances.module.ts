@@ -1,3 +1,5 @@
+import { SolanaFundingService } from './solana-funding.service';
+import { BitcoinBalanceService } from './bitcoin-balance.service';
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
@@ -13,7 +15,14 @@ import { TonCenterService } from './ton/ton-center.service';
 @Module({
     imports: [AuthModule, AssetsModule, DatabaseModule, ConfigModule, HttpModule],
     controllers: [BalancesController],
-    providers: [BalancesService, ChainBalanceService, ChainRpcService, TonCenterService],
+    providers: [
+        BalancesService,
+        ChainBalanceService,
+        ChainRpcService,
+        TonCenterService,
+        SolanaFundingService,
+        BitcoinBalanceService,
+    ],
     exports: [BalancesService],
 })
 export class BalancesModule {}

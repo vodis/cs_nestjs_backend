@@ -1,4 +1,4 @@
-export type SwapAuthMethod = 'evm' | 'near' | 'ton';
+export type SwapAuthMethod = 'evm' | 'near' | 'ton' | 'solana' | 'bitcoin';
 
 export type SwapType = 'EXACT_INPUT' | 'EXACT_OUTPUT';
 
@@ -16,6 +16,7 @@ export type SwapQuoteCommand = {
     deadline: string;
     signerId: string;
     recipient: string;
+    destinationMemo?: string;
     recipientType: 'DESTINATION_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
     depositType?: SwapAccountType;
     refundType?: SwapAccountType;

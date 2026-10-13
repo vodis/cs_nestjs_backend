@@ -1,10 +1,13 @@
 export type SupportedChainNetwork =
     | { namespace: 'near'; reference: 'mainnet' | 'testnet' }
+    | { namespace: 'solana'; reference: '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp' }
     | { namespace: 'eip155'; reference: string; chainId: bigint };
 
 export function parseSupportedChainNetwork(network: string): SupportedChainNetwork | undefined {
     const [namespace, reference, extra] = network.split(':');
     if (!namespace || !reference || extra !== undefined) return undefined;
+
+    if (namespace === 'solana' && reference === '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp') return { namespace, reference };
 
     if (namespace === 'near' && (reference === 'mainnet' || reference === 'testnet')) {
         return { namespace, reference };

@@ -13,10 +13,10 @@ export class SwapRequestValidationService {
     validate(command: SwapQuoteCommand, policy: SwapValidationPolicy): void {
         this.addressValidationService.assertSignerAddress(command.authMethod, command.signerId);
         if (
-            command.authMethod === 'ton' &&
+            ['ton', 'solana', 'bitcoin'].includes(command.authMethod) &&
             (command.depositType !== 'ORIGIN_CHAIN' || command.refundType !== 'ORIGIN_CHAIN')
         )
-            throw new SwapValidationError('UNSUPPORTED_AUTH_METHOD', 'TON supports origin-chain funding only');
+            throw new SwapValidationError('UNSUPPORTED_AUTH_METHOD', 'This wallet supports origin-chain funding only');
         this.assertDeadline(command.deadline);
         this.assertSlippageTolerance(command.slippageTolerance, policy.maxSlippageBps);
 
@@ -35,6 +35,12 @@ export class SwapRequestValidationService {
     }
 
     assertExternalRecipientSupported(command: SwapQuoteCommand, destinationAsset: AssetRegistryEntry): void {
+        this.addressValidationService.assertDestinationMemo(
+            destinationAsset.blockchain,
+            command.recipientType,
+            command.destinationMemo,
+            command.recipient,
+        );
         this.addressValidationService.assertExternalRecipient(
             command.recipient,
             command.recipientType,

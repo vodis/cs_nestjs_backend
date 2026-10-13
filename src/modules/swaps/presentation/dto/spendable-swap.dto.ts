@@ -4,5 +4,5 @@ export class SpendableSwapDto {
     @IsString() originAsset: string;
     @IsString() signerId: string;
     @IsString() network: string;
-    @IsIn(['near', 'evm', 'ton']) authMethod: 'near' | 'evm' | 'ton';
+    @IsIn(['near', 'evm', 'ton', 'solana', 'bitcoin']) authMethod: 'near' | 'evm' | 'ton' | 'solana' | 'bitcoin';
 }

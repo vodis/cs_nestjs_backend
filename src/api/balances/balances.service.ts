@@ -1,3 +1,5 @@
+import { SOLANA_MAINNET, BITCOIN_MAINNET } from '../assets/native-asset-routes';
+
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Op } from 'sequelize';
 import { AssetDto } from '../assets/dto/get-assets-response.dto';
@@ -288,11 +290,15 @@ export class BalancesService {
         if (wallet.chainType === 'near') {
             return /\.testnet$/i.test(wallet.address) ? 'near:testnet' : 'near:mainnet';
         }
+        if (wallet.chainType === 'solana') return SOLANA_MAINNET;
+        if (wallet.chainType === 'bitcoin') return BITCOIN_MAINNET;
         if (wallet.chainType === 'ton') return 'ton:mainnet';
         return undefined;
     }
 
     private chainTypeFilter(network: string): string | object {
+        if (network === SOLANA_MAINNET) return 'solana';
+        if (network === BITCOIN_MAINNET) return 'bitcoin';
         if (network.startsWith('near:')) return 'near';
         if (network.startsWith('eip155:')) return { [Op.in]: ['ethereum', 'evm'] };
         if (network === 'ton:mainnet' || network === 'ton:testnet') return 'ton';
@@ -326,6 +332,8 @@ export class BalancesService {
     }
 
     private chainType(network: string): string {
+        if (network === SOLANA_MAINNET) return 'solana';
+        if (network === BITCOIN_MAINNET) return 'bitcoin';
         if (network.startsWith('near:')) return 'near';
         if (network.startsWith('eip155:')) return 'ethereum';
         if (network === 'ton:mainnet' || network === 'ton:testnet') return 'ton';

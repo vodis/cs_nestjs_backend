@@ -1,4 +1,4 @@
-import { EVM_NETWORKS, NATIVE_ROUTES } from './native-asset-routes';
+import { SOURCE_NETWORKS, NATIVE_ROUTES } from './native-asset-routes';
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OneClickApiHttpClient } from '../../http-clients/one-click-api/one-click-api.http-client';
@@ -16,6 +16,7 @@ type AssetsCacheEntry = {
 @Injectable()
 export class AssetsService {
     private cache: AssetsCacheEntry | null = null;
+    private refresh?: Promise<GetAssetsResponseDto>;
 
     constructor(
         private readonly configService: ConfigService,
@@ -23,7 +24,8 @@ export class AssetsService {
     ) {}
 
     async findAssetById(assetId: string): Promise<AssetDto | undefined> {
-        const { data } = await this.getAssets();
+        const { data, meta } = await this.getAssets();
+        if (meta.stale) throw new ServiceUnavailableException('Asset registry is stale; try again shortly');
         return data.find((asset) => asset.assetId === assetId || asset.defuseAssetId === assetId);
     }
 
@@ -34,6 +36,15 @@ export class AssetsService {
             return this.toResponse(this.cache, true);
         }
 
+        if (!this.refresh) {
+            this.refresh = this.refreshAssets().finally(() => {
+                this.refresh = undefined;
+            });
+        }
+        return this.refresh;
+    }
+
+    private async refreshAssets(): Promise<GetAssetsResponseDto> {
         try {
             const tokens = await this.oneClickApiHttpClient.getTokens();
             const data = tokens.filter((token) => this.isValidToken(token)).map((token) => this.toAsset(token));
@@ -48,7 +59,7 @@ export class AssetsService {
             return this.toResponse(this.cache, false);
         } catch (error) {
             if (this.cache) {
-                return this.toResponse(this.cache, true);
+                return this.toResponse(this.cache, true, true);
             }
 
             throw new ServiceUnavailableException('Assets list is temporarily unavailable');
@@ -78,12 +89,13 @@ export class AssetsService {
         return {
             assetId: token.assetId,
             defuseAssetId: token.assetId,
-            ...(token.assetId === NATIVE_ROUTES[token.blockchain]
+            ...(token.assetId === NATIVE_ROUTES[token.blockchain] || token.assetId === '1cs_v1:btc:native:coin'
                 ? {
                       balanceAssetId:
-                          token.blockchain === 'ton' ? 'ton:native' : `${EVM_NETWORKS[token.blockchain]}/native`,
+                          token.blockchain === 'ton' ? 'ton:native' : `${SOURCE_NETWORKS[token.blockchain]}/native`,
                   }
                 : {}),
+            sourceNetwork: SOURCE_NETWORKS[token.blockchain],
             symbol: token.symbol,
             name: metadata?.name,
             icon: metadata?.icon || undefined,
@@ -95,11 +107,12 @@ export class AssetsService {
         };
     }
 
-    private toResponse(cache: AssetsCacheEntry, cached: boolean): GetAssetsResponseDto {
+    private toResponse(cache: AssetsCacheEntry, cached: boolean, stale = false): GetAssetsResponseDto {
         return {
             data: cache.data,
             meta: {
                 source: '1click',
+                stale,
                 cached,
                 fetchedAt: cache.fetchedAt.toISOString(),
             },

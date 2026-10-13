@@ -10,6 +10,9 @@ export class AssetDto {
     @ApiProperty()
     defuseAssetId: string;
 
+    @ApiPropertyOptional()
+    sourceNetwork?: string;
+
     @ApiProperty()
     symbol: string;
 
@@ -36,6 +39,9 @@ export class AssetDto {
 }
 
 export class AssetsMetaDto {
+    @ApiProperty()
+    stale: boolean;
+
     @ApiProperty({ enum: ['1click'] })
     source: '1click';
 

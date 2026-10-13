@@ -17,6 +17,19 @@ function createService(values: Record<string, unknown> = {}) {
 }
 
 describe('ChainRpcService', () => {
+    it('rejects a wrong Solana genesis before requesting balances', async () => {
+        const network = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp';
+        const { service, post } = createService({
+            CHAIN_RPC_ENDPOINTS_JSON: JSON.stringify({
+                [network]: [{ alias: 'solana', url: 'https://solana.example' }],
+            }),
+        });
+        post.mockResolvedValue({ data: { result: 'devnet-genesis' } });
+        await expect(service.request(network, 'getBalance', [])).rejects.toThrow('wrong Solana network');
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post.mock.calls[0][1].method).toBe('getGenesisHash');
+    });
+
     it('retries an entire batch on the secondary after a retryable primary failure', async () => {
         const { service, post } = createService();
         post.mockResolvedValueOnce({ data: { result: { chain_id: 'mainnet' } } });

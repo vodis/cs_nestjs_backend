@@ -15,6 +15,7 @@ export type OneClickQuoteRequest = {
     destinationAsset: string;
     amount: string;
     recipient: string;
+    destinationMemo?: string;
     recipientType: 'DESTINATION_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
     refundTo: string;
     refundType: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';

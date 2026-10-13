@@ -1,3 +1,5 @@
+import { SolanaWalletProofVerifier } from './solana-wallet-proof.verifier';
+import { BitcoinWalletProofVerifier } from './bitcoin-wallet-proof.verifier';
 import { TonCenterService } from '../balances/ton/ton-center.service';
 import { TonWalletProofVerifier } from './ton-wallet-proof.verifier';
 import { EvmWalletProofVerifier } from './evm-wallet-proof.verifier';
@@ -32,15 +34,25 @@ import {
         NearWalletProofVerifier,
         EvmWalletProofVerifier,
         TonWalletProofVerifier,
+        SolanaWalletProofVerifier,
+        BitcoinWalletProofVerifier,
         TonCenterService,
         {
             provide: WALLET_OWNERSHIP_VERIFIERS,
-            useFactory: (near: NearWalletProofVerifier, evm: EvmWalletProofVerifier, ton: TonWalletProofVerifier) => [
-                near,
-                evm,
-                ton,
+            useFactory: (
+                near: NearWalletProofVerifier,
+                evm: EvmWalletProofVerifier,
+                ton: TonWalletProofVerifier,
+                solana: SolanaWalletProofVerifier,
+                bitcoin: BitcoinWalletProofVerifier,
+            ) => [near, evm, ton, solana, bitcoin],
+            inject: [
+                NearWalletProofVerifier,
+                EvmWalletProofVerifier,
+                TonWalletProofVerifier,
+                SolanaWalletProofVerifier,
+                BitcoinWalletProofVerifier,
             ],
-            inject: [NearWalletProofVerifier, EvmWalletProofVerifier, TonWalletProofVerifier],
         },
         ChainRpcService,
         PrivyWalletOwnershipService,

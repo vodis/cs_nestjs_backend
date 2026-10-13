@@ -46,3 +46,24 @@ describe('SwapAddressValidationService recipient validation', () => {
         ).toBe(true);
     });
 });
+
+describe('destination memo policy', () => {
+    const validation = new SwapAddressValidationService();
+    it.each(['0', '4294967295'])('accepts XRP uint32 tag %s', (memo) => {
+        expect(() => validation.assertDestinationMemo('xrp', 'DESTINATION_CHAIN', memo)).not.toThrow();
+    });
+    it.each(['4294967296', '-1', '1.5', '01', '', ' 1'])('rejects malformed or overflowing tag %s', (memo) => {
+        expect(() => validation.assertDestinationMemo('xrp', 'DESTINATION_CHAIN', memo)).toThrow();
+    });
+    it('rejects destination tags on other chains and internal recipients', () => {
+        expect(() => validation.assertDestinationMemo('stellar', 'DESTINATION_CHAIN', '1')).toThrow();
+        expect(() => validation.assertDestinationMemo('xrp', 'INTENTS', '1')).toThrow();
+    });
+});
+
+it('validates Quantus SS58 network and checksum', () => {
+    const validation = new SwapAddressValidationService();
+    const address = 'qzk1Nxai3dZD9Cn5kwGcgL6mKxsfxwqdis7kDQJ52aJS2vSn7';
+    expect(() => validation.assertExternalRecipient(address, 'DESTINATION_CHAIN', 'qtc')).not.toThrow();
+    expect(() => validation.assertExternalRecipient(address.slice(0, -1) + '8', 'DESTINATION_CHAIN', 'qtc')).toThrow();
+});

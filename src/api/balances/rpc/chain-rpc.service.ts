@@ -117,6 +117,13 @@ export class ChainRpcService implements OnModuleInit {
         }
 
         switch (parsedNetwork.namespace) {
+            case 'solana':
+                if (
+                    (await this.call<string>(endpoint, 'getGenesisHash', [], deadline)) !==
+                    '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d'
+                )
+                    throw new ChainRpcRequestError('RPC endpoint returned the wrong Solana network', true);
+                break;
             case 'near':
                 await this.verifyNearNetwork(parsedNetwork.reference, endpoint, deadline);
                 break;

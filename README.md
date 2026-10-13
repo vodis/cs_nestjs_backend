@@ -133,8 +133,9 @@ the BFF uses the selected quote's `amountIn` (including exact-output requests)
 and registered origin metadata to persist versioned `executionPackage.payload.funding`.
 It validates destination/memo, wallet network, exact asset identity, token balance,
 and native gas/storage reserve before returning a transfer descriptor. Supported
-adapters cover NEAR native/NEP-141, nine registered EVM mainnets native/ERC-20,
-and TON mainnet native/jettons. Missing contracts only imply native assets for
+adapters cover NEAR native/NEP-141, registered EVM mainnets through one native/ERC-20
+implementation, TON native/jettons, Solana SOL/legacy SPL associated accounts,
+and Bitcoin mainnet native BTC. Missing contracts only imply native assets for
 explicit known provider route IDs; display symbols are not authoritative.
 TON jetton wallets are resolved server-side and checked against owner/master.
 NEAR reserves storage plus 100 Tgas; TON reserves 0.01 TON beyond the native
@@ -187,3 +188,42 @@ migration deletes new recovery metadata and must not be part of an app rollback.
 
 Deploy the backend first, then the coordinated wallet MFE and Angular host.
 No migration or live transfer is run by the local implementation/test workflow.
+
+### Dynamic catalog and additional wallet families
+
+`GET /api/v1/assets` ingests every valid `/v0/tokens` entry without a symbol or
+chain allowlist. Refreshes are coalesced. `meta.stale` explicitly marks fallback
+catalog data; stale metadata cannot authorize a quote or prepare request.
+`sourceNetwork` and `balanceAssetId` are backend-owned mappings. A catalog entry
+alone does not promise a connected-wallet adapter, configured RPC, or liquidity.
+Unknown future destination formats fail closed until a validator is registered.
+
+The EVM adapter adds Berachain, Monad, XLayer, Plasma, ADI, Robinhood, HyperEVM,
+and Abstract through network configuration. HyperCore is a separate destination,
+not an EVM funding alias. Every enabled EVM RPC verifies its actual chain ID.
+Solana uses `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp`, verifies mainnet genesis,
+and binds the recent blockhash to a transfer reconstructed by Phantom. The BFF
+checks mint program/decimals, associated-token balance, fees and account rent.
+Token-2022 extensions and non-associated token source accounts are not yet funded.
+
+Bitcoin uses `bip122:000000000019d6689c085ae165831e93`. Configure the optional
+backend-only `BITCOIN_ESPLORA_URL` to enable balance/fee preparation; it must be
+HTTPS without redirects, URL credentials or a query string. The adapter verifies
+the genesis block, uses confirmed UTXOs and estimates a conservative fee reserve.
+UniSat selects spendable coins and displays the final fee. Bitcoin forks need
+separate network/provider/wallet integration; they are not inferred from BTC.
+No external deposit-address fallback is offered for unconnected source chains.
+Solana Ed25519 and Bitcoin BIP-322 proofs use the existing authenticated,
+single-use wallet-link protocol. Addresses remain case-sensitive.
+
+Receiving support is independent of the source adapter. `destinationMemo` is an
+optional canonical XRP uint32 destination tag, distinct from `depositMemo`.
+It survives quote, preparation, persisted execution metadata and review. An
+X-address cannot also supply a separate tag. Memo fields on other networks are
+rejected rather than silently dropped. Destination validation additionally covers
+Movement, Fogo and Quantus (SS58 prefix 189 with checksum).
+
+Deploy BFF, then MFE, then host. XRP tags require MFE `destinationMemoVersion`
+`1.0.0`. New RPC configuration is an operator action, not part of this code change.
+The CommonJS backend pins `rpc-websockets`' UUID dependency to compatible v11;
+UUID v14 is ESM-only and cannot load through the current Jest/CommonJS pipeline.

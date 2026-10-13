@@ -17,6 +17,7 @@ export class PrepareSwapMapper {
             deadline: dto.deadline,
             signerId: dto.signerId,
             recipient: dto.recipient ?? dto.signerId,
+            destinationMemo: dto.destinationMemo,
             recipientType:
                 dto.recipientType ??
                 (dto.recipient ? 'DESTINATION_CHAIN' : dto.authMethod === 'near' ? 'INTENTS' : 'DESTINATION_CHAIN'),

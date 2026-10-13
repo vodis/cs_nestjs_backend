@@ -28,7 +28,7 @@ function assetsService(): jest.Mocked<Pick<AssetsService, 'getAssets'>> {
     return {
         getAssets: jest.fn(async () => ({
             data: [usdc, wrappedNear],
-            meta: { source: '1click' as const, cached: false, fetchedAt: new Date().toISOString() },
+            meta: { source: '1click' as const, stale: false, cached: false, fetchedAt: new Date().toISOString() },
         })),
     };
 }
@@ -257,7 +257,7 @@ describe('BalancesService', () => {
         }));
         assets.getAssets.mockResolvedValueOnce({
             data: batch,
-            meta: { source: '1click', cached: false, fetchedAt: new Date().toISOString() },
+            meta: { source: '1click', stale: false, cached: false, fetchedAt: new Date().toISOString() },
         });
 
         await service.getBalances(

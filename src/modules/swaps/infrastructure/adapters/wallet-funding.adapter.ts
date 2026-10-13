@@ -1,6 +1,9 @@
+import { SOLANA_MAINNET, BITCOIN_MAINNET } from '../../../../api/assets/native-asset-routes';
+import { SolanaFundingService } from '../../../../api/balances/solana-funding.service';
+import { BitcoinBalanceService } from '../../../../api/balances/bitcoin-balance.service';
 import { EVM_NETWORKS, NATIVE_ROUTES } from '../../../../api/assets/native-asset-routes';
 import { Interface } from 'ethers';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Address } from '@ton/core';
 import { ChainRpcService } from '../../../../api/balances/rpc/chain-rpc.service';
 import { TonCenterService } from '../../../../api/balances/ton/ton-center.service';
@@ -15,13 +18,22 @@ export class WalletFundingAdapter implements WalletFundingPort {
     constructor(
         private readonly rpc: ChainRpcService,
         private readonly ton: TonCenterService,
+        @Optional() private readonly solana?: SolanaFundingService,
+        @Optional() private readonly bitcoin?: BitcoinBalanceService,
     ) {}
 
     /** Conservative native Max estimate; final preparation validates the actual transfer again. */
     async nativeMaximum(network: string, account: string): Promise<string> {
         let balance: bigint;
         let reserve: bigint;
-        if (network === 'near:mainnet') {
+        if (network === SOLANA_MAINNET) {
+            if (!this.solana) throw new ServiceUnavailableException('Solana funding is unavailable');
+            balance = await this.solana.nativeBalance(account);
+            reserve = 10000n;
+        } else if (network === BITCOIN_MAINNET) {
+            if (!this.bitcoin) throw new ServiceUnavailableException('Bitcoin funding is unavailable');
+            ({ balance, reserve } = await this.bitcoin.funds(account));
+        } else if (network === 'near:mainnet') {
             const [state, protocol, gas] = await Promise.all([
                 this.rpc.request<{ amount: string; locked: string; storage_usage: number }>(network, 'query', {
                     request_type: 'view_account',
@@ -60,6 +72,8 @@ export class WalletFundingAdapter implements WalletFundingPort {
         asset: AssetRegistryEntry,
         execution: SwapExecutionPackage,
     ): Promise<WalletFunding> {
+        if (asset.blockchain === 'sol' || asset.blockchain === 'btc')
+            return this.prepareAdditionalFamily(command, asset, execution);
         const network =
             asset.blockchain === 'near'
                 ? 'near:mainnet'
@@ -134,6 +148,55 @@ export class WalletFundingAdapter implements WalletFundingPort {
             funding.jettonWallet = await this.ton.getJettonWalletAddress(network, command.signerId, tokenContract);
         }
         await this.assertFunds(funding);
+        return funding;
+    }
+
+    private async prepareAdditionalFamily(
+        command: SwapQuoteCommand,
+        asset: AssetRegistryEntry,
+        execution: SwapExecutionPackage,
+    ): Promise<WalletFunding> {
+        const solana = asset.blockchain === 'sol';
+        const network = solana ? SOLANA_MAINNET : BITCOIN_MAINNET;
+        const auth = solana ? 'solana' : 'bitcoin';
+        if (command.authMethod !== auth || command.network !== network || command.sourceAssetId !== asset.assetId)
+            throw new BadRequestException('Funding asset, wallet or network mismatch');
+        const destination = execution.payload.depositAddress;
+        if (typeof destination !== 'string' || execution.payload.depositMemo !== undefined)
+            throw new BadRequestException('Unsupported deposit destination or memo');
+        new SwapAddressValidationService().assertExternalRecipient(destination, 'DESTINATION_CHAIN', asset.blockchain);
+        const native =
+            asset.defuseAssetId === (solana ? 'nep141:sol.omft.near' : 'nep141:btc.omft.near') ||
+            (!solana && asset.defuseAssetId === '1cs_v1:btc:native:coin');
+        if (!native && (!solana || !asset.contractAddress)) throw new BadRequestException('Unsupported funding asset');
+        const funding: WalletFunding = {
+            version: '1.0.0',
+            kind: solana ? (native ? 'solana-native' : 'solana-token') : 'bitcoin-native',
+            network,
+            assetId: asset.assetId,
+            executionAssetId: asset.defuseAssetId,
+            sender: command.signerId,
+            destination,
+            amount: command.amount,
+        };
+        if (solana) {
+            if (!this.solana) throw new ServiceUnavailableException('Solana funding is unavailable');
+            const mint = native ? undefined : asset.contractAddress;
+            Object.assign(
+                funding,
+                await this.solana.prepare(command.signerId, destination, command.amount, asset.decimals, mint),
+            );
+            if (mint) funding.tokenContract = mint;
+        } else {
+            if (!this.bitcoin) throw new ServiceUnavailableException('Bitcoin funding is unavailable');
+            const { balance, feeRate, reserve } = await this.bitcoin.funds(command.signerId);
+            const amount = BigInt(command.amount);
+            if (amount < 546n || amount > 2100000000000000n || balance < amount + reserve)
+                throw new BadRequestException(
+                    'Invalid Bitcoin amount or insufficient confirmed funds for transfer and fees',
+                );
+            funding.feeRate = feeRate;
+        }
         return funding;
     }
 

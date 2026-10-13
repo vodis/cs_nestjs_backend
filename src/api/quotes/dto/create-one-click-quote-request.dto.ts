@@ -42,6 +42,12 @@ export class CreateOneClickQuoteRequestDto {
     @Matches(/^\S+$/, { message: 'recipient must not contain whitespace' })
     recipient?: string;
 
+    @ApiPropertyOptional({ description: 'XRP destination tag; never the deposit memo' })
+    @IsOptional()
+    @IsString()
+    @Matches(/^(0|[1-9][0-9]{0,9})$/)
+    destinationMemo?: string;
+
     @ApiPropertyOptional({ enum: ['DESTINATION_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'] })
     @IsOptional()
     @IsIn(['DESTINATION_CHAIN', 'INTENTS', 'CONFIDENTIAL_INTENTS'])
@@ -58,8 +64,8 @@ export class CreateOneClickQuoteRequestDto {
     refundType?: 'ORIGIN_CHAIN' | 'INTENTS' | 'CONFIDENTIAL_INTENTS';
 
     @ApiProperty({ example: 'evm' })
-    @IsIn(['evm', 'near', 'ton'])
-    authMethod: 'evm' | 'near' | 'ton';
+    @IsIn(['evm', 'near', 'ton', 'solana', 'bitcoin'])
+    authMethod: 'evm' | 'near' | 'ton' | 'solana' | 'bitcoin';
 
     @ApiProperty({ example: 'EXACT_INPUT' })
     @IsIn(['EXACT_INPUT', 'EXACT_OUTPUT'])

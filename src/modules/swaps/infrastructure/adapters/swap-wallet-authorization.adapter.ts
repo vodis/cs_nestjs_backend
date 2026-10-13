@@ -5,11 +5,15 @@ import { SwapWalletAuthorizationPort } from '../../application/ports/swap-wallet
 
 @Injectable()
 export class SwapWalletAuthorizationAdapter implements SwapWalletAuthorizationPort {
-    async isOwnedByUser(userId: string, address: string, chainType: 'evm' | 'near' | 'ton'): Promise<boolean> {
+    async isOwnedByUser(
+        userId: string,
+        address: string,
+        chainType: 'evm' | 'near' | 'ton' | 'solana' | 'bitcoin',
+    ): Promise<boolean> {
         const wallet = await WalletLink.findOne({
             where: {
                 userId,
-                address: chainType === 'ton' ? address.trim() : address.trim().toLowerCase(),
+                address: chainType === 'evm' || chainType === 'near' ? address.trim().toLowerCase() : address.trim(),
                 status: 'active',
                 chainType: { [Op.in]: chainType === 'evm' ? ['evm', 'ethereum'] : [chainType] },
                 ...(chainType !== 'evm'

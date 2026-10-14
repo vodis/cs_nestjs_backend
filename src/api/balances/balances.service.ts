@@ -49,7 +49,9 @@ export class BalancesService {
                   where: {
                       userId,
                       walletId: { [Op.in]: linkedWalletIds },
-                      ...(assets.length ? { assetId: { [Op.in]: assets.map((asset) => asset.assetId) } } : {}),
+                      ...(assets.length
+                          ? { assetId: { [Op.in]: assets.map((asset) => asset.balanceAssetId ?? asset.assetId) } }
+                          : {}),
                       ...(requestedNetwork ? { network: requestedNetwork } : {}),
                   },
                   order: [
@@ -68,7 +70,8 @@ export class BalancesService {
             const requestedAssets = assets.length ? assets : [undefined];
             return requestedAssets.flatMap((asset) => {
                 const assetId = asset?.assetId || this.nativeAssetId(network);
-                return wallet.walletId && freshKeys.has(this.key(wallet.walletId, network, assetId))
+                return wallet.walletId &&
+                    freshKeys.has(this.key(wallet.walletId, network, asset?.balanceAssetId ?? assetId))
                     ? []
                     : [{ wallet, network, asset, assetId }];
             });
@@ -107,7 +110,7 @@ export class BalancesService {
                 (candidate) =>
                     candidate.walletId === target.wallet.walletId &&
                     this.cacheNetwork(candidate) === target.network &&
-                    candidate.assetId === target.assetId &&
+                    candidate.assetId === (target.asset?.balanceAssetId ?? target.assetId) &&
                     candidate.expiresAt <= now,
             );
             return entry ? [this.toDto(entry, true)] : [];
@@ -216,13 +219,14 @@ export class BalancesService {
             group.network,
             group.targets.map((target) => target.asset),
         );
-        if (group.wallet.walletId) {
+        const walletId = group.wallet.walletId;
+        if (walletId) {
             await Promise.all(
                 result.balances.map((balance) =>
                     BalanceCacheEntry.upsert(
                         {
                             userId,
-                            walletId: group.wallet.walletId as string,
+                            walletId,
                             walletAddress: group.wallet.address,
                             chainType: group.wallet.chainType,
                             network: group.network,

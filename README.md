@@ -154,6 +154,9 @@ preparations or disrupting status reconciliation. A quote never bypasses ownersh
 funding checks, expiry, confirmation or settlement checks.
 
 The assets API provides optional `balanceAssetId` for native provider routes.
+Explicit SOL/BTC asset balance requests return this same native balance ID,
+matching ordinary native balance reads and the host's pre-review funding check.
+Cache reads use the same native ID, including stale fallback during provider outages.
 The host matches it to native RPC holdings while preserving `assetId` for quotes
 and execution. Native classification is backend-owned and never inferred from
 a missing contract or display symbol.

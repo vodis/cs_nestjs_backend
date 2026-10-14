@@ -1,4 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { SOLANA_MAINNET, BITCOIN_MAINNET } from '../assets/native-asset-routes';
 import { Sequelize } from 'sequelize-typescript';
 import { AssetsService } from '../assets/assets.service';
 import { AssetDto } from '../assets/dto/get-assets-response.dto';
@@ -70,10 +72,14 @@ describe('BalancesService', () => {
         await sequelize.sync({ force: true });
         assets = assetsService();
         chainBalances = chainBalanceService();
-        service = new BalancesService(
-            assets as unknown as AssetsService,
-            chainBalances as unknown as ChainBalanceService,
-        );
+        const module = await Test.createTestingModule({
+            providers: [
+                BalancesService,
+                { provide: AssetsService, useValue: assets },
+                { provide: ChainBalanceService, useValue: chainBalances },
+            ],
+        }).compile();
+        service = module.get(BalancesService);
     });
 
     afterEach(async () => sequelize.close());
@@ -145,6 +151,56 @@ describe('BalancesService', () => {
         expect(result.meta).toMatchObject({ source: 'postgres_cache', cached: true, partial: false });
         expect(chainBalances.getBalances).not.toHaveBeenCalled();
     });
+
+    it.each([
+        ['sol', SOLANA_MAINNET, 'nep141:sol.omft.near', 9],
+        ['btc', BITCOIN_MAINNET, 'nep141:btc.omft.near', 8],
+    ] satisfies Array<[string, string, string, number]>)(
+        'reuses native %s cache and preserves stale fallback for provider asset requests (PR 266)',
+        async (blockchain, network, assetId, decimals) => {
+            const { user, wallet } = await userWallet();
+            await wallet.update({ chainType: blockchain === 'sol' ? 'solana' : 'bitcoin' });
+            const balanceAssetId = `${network}/native`;
+            const asset: AssetDto = {
+                assetId,
+                defuseAssetId: assetId,
+                balanceAssetId,
+                blockchain,
+                symbol: blockchain.toUpperCase(),
+                decimals,
+            };
+            assets.getAssets.mockResolvedValue({
+                data: [asset],
+                meta: { source: '1click', stale: false, cached: false, fetchedAt: new Date().toISOString() },
+            });
+            const entry = await cache(
+                user.id,
+                wallet,
+                { ...asset, assetId: balanceAssetId },
+                new Date(Date.now() + 60000),
+            );
+            await entry.update({ network });
+            const query = { walletId: wallet.id, network, assetIds: [assetId] };
+            const fresh = await service.getBalancesForUser(user.id, query);
+            expect(fresh.data).toEqual([expect.objectContaining({ assetId: balanceAssetId, stale: false })]);
+            expect(fresh.meta).toMatchObject({ cached: true, partial: false });
+            expect(chainBalances.getBalances).not.toHaveBeenCalled();
+
+            await entry.update({ expiresAt: new Date(Date.now() - 60000) });
+            chainBalances.getBalances.mockResolvedValueOnce({
+                balances: [],
+                failures: [{ assetId, reason: 'Provider unavailable' }],
+            });
+            const stale = await service.getBalancesForUser(user.id, query);
+            expect(stale.data).toEqual([expect.objectContaining({ assetId: balanceAssetId, stale: true })]);
+            expect(stale.meta).toMatchObject({ cached: true, partial: true });
+            expect(chainBalances.getBalances).toHaveBeenCalledWith(
+                expect.objectContaining({ walletId: wallet.id }),
+                network,
+                [asset],
+            );
+        },
+    );
 
     it('adopts a cache row written without network by the legacy active image', async () => {
         const { user, wallet } = await userWallet();

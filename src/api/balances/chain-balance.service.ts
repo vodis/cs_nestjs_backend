@@ -140,7 +140,7 @@ export class ChainBalanceService {
         const balances: LiveChainBalance[] = [];
         const failures: ChainBalanceBatchResult['failures'] = [];
         for (const asset of assets) {
-            const assetId = asset?.assetId ?? `${network}/native`;
+            const assetId = asset?.balanceAssetId ?? asset?.assetId ?? `${network}/native`;
             try {
                 if (asset && asset.blockchain !== (solana ? 'sol' : 'btc'))
                     throw new BadRequestException('Asset network mismatch');
@@ -178,7 +178,10 @@ export class ChainBalanceService {
                 });
             } catch (error) {
                 if (error instanceof BadRequestException) throw error;
-                failures.push({ assetId, reason: error instanceof Error ? error.message : 'Balance provider failed' });
+                failures.push({
+                    assetId: asset?.assetId ?? assetId,
+                    reason: error instanceof Error ? error.message : 'Balance provider failed',
+                });
             }
         }
         return { balances, failures };

@@ -1,6 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { SOLANA_MAINNET, BITCOIN_MAINNET } from '../assets/native-asset-routes';
+import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
 import { Sequelize } from 'sequelize-typescript';
 import { AssetsService } from '../assets/assets.service';
 import { AssetDto } from '../assets/dto/get-assets-response.dto';

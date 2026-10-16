@@ -1,5 +1,5 @@
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { SOLANA_MAINNET } from '../assets/native-asset-routes';
+import { SOLANA_MAINNET } from '@vodis/cs-assets';
 import { Test } from '@nestjs/testing';
 import { Keypair } from '@solana/web3.js';
 import { SolanaFundingService } from './solana-funding.service';

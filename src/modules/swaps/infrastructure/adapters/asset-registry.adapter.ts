@@ -1,3 +1,4 @@
+import { nativeFundingSourceAssetId } from '@vodis/cs-assets/one-click';
 import { Injectable } from '@nestjs/common';
 import { AssetsService } from '../../../../api/assets/assets.service';
 import { AssetRegistryEntry } from '../../domain/models/asset-registry-entry';
@@ -22,6 +23,8 @@ export class AssetRegistryAdapter implements AssetRegistryPort {
             blockchain: asset.blockchain,
             price: asset.price,
             contractAddress: asset.contractAddress,
+            sourceNetwork: asset.sourceNetwork,
+            nativeFundingSourceAssetId: nativeFundingSourceAssetId(asset.blockchain, asset.defuseAssetId),
         };
     }
 }

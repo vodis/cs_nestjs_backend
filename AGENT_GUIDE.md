@@ -144,6 +144,31 @@ This backend/BFF owns the canonical supported asset/token registry for exchange,
 - Treat client-side or community token lists as non-authoritative inputs. Ingest, validate, and allowlist them server-side before they affect balances, quotes, orders, or execution.
 - Keep `cs_ng_app_client` responsible for rendering/mapping backend-provided assets, and keep `cs_mfe-wallets` responsible only for wallet connectivity, account/chain events, safety/verification gates, and signing prepared payloads.
 
+### 4.2) Protocol implementation, SDK and proof ownership
+
+Follow the cross-repository [asset and cryptographic boundary](https://github.com/vodis/cs_orchestrator/blob/main/docs/architecture/asset-and-crypto-responsibilities.md).
+Backend authority and implementation location are separate decisions.
+
+- The backend accepts ownership proofs independently, including challenge/user
+  binding, expiry and replay checks. The MFE coordinates signing and transport;
+  its verification flag is not server authorization.
+- Reuse established libraries/platform cryptography inside narrow verification
+  and chain adapters. Keep codecs, provider aliases and cryptographic details
+  out of controllers and application use cases. User private keys remain with
+  wallets/providers; treasury signing follows the separate secrets policy.
+- Use `@vodis/cs-assets/one-click` to normalize provider-native aliases
+  through the registry boundary, scoped
+  to blockchain; propagate typed funding/network facts through ports. Never
+  infer native identity from symbols or absent contracts.
+- `cs-sdk` may own reusable pure protocol types, codecs and resolvers when
+  explicitly packaged and released. It owns no server policy or live registry.
+  Use `cs-intents` for intent contracts and signing-request mapping, and
+  `cs-assets` for network identities and provider-native route resolution.
+  Do not restore a local alias table. SDK releases precede consumer lockfile updates.
+- Do not import browser MFE code into the backend or make client metadata the
+  authority. Local backend adapters are valid current implementations; extraction
+  to a shared package or service must preserve server-side checks.
+
 ### 5) Multi-Network Rules
 
 - Introduce chain/network abstraction (`NetworkAdapter` contract).

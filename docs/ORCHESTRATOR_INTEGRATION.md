@@ -264,3 +264,15 @@ Runtime env is applied when the orchestrator creates a new container. Updating s
 
 - `cs_nextjs_client` — related orchestrator integration using the same metadata contract.
 - `cs_orchestrator/docs/integration/SERVICE_INTEGRATION_GUIDE.md`
+
+### Shared asset package installs
+
+The backend pins the published `@vodis/cs-assets` package and commits its pnpm
+lockfile. Grant this repository read access under the package's **Manage Actions
+access** settings. CI uses its scoped `GITHUB_TOKEN` with package-read permission;
+no package credential belongs in runtime secrets or the service catalog.
+
+The image build receives setup-node's npm configuration and the job token through
+BuildKit secrets (`npmrc` and `node_auth_token`). Both dependency stages mount
+these secrets only during installation. Do not pass registry credentials through
+Docker build arguments, copy local `.npmrc` files into the image, or commit them.

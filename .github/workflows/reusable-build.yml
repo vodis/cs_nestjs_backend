@@ -75,9 +75,13 @@ jobs:
         with:
           node-version: '20'
           cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@vodis'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: pnpm run build
@@ -112,9 +116,13 @@ jobs:
         with:
           node-version: '20'
           cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@vodis'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: pnpm run build
@@ -151,6 +159,10 @@ jobs:
             ${{ env.GHCR_IMAGE }}:${{ inputs.image_tag }}
             ${{ env.GHCR_IMAGE }}:${{ github.sha }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          secret-files: |
+            npmrc=${{ env.NPM_CONFIG_USERCONFIG }}
+          secrets: |
+            node_auth_token=${{ secrets.GITHUB_TOKEN }}
           provenance: true
           sbom: true
 

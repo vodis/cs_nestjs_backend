@@ -1,5 +1,5 @@
-import { SOLANA_MAINNET, BITCOIN_MAINNET } from '../assets/native-asset-routes';
-import { EVM_NETWORKS, NATIVE_ROUTES } from '../assets/native-asset-routes';
+import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
+import { EVM_NETWORKS, isNativeProviderRoute } from '@vodis/cs-assets/one-click';
 import { SolanaFundingService } from './solana-funding.service';
 import { BitcoinBalanceService } from './bitcoin-balance.service';
 import { SwapAddressValidationService } from '../../modules/swaps/domain/services/swap-address-validation.service';
@@ -144,12 +144,7 @@ export class ChainBalanceService {
             try {
                 if (asset && asset.blockchain !== (solana ? 'sol' : 'btc'))
                     throw new BadRequestException('Asset network mismatch');
-                if (
-                    asset &&
-                    !asset.contractAddress &&
-                    asset.defuseAssetId !== NATIVE_ROUTES[asset.blockchain] &&
-                    asset.defuseAssetId !== '1cs_v1:btc:native:coin'
-                )
+                if (asset && !asset.contractAddress && !isNativeProviderRoute(asset.blockchain, asset.defuseAssetId))
                     throw new BadRequestException('Asset has no registered transfer contract');
                 let balanceRaw: string;
                 if (solana) {

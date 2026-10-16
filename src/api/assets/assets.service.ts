@@ -1,4 +1,4 @@
-import { SOURCE_NETWORKS, NATIVE_ROUTES } from './native-asset-routes';
+import { SOURCE_NETWORKS, nativeBalanceAssetId } from '@vodis/cs-assets/one-click';
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OneClickApiHttpClient } from '../../http-clients/one-click-api/one-click-api.http-client';
@@ -89,13 +89,10 @@ export class AssetsService {
         return {
             assetId: token.assetId,
             defuseAssetId: token.assetId,
-            ...(token.assetId === NATIVE_ROUTES[token.blockchain] || token.assetId === '1cs_v1:btc:native:coin'
-                ? {
-                      balanceAssetId:
-                          token.blockchain === 'ton' ? 'ton:native' : `${SOURCE_NETWORKS[token.blockchain]}/native`,
-                  }
-                : {}),
-            sourceNetwork: SOURCE_NETWORKS[token.blockchain],
+            balanceAssetId: nativeBalanceAssetId(token.blockchain, token.assetId),
+            sourceNetwork: Object.prototype.hasOwnProperty.call(SOURCE_NETWORKS, token.blockchain)
+                ? SOURCE_NETWORKS[token.blockchain]
+                : undefined,
             symbol: token.symbol,
             name: metadata?.name,
             icon: metadata?.icon || undefined,

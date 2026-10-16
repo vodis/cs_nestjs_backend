@@ -164,7 +164,10 @@ matching ordinary native balance reads and the host's pre-review funding check.
 Cache reads use the same native ID, including stale fallback during provider outages.
 The host matches it to native RPC holdings while preserving `assetId` for quotes
 and execution. Native classification is backend-owned and never inferred from
-a missing contract or display symbol.
+a missing contract or display symbol. Provider aliases are resolved once in
+`@vodis/cs-assets/one-click`; the registry adapter exposes normalized network and
+native-funding identity to application use cases. See AGENT_GUIDE.md §4.2 for
+the distinction between backend validation, SDK reuse, and wallet signing.
 
 ### Swap UX, indicative previews and History
 

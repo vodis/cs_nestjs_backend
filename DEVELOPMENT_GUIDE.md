@@ -19,6 +19,10 @@ The goal is predictable delivery, financial safety, and long-term maintainabilit
 - `i18n` (`cs_i18n_service`): independent translations service and language content lifecycle.
 
 This is the default long-term architecture and should guide all new implementation decisions.
+It does not mean current non-sensitive chain/provider adapters must run in a
+separate service. Keep them behind typed ports in this backend until a deliberate
+extraction. Public proof verification is not wallet signing or key custody.
+See AGENT_GUIDE.md §4.2 for backend/MFE/SDK implementation boundaries.
 
 ## Target Technical Baseline
 

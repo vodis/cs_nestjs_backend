@@ -1,4 +1,4 @@
-import { SOLANA_MAINNET, BITCOIN_MAINNET } from '../assets/native-asset-routes';
+import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
 
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Op } from 'sequelize';

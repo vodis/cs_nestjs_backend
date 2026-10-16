@@ -1,7 +1,7 @@
-import { SOLANA_MAINNET, BITCOIN_MAINNET } from '../../../../api/assets/native-asset-routes';
+import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
 import { SolanaFundingService } from '../../../../api/balances/solana-funding.service';
 import { BitcoinBalanceService } from '../../../../api/balances/bitcoin-balance.service';
-import { EVM_NETWORKS, NATIVE_ROUTES } from '../../../../api/assets/native-asset-routes';
+import { EVM_NETWORKS, isNativeProviderRoute, nativeFundingSourceAssetId } from '@vodis/cs-assets/one-click';
 import { Interface } from 'ethers';
 import { BadRequestException, Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { Address } from '@ton/core';
@@ -85,10 +85,7 @@ export class WalletFundingAdapter implements WalletFundingPort {
         const auth = network.startsWith('near:') ? 'near' : network.startsWith('ton:') ? 'ton' : 'evm';
         if (command.authMethod !== auth) throw new BadRequestException('Funding network does not match the wallet');
         const nativeNear = command.sourceAssetId === 'near:native';
-        if (
-            nativeNear &&
-            (asset.blockchain !== 'near' || asset.defuseAssetId.replace(/^1cs_v1:near:/, '') !== 'nep141:wrap.near')
-        )
+        if (nativeNear && nativeFundingSourceAssetId(asset.blockchain, asset.defuseAssetId) !== 'near:native')
             throw new BadRequestException('Native NEAR must use the registered wrapped NEAR route');
         if (command.sourceAssetId && !nativeNear && command.sourceAssetId !== asset.assetId)
             throw new BadRequestException('Funding asset does not match the registered route');
@@ -101,7 +98,7 @@ export class WalletFundingAdapter implements WalletFundingPort {
         if ((auth === 'evm' || nativeNear) && depositMemo)
             throw new BadRequestException('EVM memo funding is not supported');
         const tokenContract = asset.contractAddress;
-        const nativeRoute = asset.defuseAssetId === NATIVE_ROUTES[asset.blockchain];
+        const nativeRoute = isNativeProviderRoute(asset.blockchain, asset.defuseAssetId);
         if (auth === 'evm' && !tokenContract && !nativeRoute)
             throw new BadRequestException('Asset has no registered EVM transfer contract');
         if (auth === 'ton' && !tokenContract && !nativeRoute)
@@ -165,9 +162,7 @@ export class WalletFundingAdapter implements WalletFundingPort {
         if (typeof destination !== 'string' || execution.payload.depositMemo !== undefined)
             throw new BadRequestException('Unsupported deposit destination or memo');
         new SwapAddressValidationService().assertExternalRecipient(destination, 'DESTINATION_CHAIN', asset.blockchain);
-        const native =
-            asset.defuseAssetId === (solana ? 'nep141:sol.omft.near' : 'nep141:btc.omft.near') ||
-            (!solana && asset.defuseAssetId === '1cs_v1:btc:native:coin');
+        const native = isNativeProviderRoute(asset.blockchain, asset.defuseAssetId);
         if (!native && (!solana || !asset.contractAddress)) throw new BadRequestException('Unsupported funding asset');
         const funding: WalletFunding = {
             version: '1.0.0',

@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { Keypair } from '@solana/web3.js';
-import { BITCOIN_MAINNET, SOLANA_MAINNET } from '../assets/native-asset-routes';
+import { BITCOIN_MAINNET, SOLANA_MAINNET } from '@vodis/cs-assets';
 import { AssetDto } from '../assets/dto/get-assets-response.dto';
 import { BitcoinBalanceService } from './bitcoin-balance.service';
 import { ChainBalanceService } from './chain-balance.service';

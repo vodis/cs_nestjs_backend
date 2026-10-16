@@ -2,7 +2,6 @@ import { BadRequestException, ForbiddenException, Inject, Injectable } from '@ne
 import { ASSET_REGISTRY_PORT, AssetRegistryPort } from '../ports/asset-registry.port';
 import { SWAP_WALLET_AUTHORIZATION, SwapWalletAuthorizationPort } from '../ports/swap-wallet-authorization.port';
 import { WALLET_FUNDING, WalletFundingPort } from '../ports/wallet-funding.port';
-import { SOURCE_NETWORKS, NATIVE_ROUTES } from '../../../../api/assets/native-asset-routes';
 import { SwapAddressValidationService } from '../../domain/services/swap-address-validation.service';
 type SpendableSwapInput = {
     sourceAssetId: string;
@@ -23,16 +22,9 @@ export class GetSpendableSwapUseCase {
             throw new ForbiddenException('Wallet is not linked');
         const asset = await this.assets.findById(input.originAsset);
         if (!asset) throw new BadRequestException('Unsupported asset');
-        const nearNative =
-            input.sourceAssetId === 'near:native' &&
-            asset.blockchain === 'near' &&
-            asset.defuseAssetId.replace(/^1cs_v1:near:/, '') === 'nep141:wrap.near';
-        const routeNative =
-            input.sourceAssetId === asset.assetId &&
-            (asset.defuseAssetId === NATIVE_ROUTES[asset.blockchain] ||
-                (asset.blockchain === 'btc' && asset.defuseAssetId === '1cs_v1:btc:native:coin'));
-        if (!nearNative && !routeNative) throw new BadRequestException('Select a native asset');
-        const network = SOURCE_NETWORKS[asset.blockchain];
+        if (input.sourceAssetId !== asset.nativeFundingSourceAssetId)
+            throw new BadRequestException('Select a native asset');
+        const network = asset.sourceNetwork;
         const auth = { near: 'near', ton: 'ton', sol: 'solana', btc: 'bitcoin' }[asset.blockchain] ?? 'evm';
         if (!network || network !== input.network || auth !== input.authMethod)
             throw new BadRequestException('Network does not match asset');

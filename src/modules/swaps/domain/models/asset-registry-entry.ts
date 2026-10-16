@@ -5,5 +5,7 @@ export type AssetRegistryEntry = {
     decimals: number;
     blockchain: string;
     contractAddress?: string;
+    sourceNetwork?: string;
+    nativeFundingSourceAssetId?: string;
     price?: string | number;
 };

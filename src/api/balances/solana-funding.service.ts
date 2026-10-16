@@ -1,4 +1,4 @@
-import { SOLANA_MAINNET } from '../assets/native-asset-routes';
+import { SOLANA_MAINNET } from '@vodis/cs-assets';
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import {

@@ -268,11 +268,13 @@ Runtime env is applied when the orchestrator creates a new container. Updating s
 ### Shared asset package installs
 
 The backend pins the published `@vodis/cs-assets` package and commits its pnpm
-lockfile. Grant this repository read access under the package's **Manage Actions
-access** settings. CI uses its scoped `GITHUB_TOKEN` with package-read permission;
-no package credential belongs in runtime secrets or the service catalog.
+lockfile. Configure the repository Actions secret `GH_PACKAGES_TOKEN` with a
+package-read token authorized for `@vodis/cs-assets`. Package installs use this
+secret; staging and production explicitly forward it to the reusable workflow.
+Keep `GITHUB_TOKEN` for repository operations and GHCR publishing. No package
+credential belongs in runtime secrets or the service catalog.
 
-The image build receives setup-node's npm configuration and the job token through
-BuildKit secrets (`npmrc` and `node_auth_token`). Both dependency stages mount
+The image build receives setup-node's npm configuration and the package-read
+token through BuildKit secrets (`npmrc` and `node_auth_token`). Both dependency stages mount
 these secrets only during installation. Do not pass registry credentials through
 Docker build arguments, copy local `.npmrc` files into the image, or commit them.

@@ -40,7 +40,16 @@ describe('ChainBalanceService', () => {
         getJettonBalance: jest.fn(),
     } as unknown as TonCenterService;
 
-    it('batches native NEAR and NEP-141 ft_balance_of reads', async () => {
+    it.each([
+        undefined,
+        {
+            assetId: 'near:native',
+            defuseAssetId: 'near:native',
+            symbol: 'NEAR',
+            decimals: 24,
+            blockchain: 'near',
+        },
+    ])('reads native NEAR separately from NEP-141 tokens for swap confirmation (%j)', async (nativeAsset) => {
         const requestBatch = jest.fn(async (_network, requests) => ({
             providerAlias: 'near-primary',
             items: [
@@ -52,7 +61,7 @@ describe('ChainBalanceService', () => {
         const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
 
         const result = await service.getBalances(wallet('alice.near', 'near'), 'near:mainnet', [
-            undefined,
+            nativeAsset,
             usdcNear,
             zecNear,
         ]);
@@ -65,6 +74,11 @@ describe('ChainBalanceService', () => {
                 expect.objectContaining({ key: zecNear.assetId, method: 'query' }),
             ]),
         );
+        expect(requestBatch.mock.calls[0][1][0].params).toMatchObject({
+            request_type: 'view_account',
+            finality: 'final',
+            account_id: 'alice.near',
+        });
         const tokenRequest = requestBatch.mock.calls[0][1][1];
         expect(tokenRequest.params).toMatchObject({
             request_type: 'call_function',

@@ -106,11 +106,14 @@ export class PrepareSwapUseCase {
 
         const packageResult = this.preparePackageBuilder.build(command, bestQuote);
         if (packageResult.executionPackage.mode === 'deposit_address' && command.sourceAssetId) {
-            packageResult.executionPackage.payload.funding = await this.funding.prepare(
+            const funding = await this.funding.prepare(
                 { ...command, amount: bestQuote.amountIn },
                 originAsset!,
                 packageResult.executionPackage,
             );
+            packageResult.executionPackage.payload.funding = funding;
+            if (funding.expiresAt && Date.parse(funding.expiresAt) < Date.parse(packageResult.quoteExpiration))
+                packageResult.quoteExpiration = funding.expiresAt;
         }
         const expiresAt = new Date(packageResult.quoteExpiration);
         if (!Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) {

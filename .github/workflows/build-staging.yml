@@ -34,6 +34,8 @@ jobs:
       packages: write
       id-token: write
     uses: ./.github/workflows/reusable-build.yml
+    secrets:
+      GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
     with:
       environment: staging
       service_name: staging-nestjs-backend

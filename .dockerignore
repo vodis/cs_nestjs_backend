@@ -9,3 +9,5 @@ coverage
 docker-compose.yaml
 .docker
 test
+
+.npmrc

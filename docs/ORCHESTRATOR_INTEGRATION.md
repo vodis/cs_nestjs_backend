@@ -137,7 +137,14 @@ explicit read-only target: `network` is mandatory, `walletId` is returned as
 `null`, and the result is not written to the user's cache. Requested assets
 must exist in the backend asset allowlist.
 
-NEAR and EVM reads use the resilient JSON-RPC provider pool. EVM token reads
+NEAR, EVM and Solana reads use the resilient JSON-RPC provider pool. Solana
+mainnet uses `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` and is verified using
+`getGenesisHash`. Bitcoin mainnet uses the optional backend-only HTTPS
+`BITCOIN_ESPLORA_URL`; its genesis check precedes balance and fee reads. Missing
+configuration disables Bitcoin funding without changing existing networks.
+Treat credential-bearing provider paths as S3; never expose them to clients.
+
+ EVM token reads
 use authoritative contract metadata and ERC-20 `balanceOf`; native reads use
 the network-specific native asset. TON uses the server-side TON Center adapter:
 API v2 for native nanotons and API v3 owner/master filtering for allowlisted
@@ -257,3 +264,17 @@ Runtime env is applied when the orchestrator creates a new container. Updating s
 
 - `cs_nextjs_client` — related orchestrator integration using the same metadata contract.
 - `cs_orchestrator/docs/integration/SERVICE_INTEGRATION_GUIDE.md`
+
+### Shared asset package installs
+
+The backend pins the published `@vodis/cs-assets` package and commits its pnpm
+lockfile. Configure the repository Actions secret `GH_PACKAGES_TOKEN` with a
+package-read token authorized for `@vodis/cs-assets`. Package installs use this
+secret; staging and production explicitly forward it to the reusable workflow.
+Keep `GITHUB_TOKEN` for repository operations and GHCR publishing. No package
+credential belongs in runtime secrets or the service catalog.
+
+The image build receives setup-node's npm configuration and the package-read
+token through BuildKit secrets (`npmrc` and `node_auth_token`). Both dependency stages mount
+these secrets only during installation. Do not pass registry credentials through
+Docker build arguments, copy local `.npmrc` files into the image, or commit them.

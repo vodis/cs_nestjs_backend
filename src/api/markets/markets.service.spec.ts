@@ -48,6 +48,7 @@ describe('MarketsService', () => {
             ],
             meta: {
                 source: '1click',
+                stale: false,
                 cached: false,
                 fetchedAt: '2026-06-07T00:00:00.000Z',
             },

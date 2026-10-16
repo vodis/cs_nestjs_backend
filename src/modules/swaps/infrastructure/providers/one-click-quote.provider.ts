@@ -118,6 +118,10 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
                                 depositAddress,
                                 depositMemo,
                                 expiresAt: expirationTime,
+                                recipient: command.recipient,
+                                ...(command.destinationMemo !== undefined
+                                    ? { destinationMemo: command.destinationMemo }
+                                    : {}),
                             },
                         }
                       : undefined,
@@ -138,6 +142,7 @@ export class OneClickQuoteProvider implements QuoteProviderPort {
             destinationAsset: command.destinationAsset,
             amount: command.amount,
             recipient: command.recipient,
+            ...(command.destinationMemo !== undefined ? { destinationMemo: command.destinationMemo } : {}),
             recipientType: command.recipientType,
             refundTo: command.signerId,
             refundType: command.refundType ?? accountType,

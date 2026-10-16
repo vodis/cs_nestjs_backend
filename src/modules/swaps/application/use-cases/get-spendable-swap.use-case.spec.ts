@@ -22,6 +22,8 @@ describe('native Max authorization and asset binding', () => {
             assetId: 'wrap.near',
             defuseAssetId: 'nep141:wrap.near',
             blockchain: 'near',
+            sourceNetwork: 'near:mainnet',
+            nativeFundingSourceAssetId: 'near:native',
             symbol: 'NEAR',
             decimals: 24,
         });
@@ -45,6 +47,24 @@ describe('native Max authorization and asset binding', () => {
         });
         expect(authorization.isOwnedByUser).toHaveBeenCalledWith('owner', 'alice.near', 'near');
         expect(funding.nativeMaximum).toHaveBeenCalledWith('near:mainnet', 'alice.near');
+    });
+    it('uses registry facts and refuses to infer native status from a provider ID', async () => {
+        registry.findById.mockResolvedValue({
+            assetId: '1cs_v1:btc:native:coin',
+            defuseAssetId: '1cs_v1:btc:native:coin',
+            blockchain: 'btc',
+            sourceNetwork: 'bip122:000000000019d6689c085ae165831e93',
+        });
+        await expect(
+            useCase.execute(
+                {
+                    ...request,
+                    sourceAssetId: '1cs_v1:btc:native:coin',
+                },
+                'owner',
+            ),
+        ).rejects.toThrow('Select a native asset');
+        expect(funding.nativeMaximum).not.toHaveBeenCalled();
     });
     it('rejects a wallet belonging to another user before reading private balances', async () => {
         authorization.isOwnedByUser.mockResolvedValue(false);

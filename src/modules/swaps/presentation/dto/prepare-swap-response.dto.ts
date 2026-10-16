@@ -73,8 +73,8 @@ export class ApprovedPreparePackageDto {
     @ApiProperty({ example: 1781188800000 })
     deadlineTimestamp: number;
 
-    @ApiProperty({ example: 'evm', enum: ['evm', 'near', 'ton'] })
-    authMethod: 'evm' | 'near' | 'ton';
+    @ApiProperty({ example: 'evm', enum: ['evm', 'near', 'ton', 'solana', 'bitcoin'] })
+    authMethod: 'evm' | 'near' | 'ton' | 'solana' | 'bitcoin';
 
     @ApiProperty({ example: 'erc191', enum: ['erc191', 'nep413', 'none'] })
     signatureStandard: 'erc191' | 'nep413' | 'none';

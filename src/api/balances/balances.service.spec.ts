@@ -1,4 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
 import { Sequelize } from 'sequelize-typescript';
 import { AssetsService } from '../assets/assets.service';
 import { AssetDto } from '../assets/dto/get-assets-response.dto';
@@ -28,7 +30,7 @@ function assetsService(): jest.Mocked<Pick<AssetsService, 'getAssets'>> {
     return {
         getAssets: jest.fn(async () => ({
             data: [usdc, wrappedNear],
-            meta: { source: '1click' as const, cached: false, fetchedAt: new Date().toISOString() },
+            meta: { source: '1click' as const, stale: false, cached: false, fetchedAt: new Date().toISOString() },
         })),
     };
 }
@@ -70,10 +72,14 @@ describe('BalancesService', () => {
         await sequelize.sync({ force: true });
         assets = assetsService();
         chainBalances = chainBalanceService();
-        service = new BalancesService(
-            assets as unknown as AssetsService,
-            chainBalances as unknown as ChainBalanceService,
-        );
+        const module = await Test.createTestingModule({
+            providers: [
+                BalancesService,
+                { provide: AssetsService, useValue: assets },
+                { provide: ChainBalanceService, useValue: chainBalances },
+            ],
+        }).compile();
+        service = module.get(BalancesService);
     });
 
     afterEach(async () => sequelize.close());
@@ -132,6 +138,41 @@ describe('BalancesService', () => {
         expect(assets.getAssets).toHaveBeenCalledTimes(1);
     });
 
+    it.each([false, true])('confirms native NEAR swap balance with explicit asset IDs (batch=%s)', async (batch) => {
+        const { user, wallet } = await userWallet();
+        const query = {
+            walletAddress: wallet.address,
+            network: 'near:mainnet',
+            ...(batch
+                ? { assetIds: [NEAR_NATIVE_ASSET_ID, usdc.assetId, wrappedNear.assetId] }
+                : { assetId: NEAR_NATIVE_ASSET_ID }),
+        };
+        const result = await service.getBalancesForUser(user.id, query);
+
+        expect(result.data.map((balance) => balance.assetId)).toEqual(
+            batch ? [NEAR_NATIVE_ASSET_ID, usdc.assetId, wrappedNear.assetId] : [NEAR_NATIVE_ASSET_ID],
+        );
+        expect(result.data[0]).toMatchObject({ symbol: 'NEAR', decimals: 24, stale: false });
+        expect(result.meta.partial).toBe(false);
+        expect(chainBalances.getBalances).toHaveBeenCalledWith(
+            expect.objectContaining({ address: wallet.address }),
+            'near:mainnet',
+            expect.arrayContaining([expect.objectContaining({ assetId: NEAR_NATIVE_ASSET_ID, blockchain: 'near' })]),
+        );
+    });
+
+    it('still rejects unknown assets when batched with native NEAR', async () => {
+        const { user, wallet } = await userWallet();
+        await expect(
+            service.getBalancesForUser(user.id, {
+                walletAddress: wallet.address,
+                network: 'near:mainnet',
+                assetIds: [NEAR_NATIVE_ASSET_ID, 'nep141:unknown.near'],
+            }),
+        ).rejects.toThrow('Unsupported asset');
+        expect(chainBalances.getBalances).not.toHaveBeenCalled();
+    });
+
     it('returns a fresh cache entry without calling RPC', async () => {
         const { user, wallet } = await userWallet();
         await cache(user.id, wallet, usdc, new Date(Date.now() + 60000));
@@ -145,6 +186,56 @@ describe('BalancesService', () => {
         expect(result.meta).toMatchObject({ source: 'postgres_cache', cached: true, partial: false });
         expect(chainBalances.getBalances).not.toHaveBeenCalled();
     });
+
+    it.each([
+        ['sol', SOLANA_MAINNET, 'nep141:sol.omft.near', 9],
+        ['btc', BITCOIN_MAINNET, 'nep141:btc.omft.near', 8],
+    ] satisfies Array<[string, string, string, number]>)(
+        'reuses native %s cache and preserves stale fallback for provider asset requests (PR 266)',
+        async (blockchain, network, assetId, decimals) => {
+            const { user, wallet } = await userWallet();
+            await wallet.update({ chainType: blockchain === 'sol' ? 'solana' : 'bitcoin' });
+            const balanceAssetId = `${network}/native`;
+            const asset: AssetDto = {
+                assetId,
+                defuseAssetId: assetId,
+                balanceAssetId,
+                blockchain,
+                symbol: blockchain.toUpperCase(),
+                decimals,
+            };
+            assets.getAssets.mockResolvedValue({
+                data: [asset],
+                meta: { source: '1click', stale: false, cached: false, fetchedAt: new Date().toISOString() },
+            });
+            const entry = await cache(
+                user.id,
+                wallet,
+                { ...asset, assetId: balanceAssetId },
+                new Date(Date.now() + 60000),
+            );
+            await entry.update({ network });
+            const query = { walletId: wallet.id, network, assetIds: [assetId] };
+            const fresh = await service.getBalancesForUser(user.id, query);
+            expect(fresh.data).toEqual([expect.objectContaining({ assetId: balanceAssetId, stale: false })]);
+            expect(fresh.meta).toMatchObject({ cached: true, partial: false });
+            expect(chainBalances.getBalances).not.toHaveBeenCalled();
+
+            await entry.update({ expiresAt: new Date(Date.now() - 60000) });
+            chainBalances.getBalances.mockResolvedValueOnce({
+                balances: [],
+                failures: [{ assetId, reason: 'Provider unavailable' }],
+            });
+            const stale = await service.getBalancesForUser(user.id, query);
+            expect(stale.data).toEqual([expect.objectContaining({ assetId: balanceAssetId, stale: true })]);
+            expect(stale.meta).toMatchObject({ cached: true, partial: true });
+            expect(chainBalances.getBalances).toHaveBeenCalledWith(
+                expect.objectContaining({ walletId: wallet.id }),
+                network,
+                [asset],
+            );
+        },
+    );
 
     it('adopts a cache row written without network by the legacy active image', async () => {
         const { user, wallet } = await userWallet();
@@ -257,7 +348,7 @@ describe('BalancesService', () => {
         }));
         assets.getAssets.mockResolvedValueOnce({
             data: batch,
-            meta: { source: '1click', cached: false, fetchedAt: new Date().toISOString() },
+            meta: { source: '1click', stale: false, cached: false, fetchedAt: new Date().toISOString() },
         });
 
         await service.getBalances(

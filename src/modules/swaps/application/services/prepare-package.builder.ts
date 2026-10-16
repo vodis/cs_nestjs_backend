@@ -12,8 +12,11 @@ export class PreparePackageBuilder {
         );
 
         const intents = [{ intent: 'token_diff' as const, diff: tokenDeltas }];
-        const signatureStandard =
-            command.authMethod === 'ton' ? 'none' : command.authMethod === 'near' ? 'nep413' : 'erc191';
+        const signatureStandard = ['ton', 'solana', 'bitcoin'].includes(command.authMethod)
+            ? 'none'
+            : command.authMethod === 'near'
+              ? 'nep413'
+              : 'erc191';
 
         return {
             quoteHashes: quote.quoteHashes,

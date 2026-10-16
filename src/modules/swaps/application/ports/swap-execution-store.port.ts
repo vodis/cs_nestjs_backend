@@ -11,7 +11,7 @@ export type StoredSwapPreparation = {
     providerId: string;
     executionMode: SwapExecutionMode;
     userAddress: string;
-    userChainType: 'evm' | 'near' | 'ton';
+    userChainType: 'evm' | 'near' | 'ton' | 'solana' | 'bitcoin';
     executionPayload: Record<string, unknown>;
     expiresAt: Date;
     settlementStatus?: OneClickTerminalStatus | null;

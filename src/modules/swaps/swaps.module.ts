@@ -1,3 +1,5 @@
+import { SolanaFundingService } from '../../api/balances/solana-funding.service';
+import { BitcoinBalanceService } from '../../api/balances/bitcoin-balance.service';
 import { ListSwapHistoryUseCase, RecordSwapAttemptUseCase } from './application/use-cases/swap-history.use-cases';
 import { SwapHistoryPort } from './application/ports/swap-history.port';
 import { GetSpendableSwapUseCase } from './application/use-cases/get-spendable-swap.use-case';
@@ -50,6 +52,8 @@ import { SequelizeSwapExecutionStore } from './infrastructure/repositories/seque
         PrepareSwapUseCase,
         ChainRpcService,
         TonCenterService,
+        SolanaFundingService,
+        BitcoinBalanceService,
         { provide: WALLET_FUNDING, useClass: WalletFundingAdapter },
         GetSwapStatusUseCase,
         ExecuteSwapUseCase,

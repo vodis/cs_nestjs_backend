@@ -5,13 +5,17 @@ FROM node:20-alpine AS deps
 WORKDIR /code
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=true \
+    --mount=type=secret,id=node_auth_token,env=NODE_AUTH_TOKEN,required=true \
+    pnpm install --frozen-lockfile --prod
 
 FROM node:20-alpine AS build
 WORKDIR /code
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=true \
+    --mount=type=secret,id=node_auth_token,env=NODE_AUTH_TOKEN,required=true \
+    pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm run build
 

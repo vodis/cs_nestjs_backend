@@ -4,13 +4,27 @@ import type { SwapExecutionPackage } from '../../domain/models/swap-quote';
 
 export type WalletFunding = {
     version: '1.0.0';
-    kind: 'near-native' | 'near-token' | 'evm-native' | 'evm-token' | 'ton-native' | 'ton-token';
+    kind:
+        | 'near-native'
+        | 'near-token'
+        | 'evm-native'
+        | 'evm-token'
+        | 'ton-native'
+        | 'ton-token'
+        | 'solana-native'
+        | 'solana-token'
+        | 'bitcoin-native';
     network: string;
     assetId: string;
     executionAssetId: string;
     sender: string;
     destination: string;
     amount: string;
+    expiresAt?: string;
+    blockhash?: string;
+    lastValidBlockHeight?: number;
+    tokenDecimals?: number;
+    feeRate?: number;
     tokenContract?: string;
     depositMemo?: string;
     storageDeposit?: string;

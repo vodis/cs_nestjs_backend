@@ -42,6 +42,7 @@ describe('AssetsService', () => {
                     icon: 'https://s2.coinmarketcap.com/static/img/coins/128x128/6535.png',
                     decimals: 24,
                     blockchain: 'near',
+                    sourceNetwork: 'near:mainnet',
                     contractAddress: 'wrap.near',
                     price: '2.79',
                     priceUpdatedAt: '2026-02-27T15:18:30.437Z',
@@ -49,6 +50,7 @@ describe('AssetsService', () => {
             ],
             meta: {
                 source: '1click',
+                stale: false,
                 cached: false,
                 fetchedAt: expect.any(String),
             },
@@ -139,5 +141,25 @@ describe('AssetsService', () => {
             name: 'USD Coin',
             icon: 'https://s2.coinmarketcap.com/static/img/coins/128x128/3408.png',
         });
+    });
+    it('ingests new chains without symbol grouping and replaces removed routes after refresh', async () => {
+        const getTokens = jest
+            .fn()
+            .mockResolvedValueOnce([validToken, { ...validToken, assetId: 'new:route', blockchain: 'future-chain' }])
+            .mockResolvedValueOnce([{ ...validToken, assetId: 'replacement' }]);
+        const service = createService(getTokens, 1);
+        expect((await service.getAssets()).data).toHaveLength(2);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        expect(await service.findAssetById(validToken.assetId)).toBeUndefined();
+        expect((await service.getAssets()).data.map((asset) => asset.assetId)).toEqual(['replacement']);
+    });
+    it('coalesces refreshes and refuses to authorize assets from stale cache', async () => {
+        const getTokens = jest.fn().mockResolvedValueOnce([validToken]).mockRejectedValue(new Error('offline'));
+        const service = createService(getTokens, 1);
+        await Promise.all([service.getAssets(), service.getAssets()]);
+        expect(getTokens).toHaveBeenCalledTimes(1);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        expect((await service.getAssets()).meta.stale).toBe(true);
+        await expect(service.findAssetById(validToken.assetId)).rejects.toBeInstanceOf(ServiceUnavailableException);
     });
 });

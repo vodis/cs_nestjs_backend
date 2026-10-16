@@ -40,6 +40,12 @@ export class QuotesService {
                 request.recipientType,
                 destinationAsset.blockchain,
             );
+            this.addressValidationService.assertDestinationMemo(
+                destinationAsset.blockchain,
+                request.recipientType,
+                request.destinationMemo,
+                request.recipient,
+            );
 
             const response = await this.oneClickApiHttpClient.createQuote(request);
             if (dto.dry && response && typeof response === 'object')
@@ -122,6 +128,7 @@ export class QuotesService {
             destinationAsset: dto.destinationAsset,
             amount: dto.amount,
             recipient: dto.recipient || dto.userAddress,
+            ...(dto.destinationMemo !== undefined ? { destinationMemo: dto.destinationMemo } : {}),
             recipientType,
             refundTo: dto.userAddress,
             refundType: dto.refundType ?? (dto.authMethod === 'near' ? 'INTENTS' : 'ORIGIN_CHAIN'),

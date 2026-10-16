@@ -170,7 +170,19 @@ describe('PrepareSwapUseCase', () => {
                 },
             ]),
         };
-        await createUseCase([provider]).execute(
+        const fundingExpiresAt = new Date(Date.now() + 20000).toISOString();
+        funding.prepare.mockResolvedValueOnce({
+            version: '1.0.0',
+            kind: 'evm-native',
+            network: 'eip155:1',
+            assetId: command.originAsset,
+            executionAssetId: command.originAsset,
+            sender: command.signerId,
+            destination: command.signerId,
+            amount: '146146',
+            expiresAt: fundingExpiresAt,
+        });
+        const prepared = await createUseCase([provider]).execute(
             {
                 ...command,
                 swapType: 'EXACT_OUTPUT',
@@ -181,6 +193,10 @@ describe('PrepareSwapUseCase', () => {
                 network: 'eip155:1',
             },
             actor,
+        );
+        expect(prepared.quoteExpiration).toBe(fundingExpiresAt);
+        expect(executionStore.createPreparation).toHaveBeenCalledWith(
+            expect.objectContaining({ expiresAt: new Date(fundingExpiresAt) }),
         );
         expect(funding.prepare).toHaveBeenCalledWith(
             expect.objectContaining({ amount: '146146' }),

@@ -1,3 +1,5 @@
+import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
+
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Op } from 'sequelize';
 import { AssetDto } from '../assets/dto/get-assets-response.dto';
@@ -9,7 +11,7 @@ import { BalanceAccount, ChainBalanceService, LiveChainBalance } from './chain-b
 import { GetBalancesQueryDto } from './dto/get-balances-query.dto';
 import { BalanceDto, GetBalancesResponseDto } from './dto/get-balances-response.dto';
 import { PostBalancesRequestDto } from './dto/post-balances-request.dto';
-import { NEAR_NATIVE_ASSET_ID } from './near-balance.constants';
+import { NEAR_NATIVE_ASSET_ID, NEAR_NATIVE_DECIMALS, NEAR_NATIVE_SYMBOL } from './near-balance.constants';
 
 type BalancesRequest = GetBalancesQueryDto | PostBalancesRequestDto;
 type BalanceSubject = BalanceAccount & { walletId: string | null };
@@ -47,7 +49,9 @@ export class BalancesService {
                   where: {
                       userId,
                       walletId: { [Op.in]: linkedWalletIds },
-                      ...(assets.length ? { assetId: { [Op.in]: assets.map((asset) => asset.assetId) } } : {}),
+                      ...(assets.length
+                          ? { assetId: { [Op.in]: assets.map((asset) => asset.balanceAssetId ?? asset.assetId) } }
+                          : {}),
                       ...(requestedNetwork ? { network: requestedNetwork } : {}),
                   },
                   order: [
@@ -66,7 +70,8 @@ export class BalancesService {
             const requestedAssets = assets.length ? assets : [undefined];
             return requestedAssets.flatMap((asset) => {
                 const assetId = asset?.assetId || this.nativeAssetId(network);
-                return wallet.walletId && freshKeys.has(this.key(wallet.walletId, network, assetId))
+                return wallet.walletId &&
+                    freshKeys.has(this.key(wallet.walletId, network, asset?.balanceAssetId ?? assetId))
                     ? []
                     : [{ wallet, network, asset, assetId }];
             });
@@ -105,7 +110,7 @@ export class BalancesService {
                 (candidate) =>
                     candidate.walletId === target.wallet.walletId &&
                     this.cacheNetwork(candidate) === target.network &&
-                    candidate.assetId === target.assetId &&
+                    candidate.assetId === (target.asset?.balanceAssetId ?? target.assetId) &&
                     candidate.expiresAt <= now,
             );
             return entry ? [this.toDto(entry, true)] : [];
@@ -183,9 +188,19 @@ export class BalancesService {
             byId.set(asset.assetId, asset);
             byId.set(asset.defuseAssetId, asset);
         }
-        const assets = assetIds.map((assetId) => byId.get(assetId));
-        if (assets.some((asset) => !asset)) throw new BadRequestException('Unsupported asset');
-        return assets as AssetDto[];
+        // Native wallet NEAR is a balance identity, not a provider execution route.
+        byId.set(NEAR_NATIVE_ASSET_ID, {
+            assetId: NEAR_NATIVE_ASSET_ID,
+            defuseAssetId: NEAR_NATIVE_ASSET_ID,
+            symbol: NEAR_NATIVE_SYMBOL,
+            decimals: NEAR_NATIVE_DECIMALS,
+            blockchain: 'near',
+        });
+        return assetIds.map((assetId) => {
+            const asset = byId.get(assetId);
+            if (!asset) throw new BadRequestException('Unsupported asset');
+            return asset;
+        });
     }
 
     private requestedAssetIds(query: BalancesRequest): string[] {
@@ -214,13 +229,14 @@ export class BalancesService {
             group.network,
             group.targets.map((target) => target.asset),
         );
-        if (group.wallet.walletId) {
+        const walletId = group.wallet.walletId;
+        if (walletId) {
             await Promise.all(
                 result.balances.map((balance) =>
                     BalanceCacheEntry.upsert(
                         {
                             userId,
-                            walletId: group.wallet.walletId as string,
+                            walletId,
                             walletAddress: group.wallet.address,
                             chainType: group.wallet.chainType,
                             network: group.network,
@@ -288,11 +304,15 @@ export class BalancesService {
         if (wallet.chainType === 'near') {
             return /\.testnet$/i.test(wallet.address) ? 'near:testnet' : 'near:mainnet';
         }
+        if (wallet.chainType === 'solana') return SOLANA_MAINNET;
+        if (wallet.chainType === 'bitcoin') return BITCOIN_MAINNET;
         if (wallet.chainType === 'ton') return 'ton:mainnet';
         return undefined;
     }
 
     private chainTypeFilter(network: string): string | object {
+        if (network === SOLANA_MAINNET) return 'solana';
+        if (network === BITCOIN_MAINNET) return 'bitcoin';
         if (network.startsWith('near:')) return 'near';
         if (network.startsWith('eip155:')) return { [Op.in]: ['ethereum', 'evm'] };
         if (network === 'ton:mainnet' || network === 'ton:testnet') return 'ton';
@@ -326,6 +346,8 @@ export class BalancesService {
     }
 
     private chainType(network: string): string {
+        if (network === SOLANA_MAINNET) return 'solana';
+        if (network === BITCOIN_MAINNET) return 'bitcoin';
         if (network.startsWith('near:')) return 'near';
         if (network.startsWith('eip155:')) return 'ethereum';
         if (network === 'ton:mainnet' || network === 'ton:testnet') return 'ton';

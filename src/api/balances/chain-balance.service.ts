@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
+import { EVM_NETWORKS, isNativeProviderRoute } from '@vodis/cs-assets/one-click';
+import { SolanaFundingService } from './solana-funding.service';
+import { BitcoinBalanceService } from './bitcoin-balance.service';
+import { SwapAddressValidationService } from '../../modules/swaps/domain/services/swap-address-validation.service';
+import { BadRequestException, Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AssetDto } from '../assets/dto/get-assets-response.dto';
 import { WalletLink } from '../../database/models/wallet-link.model';
@@ -21,7 +26,7 @@ export type LiveChainBalance = {
     decimals: number;
     balanceRaw: string;
     balanceDecimal: string;
-    source: 'near_rpc' | 'evm_rpc' | 'toncenter_api';
+    source: 'near_rpc' | 'evm_rpc' | 'toncenter_api' | 'solana_rpc' | 'bitcoin_esplora';
     providerAlias: string;
     fetchedAt: Date;
     expiresAt: Date;
@@ -43,20 +48,17 @@ export type ChainBalanceBatchResult = {
     failures: { assetId: string; reason: string }[];
 };
 
-const EVM_NETWORK_BY_BLOCKCHAIN: Record<string, string> = {
-    eth: 'eip155:1',
-    ethereum: 'eip155:1',
-    op: 'eip155:10',
-    bsc: 'eip155:56',
-    gnosis: 'eip155:100',
-    pol: 'eip155:137',
-    base: 'eip155:8453',
-    arb: 'eip155:42161',
-    avax: 'eip155:43114',
-    scroll: 'eip155:534352',
-};
+const EVM_NETWORK_BY_BLOCKCHAIN = { ...EVM_NETWORKS, ethereum: 'eip155:1' };
 
 const EVM_NATIVE_ASSET_BY_NETWORK: Record<string, { symbol: string; decimals: number }> = {
+    'eip155:80094': { symbol: 'BERA', decimals: 18 },
+    'eip155:143': { symbol: 'MON', decimals: 18 },
+    'eip155:196': { symbol: 'OKB', decimals: 18 },
+    'eip155:9745': { symbol: 'XPL', decimals: 18 },
+    'eip155:36900': { symbol: 'ADI', decimals: 18 },
+    'eip155:4663': { symbol: 'ETH', decimals: 18 },
+    'eip155:999': { symbol: 'HYPE', decimals: 18 },
+    'eip155:2741': { symbol: 'ETH', decimals: 18 },
     'eip155:1': { symbol: 'ETH', decimals: 18 },
     'eip155:10': { symbol: 'ETH', decimals: 18 },
     'eip155:56': { symbol: 'BNB', decimals: 18 },
@@ -74,6 +76,8 @@ export class ChainBalanceService {
         private readonly rpc: ChainRpcService,
         private readonly config: ConfigService,
         private readonly tonCenter: TonCenterService,
+        @Optional() private readonly solana?: SolanaFundingService,
+        @Optional() private readonly bitcoin?: BitcoinBalanceService,
     ) {}
 
     async getBalances(
@@ -81,6 +85,8 @@ export class ChainBalanceService {
         network: string,
         assets: Array<AssetDto | undefined>,
     ): Promise<ChainBalanceBatchResult> {
+        if (network === SOLANA_MAINNET || network === BITCOIN_MAINNET)
+            return this.additionalFamilyBalances(wallet, network, assets);
         if (network === 'ton:mainnet' || network === 'ton:testnet') {
             return this.getTonBalances(wallet, network, assets);
         }
@@ -113,10 +119,67 @@ export class ChainBalanceService {
     }
 
     assertAddress(network: string, address: string): void {
+        if (network === SOLANA_MAINNET || network === BITCOIN_MAINNET) {
+            const validator: SwapAddressValidationService = new SwapAddressValidationService();
+            validator.assertSignerAddress(network === SOLANA_MAINNET ? 'solana' : 'bitcoin', address);
+            return;
+        }
         if (network.startsWith('near:')) return this.assertNearAccount(address);
         if (network.startsWith('eip155:')) return this.assertEvmAccount(address);
         if (network === 'ton:mainnet' || network === 'ton:testnet') return this.assertTonAccount(address);
         throw new BadRequestException(`Unsupported balance network: ${network}`);
+    }
+
+    private async additionalFamilyBalances(
+        wallet: BalanceAccount,
+        network: string,
+        assets: Array<AssetDto | undefined>,
+    ): Promise<ChainBalanceBatchResult> {
+        this.assertAddress(network, wallet.address);
+        const solana = network === SOLANA_MAINNET;
+        const balances: LiveChainBalance[] = [];
+        const failures: ChainBalanceBatchResult['failures'] = [];
+        for (const asset of assets) {
+            const assetId = asset?.balanceAssetId ?? asset?.assetId ?? `${network}/native`;
+            try {
+                if (asset && asset.blockchain !== (solana ? 'sol' : 'btc'))
+                    throw new BadRequestException('Asset network mismatch');
+                if (asset && !asset.contractAddress && !isNativeProviderRoute(asset.blockchain, asset.defuseAssetId))
+                    throw new BadRequestException('Asset has no registered transfer contract');
+                let balanceRaw: string;
+                if (solana) {
+                    if (!this.solana) throw new ServiceUnavailableException('Solana balances unavailable');
+                    balanceRaw = asset?.contractAddress
+                        ? await this.solana.tokenBalance(wallet.address, asset.contractAddress)
+                        : (await this.solana.nativeBalance(wallet.address)).toString();
+                } else {
+                    if (!this.bitcoin || asset?.contractAddress)
+                        throw new BadRequestException('Unsupported Bitcoin balance asset');
+                    balanceRaw = (await this.bitcoin.funds(wallet.address)).balance.toString();
+                }
+                const fetchedAt = new Date();
+                const decimals = asset?.decimals ?? (solana ? 9 : 8);
+                balances.push({
+                    network,
+                    assetId,
+                    symbol: asset?.symbol ?? (solana ? 'SOL' : 'BTC'),
+                    decimals,
+                    balanceRaw,
+                    balanceDecimal: formatTokenAmount(balanceRaw, decimals),
+                    source: solana ? 'solana_rpc' : 'bitcoin_esplora',
+                    providerAlias: solana ? 'solana' : 'bitcoin',
+                    fetchedAt,
+                    expiresAt: new Date(fetchedAt.getTime() + this.balanceTtlMs()),
+                });
+            } catch (error) {
+                if (error instanceof BadRequestException) throw error;
+                failures.push({
+                    assetId: asset?.assetId ?? assetId,
+                    reason: error instanceof Error ? error.message : 'Balance provider failed',
+                });
+            }
+        }
+        return { balances, failures };
     }
 
     private requestSpec(wallet: BalanceAccount, network: string, asset?: AssetDto): BalanceRequestSpec {

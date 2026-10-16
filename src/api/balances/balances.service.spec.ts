@@ -138,6 +138,41 @@ describe('BalancesService', () => {
         expect(assets.getAssets).toHaveBeenCalledTimes(1);
     });
 
+    it.each([false, true])('confirms native NEAR swap balance with explicit asset IDs (batch=%s)', async (batch) => {
+        const { user, wallet } = await userWallet();
+        const query = {
+            walletAddress: wallet.address,
+            network: 'near:mainnet',
+            ...(batch
+                ? { assetIds: [NEAR_NATIVE_ASSET_ID, usdc.assetId, wrappedNear.assetId] }
+                : { assetId: NEAR_NATIVE_ASSET_ID }),
+        };
+        const result = await service.getBalancesForUser(user.id, query);
+
+        expect(result.data.map((balance) => balance.assetId)).toEqual(
+            batch ? [NEAR_NATIVE_ASSET_ID, usdc.assetId, wrappedNear.assetId] : [NEAR_NATIVE_ASSET_ID],
+        );
+        expect(result.data[0]).toMatchObject({ symbol: 'NEAR', decimals: 24, stale: false });
+        expect(result.meta.partial).toBe(false);
+        expect(chainBalances.getBalances).toHaveBeenCalledWith(
+            expect.objectContaining({ address: wallet.address }),
+            'near:mainnet',
+            expect.arrayContaining([expect.objectContaining({ assetId: NEAR_NATIVE_ASSET_ID, blockchain: 'near' })]),
+        );
+    });
+
+    it('still rejects unknown assets when batched with native NEAR', async () => {
+        const { user, wallet } = await userWallet();
+        await expect(
+            service.getBalancesForUser(user.id, {
+                walletAddress: wallet.address,
+                network: 'near:mainnet',
+                assetIds: [NEAR_NATIVE_ASSET_ID, 'nep141:unknown.near'],
+            }),
+        ).rejects.toThrow('Unsupported asset');
+        expect(chainBalances.getBalances).not.toHaveBeenCalled();
+    });
+
     it('returns a fresh cache entry without calling RPC', async () => {
         const { user, wallet } = await userWallet();
         await cache(user.id, wallet, usdc, new Date(Date.now() + 60000));

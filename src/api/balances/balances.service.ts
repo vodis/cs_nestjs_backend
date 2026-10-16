@@ -11,7 +11,7 @@ import { BalanceAccount, ChainBalanceService, LiveChainBalance } from './chain-b
 import { GetBalancesQueryDto } from './dto/get-balances-query.dto';
 import { BalanceDto, GetBalancesResponseDto } from './dto/get-balances-response.dto';
 import { PostBalancesRequestDto } from './dto/post-balances-request.dto';
-import { NEAR_NATIVE_ASSET_ID } from './near-balance.constants';
+import { NEAR_NATIVE_ASSET_ID, NEAR_NATIVE_DECIMALS, NEAR_NATIVE_SYMBOL } from './near-balance.constants';
 
 type BalancesRequest = GetBalancesQueryDto | PostBalancesRequestDto;
 type BalanceSubject = BalanceAccount & { walletId: string | null };
@@ -188,9 +188,19 @@ export class BalancesService {
             byId.set(asset.assetId, asset);
             byId.set(asset.defuseAssetId, asset);
         }
-        const assets = assetIds.map((assetId) => byId.get(assetId));
-        if (assets.some((asset) => !asset)) throw new BadRequestException('Unsupported asset');
-        return assets as AssetDto[];
+        // Native wallet NEAR is a balance identity, not a provider execution route.
+        byId.set(NEAR_NATIVE_ASSET_ID, {
+            assetId: NEAR_NATIVE_ASSET_ID,
+            defuseAssetId: NEAR_NATIVE_ASSET_ID,
+            symbol: NEAR_NATIVE_SYMBOL,
+            decimals: NEAR_NATIVE_DECIMALS,
+            blockchain: 'near',
+        });
+        return assetIds.map((assetId) => {
+            const asset = byId.get(assetId);
+            if (!asset) throw new BadRequestException('Unsupported asset');
+            return asset;
+        });
     }
 
     private requestedAssetIds(query: BalancesRequest): string[] {

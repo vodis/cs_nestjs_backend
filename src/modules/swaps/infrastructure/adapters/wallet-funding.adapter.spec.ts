@@ -1,4 +1,8 @@
 import { Test } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
+import { AssetsService } from '../../../../api/assets/assets.service';
+import { OneClickApiHttpClient } from '../../../../http-clients/one-click-api/one-click-api.http-client';
+import { AssetRegistryAdapter } from './asset-registry.adapter';
 import { WalletFundingAdapter } from './wallet-funding.adapter';
 import { ChainRpcService } from '../../../../api/balances/rpc/chain-rpc.service';
 import { TonCenterService } from '../../../../api/balances/ton/ton-center.service';
@@ -114,6 +118,74 @@ describe('wallet funding preparation', () => {
             sender: 'alice.near',
         });
     });
+    it.each([true, false])(
+        'prepares staging NEAR/USDC routes without confusing native and token funding (native=%s, PR 266)',
+        async (native) => {
+            const contract = '17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1';
+            const usdcId = `nep141:${contract}`;
+            const nearId = 'nep141:wrap.near';
+            const module = await Test.createTestingModule({
+                providers: [
+                    AssetsService,
+                    AssetRegistryAdapter,
+                    { provide: ConfigService, useValue: new ConfigService() },
+                    {
+                        provide: OneClickApiHttpClient,
+                        useValue: {
+                            getTokens: jest.fn().mockResolvedValue([
+                                {
+                                    assetId: usdcId,
+                                    symbol: 'USDC',
+                                    decimals: 6,
+                                    blockchain: 'near',
+                                    contractAddress: contract,
+                                },
+                                {
+                                    assetId: nearId,
+                                    symbol: 'wNEAR',
+                                    decimals: 24,
+                                    blockchain: 'near',
+                                    contractAddress: 'wrap.near',
+                                },
+                            ]),
+                        },
+                    },
+                ],
+            }).compile();
+            const registry = module.get(AssetRegistryAdapter);
+            const originAsset = native ? nearId : usdcId;
+            const destinationAsset = native ? usdcId : nearId;
+            const sourceAssetId = native ? 'near:native' : usdcId;
+            const registered = await registry.findById(originAsset);
+            if (!registered) throw new Error('Expected staging origin route in registry');
+            expect(await registry.findById(destinationAsset)).toMatchObject({ assetId: destinationAsset });
+            expect(await registry.findById('near:native')).toBeUndefined();
+            const result = await adapter.prepare(
+                { ...command, originAsset, destinationAsset, sourceAssetId },
+                registered,
+                execution,
+            );
+            expect(result).toMatchObject({
+                kind: native ? 'near-native' : 'near-token',
+                assetId: sourceAssetId,
+                executionAssetId: originAsset,
+                network: 'near:mainnet',
+                amount: command.amount,
+            });
+            if (native) expect(result.tokenContract).toBeUndefined();
+            else expect(result.tokenContract).toBe(contract);
+            expect(rpc.request).toHaveBeenCalledWith(
+                'near:mainnet',
+                'query',
+                expect.objectContaining({
+                    request_type: 'view_account',
+                    account_id: command.signerId,
+                }),
+            );
+            await module.close();
+        },
+    );
+
     it('rejects insufficient tokens or native fees before returning executable funding', async () => {
         tokenBalance = '146145';
         await expect(adapter.prepare(command, asset, execution)).rejects.toThrow('Insufficient token');

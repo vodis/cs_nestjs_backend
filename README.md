@@ -153,6 +153,11 @@ the native NEAR path. A host rollback disables new token funding without deletin
 preparations or disrupting status reconciliation. A quote never bypasses ownership,
 funding checks, expiry, confirmation or settlement checks.
 
+The balances API accepts `near:native` explicitly in `assetId` or `assetIds`,
+including batches with NEP-141 tokens. It reads the wallet's native NEAR balance
+separately from wrapped NEAR; this balance ID does not authorize a provider swap
+route. Unknown token IDs remain rejected.
+
 The assets API provides optional `balanceAssetId` for native provider routes.
 Explicit SOL/BTC asset balance requests return this same native balance ID,
 matching ordinary native balance reads and the host's pre-review funding check.

@@ -28,8 +28,9 @@ describe('durable swap history', () => {
         jest.restoreAllMocks();
         await db.close();
     });
-    async function prepare() {
+    async function prepare(createdAt = new Date()) {
         return SwapPreparation.create({
+            createdAt,
             userId: owner,
             providerId: 'one-click',
             executionMode: 'deposit_address',
@@ -85,11 +86,13 @@ describe('durable swap history', () => {
     it.each(['SUCCESS', 'REFUNDED', 'FAILED'] as const)(
         'October 16 regression: lists %s without a browser attempt, preserving owner isolation and pagination',
         async (status) => {
-            const first = await prepare();
-            const second = await prepare();
+            const first = await prepare(new Date('2026-10-16T12:25:09Z'));
+            const second = await prepare(new Date('2026-10-16T12:28:50Z'));
             await prepare(); // Unattempted quotes must remain hidden.
-            await first.update({ settlementStatus: status, createdAt: new Date('2026-10-16T12:25:09Z') });
-            await second.update({ settlementStatus: status, createdAt: new Date('2026-10-16T12:28:50Z') });
+            await first.update({ settlementStatus: status });
+            await second.update({ settlementStatus: status });
+            expect((await first.reload()).createdAt.toISOString()).toBe('2026-10-16T12:25:09.000Z');
+            expect((await second.reload()).createdAt.toISOString()).toBe('2026-10-16T12:28:50.000Z');
             await history.startAttempt(owner, first.id, 'CANCELLED'); // Late notification is a no-op.
             expect((await history.list(owner)).items.map((row) => row.preparationId)).toEqual([second.id, first.id]);
             const older = await history.list(owner, { createdAt: second.createdAt, id: second.id });

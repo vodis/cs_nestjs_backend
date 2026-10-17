@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Transaction, UniqueConstraintError } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { SEQUELIZE } from '../../../../database/database.tokens';
@@ -14,10 +14,19 @@ import {
 
 @Injectable()
 export class SequelizeSwapExecutionStore implements SwapExecutionStorePort {
+    private readonly logger = new Logger(SequelizeSwapExecutionStore.name);
+
     constructor(@Inject(SEQUELIZE) private readonly sequelize: Sequelize) {}
 
     async createPreparation(input: Omit<StoredSwapPreparation, 'id'>): Promise<StoredSwapPreparation> {
-        const row = await SwapPreparation.create(input);
+        const row = await SwapPreparation.create(input).catch(() => {
+            this.logger.error({ event: 'swap.persistence_failed', operation: 'create_preparation' });
+            throw new ServiceUnavailableException({
+                code: 'SWAP_PERSISTENCE_UNAVAILABLE',
+                message: 'Swap storage is temporarily unavailable. Retry the request.',
+                retryable: true,
+            });
+        });
         return this.toPreparation(row);
     }
 
@@ -31,44 +40,60 @@ export class SequelizeSwapExecutionStore implements SwapExecutionStorePort {
         status: OneClickTerminalStatus,
         receipt?: import('../../domain/models/swap-history').SwapReceipt,
     ): Promise<OneClickTerminalStatus> {
-        return this.sequelize.transaction(async (transaction) => {
-            const row = await SwapPreparation.findByPk(preparationId, { transaction, lock: transaction.LOCK.UPDATE });
-            if (!row) {
-                throw new Error(`Swap preparation ${preparationId} was not found`);
-            }
-            if (row.settlementStatus) {
-                return row.settlementStatus;
-            }
-            const execution = await SwapExecution.findOne({
-                where: { preparationId, status: 'succeeded' },
-                transaction,
-            });
-            await row.update(
-                {
-                    settlementStatus: status,
-                    ...(receipt && row.historyData ? { historyData: { ...row.historyData, receipt } } : {}),
-                },
-                { transaction },
-            );
-            await ProductEvent.create(
-                {
-                    eventName: 'swap.settlement',
-                    source: 'backend',
-                    status: status === 'SUCCESS' ? 'succeeded' : 'failed',
-                    userId: execution?.userId ?? null,
-                    requestId: execution?.traceId ?? null,
-                    reasonCode: status === 'SUCCESS' ? null : status,
-                    metadata: {
-                        preparationId,
-                        providerId: row.providerId,
+        return this.sequelize
+            .transaction(async (transaction) => {
+                const row = await SwapPreparation.findByPk(preparationId, {
+                    transaction,
+                    lock: transaction.LOCK.UPDATE,
+                });
+                if (!row) {
+                    throw new Error(`Swap preparation ${preparationId} was not found`);
+                }
+                if (row.settlementStatus) {
+                    return row.settlementStatus;
+                }
+                const execution = await SwapExecution.findOne({
+                    where: { preparationId, status: 'succeeded' },
+                    transaction,
+                });
+                await row.update(
+                    {
                         settlementStatus: status,
-                        ...(execution ? { executionId: execution.id, intentHash: execution.intentHash } : {}),
+                        ...(receipt && row.historyData ? { historyData: { ...row.historyData, receipt } } : {}),
                     },
-                },
-                { transaction },
-            );
-            return status;
-        });
+                    { transaction },
+                );
+                await ProductEvent.create(
+                    {
+                        eventName: 'swap.settlement',
+                        source: 'backend',
+                        status: status === 'SUCCESS' ? 'succeeded' : 'failed',
+                        userId: row.userId ?? execution?.userId ?? null,
+                        requestId: execution?.traceId ?? null,
+                        reasonCode: status === 'SUCCESS' ? null : status,
+                        metadata: {
+                            preparationId,
+                            providerId: row.providerId,
+                            settlementStatus: status,
+                            ...(execution ? { executionId: execution.id, intentHash: execution.intentHash } : {}),
+                        },
+                    },
+                    { transaction },
+                );
+                return status;
+            })
+            .catch(() => {
+                this.logger.error({
+                    event: 'swap.persistence_failed',
+                    operation: 'record_terminal_settlement',
+                    preparationId,
+                });
+                throw new ServiceUnavailableException({
+                    code: 'SWAP_PERSISTENCE_UNAVAILABLE',
+                    message: 'Swap storage is temporarily unavailable. Retry the request.',
+                    retryable: true,
+                });
+            });
     }
 
     async claimExecution(input: {

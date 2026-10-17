@@ -1,20 +1,26 @@
 import { SwapHistoryCursor, SwapHistoryPort, SwapHistoryPage } from '../../application/ports/swap-history.port';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Op } from 'sequelize';
 import { SwapPreparation } from '../../../../database/models/swap-preparation.model';
 
 @Injectable()
 export class SwapHistoryRepository implements SwapHistoryPort {
+    private readonly logger = new Logger(SwapHistoryRepository.name);
     async list(userId: string, before?: SwapHistoryCursor): Promise<SwapHistoryPage> {
         const rows = await SwapPreparation.findAll({
             where: {
                 userId,
-                attemptStartedAt: { [Op.ne]: null },
+                // Provider-confirmed settlement is authoritative even without a browser attempt notification.
+                [Op.or]: [{ attemptStartedAt: { [Op.ne]: null } }, { settlementStatus: { [Op.ne]: null } }],
                 ...(before
                     ? {
-                          [Op.or]: [
-                              { createdAt: { [Op.lt]: before.createdAt } },
-                              { createdAt: before.createdAt, id: { [Op.lt]: before.id } },
+                          [Op.and]: [
+                              {
+                                  [Op.or]: [
+                                      { createdAt: { [Op.lt]: before.createdAt } },
+                                      { createdAt: before.createdAt, id: { [Op.lt]: before.id } },
+                                  ],
+                              },
                           ],
                       }
                     : {}),
@@ -49,22 +55,32 @@ export class SwapHistoryRepository implements SwapHistoryPort {
     ): Promise<void> {
         const db = SwapPreparation.sequelize;
         if (!db) throw new Error('Swap history storage is unavailable');
-        await db.transaction(async (transaction) => {
-            const row = await SwapPreparation.findOne({
-                where: { id: preparationId, userId },
-                transaction,
-                lock: transaction.LOCK.UPDATE,
+        await db
+            .transaction(async (transaction) => {
+                const row = await SwapPreparation.findOne({
+                    where: { id: preparationId, userId },
+                    transaction,
+                    lock: transaction.LOCK.UPDATE,
+                });
+                if (!row) throw new NotFoundException('Swap preparation was not found');
+                // Serialize browser notifications so an older cancellation cannot replace a submission.
+                if (row.settlementStatus || row.historyData?.submissionState === 'SUBMITTED') return;
+                await SwapPreparation.update(
+                    {
+                        attemptStartedAt: row.attemptStartedAt ?? new Date(),
+                        ...(row.historyData ? { historyData: { ...row.historyData, submissionState: state } } : {}),
+                    },
+                    { where: { id: preparationId, userId, settlementStatus: null }, transaction },
+                );
+            })
+            .catch((error: unknown) => {
+                if (error instanceof NotFoundException) throw error;
+                this.logger.error({ event: 'swap.persistence_failed', operation: 'start_attempt', preparationId });
+                throw new ServiceUnavailableException({
+                    code: 'SWAP_PERSISTENCE_UNAVAILABLE',
+                    message: 'Swap storage is temporarily unavailable. Retry the request.',
+                    retryable: true,
+                });
             });
-            if (!row) throw new NotFoundException('Swap preparation was not found');
-            // Serialize browser notifications so an older cancellation cannot replace a submission.
-            if (row.settlementStatus || row.historyData?.submissionState === 'SUBMITTED') return;
-            await SwapPreparation.update(
-                {
-                    attemptStartedAt: row.attemptStartedAt ?? new Date(),
-                    ...(row.historyData ? { historyData: { ...row.historyData, submissionState: state } } : {}),
-                },
-                { where: { id: preparationId, userId, settlementStatus: null }, transaction },
-            );
-        });
     }
 }

@@ -70,7 +70,8 @@ The optional `providerId` on prepare lets the wallet MFE request the 1Click
 route explicitly; the backend validates the request and forwards it to that
 registered provider.
 After submission, the authenticated `GET /api/v1/swaps/status/:preparationId`
-endpoint checks wallet ownership and queries 1Click using the stored quote's
+endpoint authorizes the preparing account (active wallet ownership for legacy
+preparations without an account) and queries 1Click using the stored quote's
 deposit address and memo. `intentHash` means 1Click accepted the signed intent;
 only a later `SUCCESS` status confirms settlement. The backend's idempotency
 claim prevents duplicate submissions through this API, while 1Click controls
@@ -191,7 +192,7 @@ migration deletes new recovery metadata and must not be part of an app rollback.
 - Authenticated `POST /api/v1/swaps/:preparationId/attempt` records approval or
   submission progress before wallet I/O. It cannot assert settlement success.
 - Authenticated `GET /api/v1/swaps/history?before=<timestamp>|<id>` returns up
-  to 50 attempted preparations for the preparing user, with stable pagination.
+  to 50 attempted or terminally settled preparations for the preparing user, with stable pagination.
   It never returns execution payloads or signatures. Settlement stores valid
   actual amounts and HTTPS transaction references separately from quote amounts.
 - Exact-output quote selection minimizes input; exact-input maximizes output.

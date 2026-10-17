@@ -201,11 +201,6 @@ migration deletes new recovery metadata and must not be part of an app rollback.
 Deploy the backend first, then the coordinated wallet MFE and Angular host.
 No migration or live transfer is run by the local implementation/test workflow.
 
-
-Settled history remains visible without a browser attempt notification or an active
-wallet link. See the [October 16 history investigation](docs/incidents/2026-10-16-swap-history.md)
-for evidence, recovery limits and regression coverage.
-
 ### Dynamic catalog and additional wallet families
 
 `GET /api/v1/assets` ingests every valid `/v0/tokens` entry without a symbol or

@@ -21,11 +21,15 @@ export class GetSwapStatusUseCase {
         }
         if (preparation.userId && preparation.userId !== actor.id)
             throw new NotFoundException('Swap preparation was not found');
-        const owned = await this.walletAuthorization.isOwnedByUser(
-            actor.id,
-            preparation.userAddress,
-            preparation.userChainType,
-        );
+        // New preparations retain their authenticated owner even after a wallet is unlinked.
+        // Legacy preparations have no account binding and still require wallet ownership.
+        const owned =
+            preparation.userId === actor.id ||
+            (await this.walletAuthorization.isOwnedByUser(
+                actor.id,
+                preparation.userAddress,
+                preparation.userChainType,
+            ));
         if (!owned) {
             throw new ForbiddenException('Swap status requires an active wallet owned by the authenticated user');
         }

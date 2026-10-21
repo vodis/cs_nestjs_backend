@@ -239,3 +239,16 @@ Deploy BFF, then MFE, then host. XRP tags require MFE `destinationMemoVersion`
 `1.0.0`. New RPC configuration is an operator action, not part of this code change.
 The CommonJS backend pins `rpc-websockets`' UUID dependency to compatible v11;
 UUID v14 is ESM-only and cannot load through the current Jest/CommonJS pipeline.
+
+### Provider request diagnostics
+
+Provider logs emit structured `provider_request` records with an allowlisted
+provider/operation, HTTP status, duration in milliseconds, generated request ID
+and outcome (`success`, `rejected`, `rate_limited`, `upstream_unavailable`,
+`timeout`, `cancelled`, or `transport_error`). Market-history fallbacks emit
+`market_history_fallback` with the provider and `empty`/`error` reason. HTTP
+responses expose the generated `X-Request-Id`; concurrent requests do not share
+mutable Axios defaults. No request/response bodies, URL paths/queries, client
+correlation values, credentials or signed payloads are logged. Custom provider
+hosts are labeled `other`. Update log queries from the old text format when
+rolling out; rollback restores that format. No schema or secret changes.

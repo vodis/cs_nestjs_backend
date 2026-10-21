@@ -239,3 +239,17 @@ Deploy BFF, then MFE, then host. XRP tags require MFE `destinationMemoVersion`
 `1.0.0`. New RPC configuration is an operator action, not part of this code change.
 The CommonJS backend pins `rpc-websockets`' UUID dependency to compatible v11;
 UUID v14 is ESM-only and cannot load through the current Jest/CommonJS pipeline.
+
+### Market-history provider resilience
+
+Hyperliquid candle windows and CoinGecko asset/timeframe histories share in-flight
+reads and retain successful display data (including empty results) for 60 seconds.
+Hyperliquid moving windows are keyed to minute boundaries; distinct assets,
+intervals and windows remain separate. Its failure cooldown uses a stable
+coin/interval/lookback key so moving windows cannot reset outage backoff. Each
+provider retains at most 256 response entries and 256 failure entries. Failed
+reads remain failures for fallback handling, with cooldowns of 30 seconds up to
+five minutes. HTTP 429 pauses uncached reads across that provider, honoring
+numeric or date Retry-After values up to 24 hours. No stale history is used for
+trade authorization and no submission requests are retried. No migration or
+configuration is required; rollback removes these in-memory caches.

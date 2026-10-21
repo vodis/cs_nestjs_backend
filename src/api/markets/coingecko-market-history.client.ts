@@ -1,3 +1,4 @@
+import { MarketHistoryCache } from '../../http-clients/market-history-cache';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
@@ -11,6 +12,8 @@ interface CoinGeckoMarketChartResponse {
 
 @Injectable()
 export class CoinGeckoMarketHistoryClient implements MarketHistoryProvider {
+    private readonly history = new MarketHistoryCache<MarketHistoryPoint[]>();
+
     constructor(
         private readonly configService: ConfigService,
         private readonly httpService: HttpService,
@@ -22,25 +25,27 @@ export class CoinGeckoMarketHistoryClient implements MarketHistoryProvider {
             return [];
         }
 
-        const end = Date.now();
-        const start = end - comparisonTimeframeMs[timeframe];
-        const { data } = await this.httpService.axiosRef.get<CoinGeckoMarketChartResponse>(
-            `/coins/${encodeURIComponent(id)}/market_chart/range`,
-            {
-                params: {
-                    vs_currency: 'usd',
-                    from: Math.floor(start / 1000),
-                    to: Math.floor(end / 1000),
+        return this.history.get(JSON.stringify([id, timeframe]), async () => {
+            const end = Date.now();
+            const start = end - comparisonTimeframeMs[timeframe];
+            const { data } = await this.httpService.axiosRef.get<CoinGeckoMarketChartResponse>(
+                `/coins/${encodeURIComponent(id)}/market_chart/range`,
+                {
+                    params: {
+                        vs_currency: 'usd',
+                        from: Math.floor(start / 1000),
+                        to: Math.floor(end / 1000),
+                    },
                 },
-            },
-        );
+            );
 
-        return (data.prices || [])
-            .map(([time, price]) => ({
-                time: Math.floor(time / 1000),
-                price: Number(price),
-            }))
-            .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.price) && point.price > 0);
+            return (data.prices || [])
+                .map(([time, price]) => ({
+                    time: Math.floor(time / 1000),
+                    price: Number(price),
+                }))
+                .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.price) && point.price > 0);
+        });
     }
 
     private resolveCoinId(symbol: string): string | undefined {

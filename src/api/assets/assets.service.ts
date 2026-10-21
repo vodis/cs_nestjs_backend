@@ -17,6 +17,8 @@ type AssetsCacheEntry = {
 export class AssetsService {
     private cache: AssetsCacheEntry | null = null;
     private refresh?: Promise<GetAssetsResponseDto>;
+    private refreshFailures = 0;
+    private retryAfter = 0;
 
     constructor(
         private readonly configService: ConfigService,
@@ -36,6 +38,11 @@ export class AssetsService {
             return this.toResponse(this.cache, true);
         }
 
+        if (now.getTime() < this.retryAfter) {
+            if (this.cache) return this.toResponse(this.cache, true, true);
+            throw new ServiceUnavailableException('Assets list is temporarily unavailable');
+        }
+
         if (!this.refresh) {
             this.refresh = this.refreshAssets().finally(() => {
                 this.refresh = undefined;
@@ -50,6 +57,8 @@ export class AssetsService {
             const data = tokens.filter((token) => this.isValidToken(token)).map((token) => this.toAsset(token));
             const fetchedAt = new Date();
 
+            this.refreshFailures = 0;
+            this.retryAfter = 0;
             this.cache = {
                 data,
                 fetchedAt,
@@ -57,7 +66,10 @@ export class AssetsService {
             };
 
             return this.toResponse(this.cache, false);
-        } catch (error) {
+        } catch {
+            // Keep freshness unchanged: cooldown data is display-only.
+            this.refreshFailures = Math.min(this.refreshFailures + 1, 5);
+            this.retryAfter = Date.now() + Math.min(30_000 * 2 ** (this.refreshFailures - 1), 300_000);
             if (this.cache) {
                 return this.toResponse(this.cache, true, true);
             }

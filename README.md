@@ -239,3 +239,11 @@ Deploy BFF, then MFE, then host. XRP tags require MFE `destinationMemoVersion`
 `1.0.0`. New RPC configuration is an operator action, not part of this code change.
 The CommonJS backend pins `rpc-websockets`' UUID dependency to compatible v11;
 UUID v14 is ESM-only and cannot load through the current Jest/CommonJS pipeline.
+
+### Asset-provider outage cooldown
+
+Failed catalog refreshes back off from 30 seconds to at most five minutes,
+including cold starts. Concurrent refreshes share one request. Cached catalog
+data remains explicitly stale during the cooldown and cannot authorize quotes
+or preparation; a successful refresh resets the cooldown. No configuration or
+migration is required. Rolling back restores the earlier refresh frequency.

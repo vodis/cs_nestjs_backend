@@ -162,4 +162,35 @@ describe('AssetsService', () => {
         expect((await service.getAssets()).meta.stale).toBe(true);
         await expect(service.findAssetById(validToken.assetId)).rejects.toBeInstanceOf(ServiceUnavailableException);
     });
+    it('backs off cold-start failures, coalesces recovery and resets the cooldown after success', async () => {
+        jest.useFakeTimers();
+        try {
+            const getTokens = jest.fn().mockRejectedValue(new Error('offline'));
+            const service = createService(getTokens, 1);
+            await expect(service.getAssets()).rejects.toBeInstanceOf(ServiceUnavailableException);
+            await expect(service.getAssets()).rejects.toBeInstanceOf(ServiceUnavailableException);
+            expect(getTokens).toHaveBeenCalledTimes(1);
+            jest.advanceTimersByTime(30_000);
+            await expect(service.getAssets()).rejects.toBeInstanceOf(ServiceUnavailableException);
+            jest.advanceTimersByTime(30_000);
+            await expect(service.getAssets()).rejects.toBeInstanceOf(ServiceUnavailableException);
+            expect(getTokens).toHaveBeenCalledTimes(2);
+            jest.advanceTimersByTime(30_000);
+            getTokens.mockResolvedValueOnce([validToken]);
+            const recovered = await Promise.all([service.getAssets(), service.getAssets()]);
+            expect(recovered.every((result) => !result.meta.stale)).toBe(true);
+            expect(getTokens).toHaveBeenCalledTimes(3);
+            jest.advanceTimersByTime(2);
+            const stale = await service.getAssets();
+            expect(stale.meta.stale).toBe(true);
+            await expect(service.findAssetById(validToken.assetId)).rejects.toBeInstanceOf(ServiceUnavailableException);
+            expect(getTokens).toHaveBeenCalledTimes(4);
+            jest.advanceTimersByTime(30_000);
+            getTokens.mockResolvedValueOnce([validToken]);
+            expect((await service.getAssets()).meta.stale).toBe(false);
+            expect(getTokens).toHaveBeenCalledTimes(5);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
 });

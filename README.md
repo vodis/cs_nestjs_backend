@@ -252,3 +252,11 @@ mutable Axios defaults. No request/response bodies, URL paths/queries, client
 correlation values, credentials or signed payloads are logged. Custom provider
 hosts are labeled `other`. Update log queries from the old text format when
 rolling out; rollback restores that format. No schema or secret changes.
+
+### External data availability
+
+The backend owns caching, request coalescing and outage backoff for external
+asset catalogs and market history. Stale catalog data is marked explicitly and
+cannot authorize quotes or swap preparation. Market history is display data;
+provider failures retain the existing fallback behavior and never trigger
+transaction resubmission.

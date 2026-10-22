@@ -1,3 +1,4 @@
+import { logMarketHistoryFallback } from '../../http-clients/http-clients.interceptor';
 import { Injectable } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { AssetsService } from '../assets/assets.service';
@@ -247,8 +248,9 @@ export class MarketsService {
             if (coingecko.length > 0) {
                 return coingecko;
             }
+            logMarketHistoryFallback('coingecko', 'empty');
         } catch {
-            // Continue to the on-chain fallback below.
+            logMarketHistoryFallback('coingecko', 'error');
         }
 
         return this.geckoTerminalMarketHistoryClient?.getHistory(asset, timeframe) || [];
@@ -264,6 +266,7 @@ export class MarketsService {
             const startTime = endTime - hyperliquidLookbackMs(timeframe);
             const candles = await this.hyperliquidApiHttpClient.getCandles(symbol, interval, startTime, endTime);
 
+            if (candles.length === 0) logMarketHistoryFallback('hyperliquid', 'empty');
             return candles
                 .map((candle) => ({
                     time: Math.floor(candle.t / 1000),
@@ -271,6 +274,7 @@ export class MarketsService {
                 }))
                 .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.price) && point.price > 0);
         } catch {
+            logMarketHistoryFallback('hyperliquid', 'error');
             return [];
         }
     }

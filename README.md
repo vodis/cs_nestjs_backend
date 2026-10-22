@@ -240,10 +240,10 @@ Deploy BFF, then MFE, then host. XRP tags require MFE `destinationMemoVersion`
 The CommonJS backend pins `rpc-websockets`' UUID dependency to compatible v11;
 UUID v14 is ESM-only and cannot load through the current Jest/CommonJS pipeline.
 
-### Asset-provider outage cooldown
+### External data availability
 
-Failed catalog refreshes back off from 30 seconds to at most five minutes,
-including cold starts. Concurrent refreshes share one request. Cached catalog
-data remains explicitly stale during the cooldown and cannot authorize quotes
-or preparation; a successful refresh resets the cooldown. No configuration or
-migration is required. Rolling back restores the earlier refresh frequency.
+The backend owns caching, request coalescing and outage backoff for external
+asset catalogs and market history. Stale catalog data is marked explicitly and
+cannot authorize quotes or swap preparation. Market history is display data;
+provider failures retain the existing fallback behavior and never trigger
+transaction resubmission.

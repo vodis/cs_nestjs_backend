@@ -183,13 +183,14 @@ describe('Ethereum RPC rate-limit regression (2026-10-27)', () => {
 
     it('keeps token execution-limit errors local to the failed item', async () => {
         const { service, post } = setup();
+        const providerError = { code: 3, message: 'execution reverted: gas limit exceeded' };
         post.mockResolvedValueOnce(response({ result: '0x1' }))
-            .mockResolvedValueOnce(response({ error: { code: 3, message: 'execution reverted: gas limit exceeded' } }))
+            .mockResolvedValueOnce(response({ error: providerError }))
             .mockResolvedValue(response({ result: '0x2a' }));
         const tokenRead = [{ key: 'token', method: 'eth_call', params: [{ to: '0x1111' }, 'latest'] }];
         expect(await service.requestBatch('eip155:1', tokenRead)).toEqual({
             providerAlias: 'primary',
-            items: [{ key: 'token', error: 'RPC provider rejected the request' }],
+            items: [{ key: 'token', error: 'RPC provider rejected the request', providerError }],
         });
         expect((await service.requestBatch('eip155:1', request)).providerAlias).toBe('primary');
         expect(post.mock.calls.every(([url]) => url === primary)).toBe(true);

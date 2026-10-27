@@ -1,5 +1,13 @@
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import { Sequelize } from 'sequelize-typescript';
+import { AssetsService } from '../assets/assets.service';
+import { AppUser } from '../../database/models/app-user.model';
+import { WalletLink } from '../../database/models/wallet-link.model';
+import { BalanceCacheEntry } from '../../database/models/balance-cache-entry.model';
+import { BalancesPortfolioAdapter } from '../../modules/portfolio/infrastructure/balances-portfolio.adapter';
+import { BalancesService } from './balances.service';
 import { AxiosHeaders, AxiosResponse } from 'axios';
 import { AssetDto } from '../assets/dto/get-assets-response.dto';
 import { ChainBalanceService } from './chain-balance.service';
@@ -76,7 +84,7 @@ describe('NEAR portfolio 503 regression (2026-10-27)', () => {
             .mockResolvedValueOnce(response({ error: missingAccount(wallet.address) }));
         const result = await service.getBalances(wallet, 'near:mainnet', [undefined]);
         expect(result.balances).toEqual([]);
-        expect(result.failures).toEqual([{ assetId: 'near:native', reason: 'NEAR account does not exist' }]);
+        expect(result.failures).toEqual([{ assetId: 'near:native', reason: 'RPC provider rejected the request' }]);
     });
 
     it('does not convert a provider outage into zero', async () => {
@@ -85,5 +93,74 @@ describe('NEAR portfolio 503 regression (2026-10-27)', () => {
             .mockResolvedValueOnce(response({ result: { chain_id: 'mainnet' } }))
             .mockRejectedValueOnce(new Error('unavailable'));
         await expect(service.getBalances(wallet, 'near:mainnet', [token])).rejects.toThrow();
+    });
+});
+
+describe('missing NEAR contract persistence', () => {
+    it('replaces an expired positive balance with zero and reuses it in the portfolio', async () => {
+        const sequelize = new Sequelize({
+            dialect: 'sqlite',
+            storage: ':memory:',
+            logging: false,
+            models: [AppUser, WalletLink, BalanceCacheEntry],
+        });
+        try {
+            await sequelize.sync({ force: true });
+            const { service, post } = setup(missingAccount());
+            const module = await Test.createTestingModule({
+                providers: [
+                    BalancesService,
+                    BalancesPortfolioAdapter,
+                    { provide: ChainBalanceService, useValue: service },
+                    { provide: AssetsService, useValue: { getAssets: async () => ({ data: [token] }) } },
+                ],
+            }).compile();
+            const user = await AppUser.create({ privyUserId: 'did:privy:missing-contract', status: 'active' });
+            const linked = await WalletLink.create({
+                userId: user.id,
+                privyWalletId: 'missing-contract-wallet',
+                ...wallet,
+                walletType: 'embedded',
+                source: 'privy',
+                status: 'active',
+                isPrimary: true,
+            });
+            const stale = await BalanceCacheEntry.create({
+                userId: user.id,
+                walletId: linked.id,
+                walletAddress: wallet.address,
+                chainType: 'near',
+                network: 'near:mainnet',
+                assetId: token.assetId,
+                symbol: token.symbol,
+                decimals: token.decimals,
+                balanceRaw: '1250000',
+                balanceDecimal: '1.25',
+                source: 'near_rpc',
+                fetchedAt: new Date(Date.now() - 60000),
+                expiresAt: new Date(Date.now() - 30000),
+            });
+            const portfolio = module.get(BalancesPortfolioAdapter);
+            const query = { walletAddress: wallet.address, network: 'near:mainnet' };
+            const holdings = await portfolio.balancesForUser(user.id, query);
+            expect(holdings).toEqual([expect.objectContaining({ assetId: 'near:native', quantity: '2' })]);
+            await stale.reload();
+            expect(stale.balanceRaw).toBe('0');
+            expect(stale.balanceDecimal).toBe('0');
+            expect(stale.expiresAt.getTime()).toBeGreaterThan(Date.now());
+            expect(await BalanceCacheEntry.count({ where: { assetId: token.assetId } })).toBe(1);
+            const cached = await module.get(BalancesService).getBalancesForUser(user.id, {
+                ...query,
+                assetIds: [token.assetId],
+            });
+            expect(cached.meta.partial).toBe(false);
+            expect(cached.data).toEqual([expect.objectContaining({ assetId: token.assetId, balanceRaw: '0' })]);
+            expect(await portfolio.balancesForUser(user.id, query)).toEqual(holdings);
+            expect(post).toHaveBeenCalledTimes(3);
+            await module.close();
+        } finally {
+            jest.restoreAllMocks();
+            await sequelize.close();
+        }
     });
 });

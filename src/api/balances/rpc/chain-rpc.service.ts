@@ -67,7 +67,8 @@ export class ChainRpcService implements OnModuleInit {
             } catch (error) {
                 const rpcError = this.toRpcError(error);
                 lastError = rpcError;
-                if (!rpcError.retryable) throw rpcError;
+                // Provider evidence belongs only in internal batch items, never thrown public errors.
+                if (!rpcError.retryable) throw new ChainRpcRequestError(rpcError.message, false);
                 this.recordFailure(network, endpoint.alias, state, method, rpcError);
             }
         }
@@ -96,7 +97,8 @@ export class ChainRpcService implements OnModuleInit {
             } catch (error) {
                 const rpcError = this.toRpcError(error);
                 lastError = rpcError;
-                if (!rpcError.retryable) throw rpcError;
+                // Provider evidence belongs only in internal batch items, never thrown public errors.
+                if (!rpcError.retryable) throw new ChainRpcRequestError(rpcError.message, false);
                 this.recordFailure(network, endpoint.alias, state, 'batch', rpcError);
             }
         }
@@ -197,24 +199,12 @@ export class ChainRpcService implements OnModuleInit {
         );
         const envelope = response.data;
         if (envelope?.error) {
-            // Only a structured, account-bound NEAR response proves absence.
-            if (
-                method === 'query' &&
-                params &&
-                typeof params === 'object' &&
-                'account_id' in params &&
-                typeof params.account_id === 'string' &&
-                envelope.error.name === 'HANDLER_ERROR' &&
-                envelope.error.cause?.name === 'UNKNOWN_ACCOUNT' &&
-                envelope.error.cause.info?.requested_account_id === params.account_id
-            ) {
-                throw new ChainRpcRequestError('NEAR account does not exist', false, 'near_account_missing');
-            }
             const message = envelope.error.message || 'RPC provider rejected the request';
             const retryable = this.isRetryableProviderError(envelope.error.code, message);
             throw new ChainRpcRequestError(
                 retryable ? 'RPC provider is temporarily unavailable' : 'RPC provider rejected the request',
                 retryable,
+                envelope.error,
             );
         }
         if (!envelope || envelope.result === undefined) {
@@ -243,7 +233,7 @@ export class ChainRpcService implements OnModuleInit {
                     items[index] = {
                         key: request.key,
                         error: rpcError.message,
-                        ...(rpcError.errorCode ? { errorCode: rpcError.errorCode } : {}),
+                        ...(rpcError.providerError ? { providerError: rpcError.providerError } : {}),
                     };
                 }
             }

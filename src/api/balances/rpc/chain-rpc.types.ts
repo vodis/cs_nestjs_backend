@@ -18,7 +18,8 @@ export type ChainRpcBatchItem = {
     key: string;
     result?: unknown;
     error?: string;
-    errorCode?: 'near_account_missing';
+    // Internal provider evidence for network adapters; never return or log it.
+    providerError?: unknown;
 };
 
 export type ChainRpcBatchResult = {
@@ -34,8 +35,6 @@ export type JsonRpcEnvelope<T> = {
         code?: number;
         message?: string;
         data?: unknown;
-        name?: string;
-        cause?: { name?: string; info?: { requested_account_id?: string } };
     };
 };
 
@@ -43,7 +42,7 @@ export class ChainRpcRequestError extends Error {
     constructor(
         message: string,
         readonly retryable: boolean,
-        readonly errorCode?: ChainRpcBatchItem['errorCode'],
+        readonly providerError?: unknown,
     ) {
         super(message);
     }

@@ -197,6 +197,19 @@ export class ChainRpcService implements OnModuleInit {
         );
         const envelope = response.data;
         if (envelope?.error) {
+            // Only a structured, account-bound NEAR response proves absence.
+            if (
+                method === 'query' &&
+                params &&
+                typeof params === 'object' &&
+                'account_id' in params &&
+                typeof params.account_id === 'string' &&
+                envelope.error.name === 'HANDLER_ERROR' &&
+                envelope.error.cause?.name === 'UNKNOWN_ACCOUNT' &&
+                envelope.error.cause.info?.requested_account_id === params.account_id
+            ) {
+                throw new ChainRpcRequestError('NEAR account does not exist', false, 'near_account_missing');
+            }
             const message = envelope.error.message || 'RPC provider rejected the request';
             const retryable = this.isRetryableProviderError(envelope.error.code, message);
             throw new ChainRpcRequestError(
@@ -227,7 +240,11 @@ export class ChainRpcService implements OnModuleInit {
                         retryableError = rpcError;
                         return;
                     }
-                    items[index] = { key: request.key, error: rpcError.message };
+                    items[index] = {
+                        key: request.key,
+                        error: rpcError.message,
+                        ...(rpcError.errorCode ? { errorCode: rpcError.errorCode } : {}),
+                    };
                 }
             }
         };

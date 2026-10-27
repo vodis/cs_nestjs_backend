@@ -159,6 +159,12 @@ including batches with NEP-141 tokens. It reads the wallet's native NEAR balance
 separately from wrapped NEAR; this balance ID does not authorize a provider swap
 route. Unknown token IDs remain rejected.
 
+A catalogued NEP-141 contract that is proven absent by an account-bound NEAR
+`UNKNOWN_ACCOUNT` response has a zero token balance and does not block portfolio
+valuation. Missing native wallet accounts, contract execution failures and RPC
+outages remain incomplete reads; portfolio refuses to present them as a complete
+total. This balance-only handling does not authorize a token for execution.
+
 The assets API provides optional `balanceAssetId` for native provider routes.
 Explicit SOL/BTC asset balance requests return this same native balance ID,
 matching ordinary native balance reads and the host's pre-review funding check.

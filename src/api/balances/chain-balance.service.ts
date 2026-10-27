@@ -103,6 +103,16 @@ export class ChainBalanceService {
             const spec = specByKey.get(item.key);
             if (!spec) continue;
             if (item.error) {
+                // A missing NEP-141 contract cannot hold this wallet's tokens.
+                // Native account failures and provider/contract errors stay partial.
+                if (
+                    network.startsWith('near:') &&
+                    spec.assetId !== NEAR_NATIVE_ASSET_ID &&
+                    item.errorCode === 'near_account_missing'
+                ) {
+                    balances.push(this.result(network, spec, '0', response.providerAlias));
+                    continue;
+                }
                 failures.push({ assetId: spec.assetId, reason: item.error });
                 continue;
             }

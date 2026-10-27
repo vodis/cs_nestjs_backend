@@ -221,6 +221,10 @@ export class ChainRpcService implements OnModuleInit {
         const envelope = response.data;
         if (envelope?.error) {
             const message = envelope.error.message || 'RPC provider rejected the request';
+            // Server error codes are provider-specific; require explicit limit evidence.
+            if (/rate.?limit|too many requests|^limit exceeded$/i.test(message.trim())) {
+                throw new RateLimitedRpcError(0);
+            }
             const retryable = this.isRetryableProviderError(envelope.error.code, message);
             throw new ChainRpcRequestError(
                 retryable ? 'RPC provider is temporarily unavailable' : 'RPC provider rejected the request',
@@ -247,7 +251,14 @@ export class ChainRpcService implements OnModuleInit {
                 } catch (error) {
                     const rpcError = this.toRpcError(error);
                     if (rpcError.retryable) {
-                        retryableError = rpcError;
+                        // Concurrent failures must not erase a provider's longest rate-limit cooldown.
+                        if (
+                            !(retryableError instanceof RateLimitedRpcError) ||
+                            (rpcError instanceof RateLimitedRpcError &&
+                                rpcError.retryAfterMs > retryableError.retryAfterMs)
+                        ) {
+                            retryableError = rpcError;
+                        }
                         return;
                     }
                     items[index] = { key: request.key, error: rpcError.message };
@@ -379,11 +390,7 @@ export class ChainRpcService implements OnModuleInit {
                           : 0;
                 return new RateLimitedRpcError(Number.isFinite(delay) ? Math.max(0, delay) : 0);
             }
-            const retryable =
-                !error.response ||
-                error.code === 'ECONNABORTED' ||
-                error.response.status === 429 ||
-                error.response.status >= 500;
+            const retryable = !error.response || error.code === 'ECONNABORTED' || error.response.status >= 500;
             return new ChainRpcRequestError(
                 retryable ? 'RPC provider is temporarily unavailable' : 'RPC provider rejected the request',
                 retryable,
@@ -393,7 +400,7 @@ export class ChainRpcService implements OnModuleInit {
     }
 
     private isRetryableProviderError(code: number | undefined, message: string): boolean {
-        return code === -32005 || /rate.?limit|too many requests|temporar|timeout|unavailable/i.test(message);
+        return code === -32005 || /temporar|timeout|unavailable/i.test(message);
     }
 
     private positiveNumber(name: string, fallback: number): number {

@@ -10,12 +10,12 @@ const primary = 'https://primary.example';
 const secondary = 'https://secondary.example';
 const request = [{ key: 'native', method: 'eth_getBalance', params: ['0x1111', 'latest'] }];
 
-function setup() {
+function setup(network = 'eip155:1') {
     const http = new HttpService();
     const post = jest.spyOn(http.axiosRef, 'post');
     const config = new ConfigService({
         CHAIN_RPC_ENDPOINTS_JSON: JSON.stringify({
-            'eip155:1': [
+            [network]: [
                 { alias: 'primary', url: primary },
                 { alias: 'secondary', url: secondary },
             ],
@@ -93,6 +93,119 @@ describe('Ethereum RPC rate-limit regression (2026-10-27)', () => {
         expect(post.mock.calls.filter(([url]) => url === primary)).toHaveLength(2);
         now += 2;
         expect((await service.requestBatch('eip155:1', request)).providerAlias).toBe('primary');
+    });
+
+    it.each([
+        [
+            '429 then 503',
+            rateLimit('120'),
+            new AxiosError('unavailable', undefined, undefined, undefined, response({}, 503)),
+        ],
+        [
+            '503 then 429',
+            new AxiosError('unavailable', undefined, undefined, undefined, response({}, 503)),
+            rateLimit('120'),
+        ],
+        ['long then short Retry-After', rateLimit('120'), rateLimit('30')],
+        ['short then long Retry-After', rateLimit('30'), rateLimit('120')],
+    ])('preserves the longest rate-limit cooldown across concurrent failures: %s', async (_name, first, second) => {
+        let now = Date.parse('2026-10-27T14:00:00Z');
+        jest.spyOn(Date, 'now').mockImplementation(() => now);
+        const { service, post } = setup();
+        post.mockResolvedValueOnce(response({ result: '0x1' }))
+            .mockRejectedValueOnce(first)
+            .mockImplementationOnce(() => new Promise((_resolve, reject) => setTimeout(() => reject(second), 0)))
+            .mockResolvedValue(response({ result: '0x1' }));
+        const batch = [...request, { ...request[0], key: 'other', params: ['0x2222', 'latest'] }];
+        expect((await service.requestBatch('eip155:1', batch)).providerAlias).toBe('secondary');
+        now += 119999;
+        expect((await service.requestBatch('eip155:1', batch)).providerAlias).toBe('secondary');
+        expect(post.mock.calls.filter(([url]) => url === primary)).toHaveLength(3);
+        now += 2;
+        expect((await service.requestBatch('eip155:1', batch)).providerAlias).toBe('primary');
+    });
+
+    it.each([
+        {
+            network: 'near:mainnet',
+            verification: { chain_id: 'mainnet' },
+            method: 'query',
+            params: { request_type: 'view_account', account_id: 'alice.near', finality: 'final' },
+        },
+        { network: 'eip155:8453', verification: '0x2105', method: 'eth_getBalance', params: ['0x1111', 'latest'] },
+        {
+            network: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
+            verification: '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d',
+            method: 'getBalance',
+            params: ['wallet'],
+        },
+    ])(
+        'applies HTTP rate-limit cooldown to single reads on $network',
+        async ({ network, verification, method, params }) => {
+            const { service, post } = setup(network);
+            post.mockResolvedValueOnce(response({ result: verification }))
+                .mockRejectedValueOnce(rateLimit('120'))
+                .mockResolvedValueOnce(response({ result: verification }))
+                .mockResolvedValue(response({ result: 'balance' }));
+            expect((await service.request(network, method, params)).providerAlias).toBe('secondary');
+            expect((await service.request(network, method, params)).providerAlias).toBe('secondary');
+            expect(post.mock.calls.filter(([url]) => url === primary)).toHaveLength(2);
+        },
+    );
+
+    it.each([
+        { code: -32005, message: 'Limit exceeded' },
+        { code: -32000, message: 'Too many requests' },
+    ])('cools down rate limits delivered inside JSON-RPC: %j', async (error) => {
+        const { service, post } = setup();
+        post.mockResolvedValueOnce(response({ result: '0x1' }))
+            .mockResolvedValueOnce(response({ error }))
+            .mockResolvedValueOnce(response({ result: '0x1' }))
+            .mockResolvedValue(response({ result: '0x2a' }));
+        expect((await service.requestBatch('eip155:1', request)).providerAlias).toBe('secondary');
+        expect((await service.requestBatch('eip155:1', request)).providerAlias).toBe('secondary');
+        expect(post.mock.calls.filter(([url]) => url === primary)).toHaveLength(2);
+    });
+
+    it('does not treat a provider-specific error code alone as rate-limit evidence', async () => {
+        const network = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp';
+        const genesis = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
+        const { service, post } = setup(network);
+        post.mockResolvedValueOnce(response({ result: genesis }))
+            .mockResolvedValueOnce(response({ error: { code: -32005, message: 'Node is unhealthy' } }))
+            .mockResolvedValueOnce(response({ result: genesis }))
+            .mockResolvedValueOnce(response({ result: 'balance' }))
+            .mockResolvedValueOnce(response({ result: genesis }))
+            .mockResolvedValueOnce(response({ result: 'balance' }));
+        expect((await service.request(network, 'getBalance', ['wallet'])).providerAlias).toBe('secondary');
+        expect((await service.request(network, 'getBalance', ['wallet'])).providerAlias).toBe('primary');
+    });
+
+    it('keeps token execution-limit errors local to the failed item', async () => {
+        const { service, post } = setup();
+        post.mockResolvedValueOnce(response({ result: '0x1' }))
+            .mockResolvedValueOnce(response({ error: { code: 3, message: 'execution reverted: gas limit exceeded' } }))
+            .mockResolvedValue(response({ result: '0x2a' }));
+        const tokenRead = [{ key: 'token', method: 'eth_call', params: [{ to: '0x1111' }, 'latest'] }];
+        expect(await service.requestBatch('eip155:1', tokenRead)).toEqual({
+            providerAlias: 'primary',
+            items: [{ key: 'token', error: 'RPC provider rejected the request' }],
+        });
+        expect((await service.requestBatch('eip155:1', request)).providerAlias).toBe('primary');
+        expect(post.mock.calls.every(([url]) => url === primary)).toBe(true);
+    });
+
+    it('does not coalesce methods outside the explicit read allowlist', async () => {
+        const { service, post } = setup();
+        post.mockResolvedValue(response({ result: '0x1' }));
+        const writes = [{ key: 'write', method: 'eth_sendRawTransaction', params: ['signed-transaction'] }];
+        await Promise.all([service.requestBatch('eip155:1', writes), service.requestBatch('eip155:1', writes)]);
+        expect(
+            post.mock.calls.filter(
+                ([, body]) =>
+                    body && typeof body === 'object' && 'method' in body && body.method === 'eth_sendRawTransaction',
+            ),
+        ).toHaveLength(2);
     });
 
     it('releases failed pending reads so a later request can recover', async () => {

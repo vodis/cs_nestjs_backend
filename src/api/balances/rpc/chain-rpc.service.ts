@@ -23,11 +23,18 @@ type NearStatus = { chain_id?: string };
 const ALIAS_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 const LOGICAL_BATCH_CONCURRENCY = 4;
 
+class RateLimitedRpcError extends ChainRpcRequestError {
+    constructor(readonly retryAfterMs: number) {
+        super('RPC provider rate limited the request', true);
+    }
+}
+
 @Injectable()
 export class ChainRpcService implements OnModuleInit {
     private readonly logger = new Logger(ChainRpcService.name);
     private readonly endpoints: Map<string, ChainRpcEndpoint[]>;
     private readonly states = new Map<string, EndpointState>();
+    private readonly pendingBatches = new Map<string, Promise<ChainRpcBatchResult>>();
     private requestId = 0;
 
     constructor(
@@ -61,8 +68,7 @@ export class ChainRpcService implements OnModuleInit {
             try {
                 await this.verifyNetwork(network, endpoint, state, deadline);
                 const result = await this.call<T>(endpoint, method, params, deadline);
-                state.failures = 0;
-                state.openUntil = 0;
+                if (state.openUntil <= Date.now()) state.failures = 0;
                 return { result, providerAlias: endpoint.alias };
             } catch (error) {
                 const rpcError = this.toRpcError(error);
@@ -78,6 +84,23 @@ export class ChainRpcService implements OnModuleInit {
 
     async requestBatch(network: string, requests: ChainRpcBatchRequest[]): Promise<ChainRpcBatchResult> {
         if (!requests.length) return { items: [], providerAlias: 'none' };
+        // Coalesce only read methods; never retain results or share authorization state.
+        if (!requests.every((request) => ['query', 'eth_getBalance', 'eth_call'].includes(request.method))) {
+            return this.fetchBatch(network, requests);
+        }
+        const key = JSON.stringify([network, requests]);
+        const pending = this.pendingBatches.get(key);
+        if (pending) return pending;
+        const operation = this.fetchBatch(network, requests);
+        this.pendingBatches.set(key, operation);
+        try {
+            return await operation;
+        } finally {
+            this.pendingBatches.delete(key);
+        }
+    }
+
+    private async fetchBatch(network: string, requests: ChainRpcBatchRequest[]): Promise<ChainRpcBatchResult> {
         const endpoints = this.endpoints.get(network);
         if (!endpoints?.length) {
             throw new ServiceUnavailableException(`RPC network is not configured: ${network}`);
@@ -91,8 +114,8 @@ export class ChainRpcService implements OnModuleInit {
             try {
                 await this.verifyNetwork(network, endpoint, state, deadline);
                 const items = await this.callBatch(endpoint, requests, deadline);
-                state.failures = 0;
-                state.openUntil = 0;
+                // An older in-flight success must not cancel a newer rate-limit cooldown.
+                if (state.openUntil <= Date.now()) state.failures = 0;
                 return { items, providerAlias: endpoint.alias };
             } catch (error) {
                 const rpcError = this.toRpcError(error);
@@ -200,6 +223,10 @@ export class ChainRpcService implements OnModuleInit {
         const envelope = response.data;
         if (envelope?.error) {
             const message = envelope.error.message || 'RPC provider rejected the request';
+            // Server error codes are provider-specific; require explicit limit evidence.
+            if (/rate.?limit|too many requests|^limit exceeded$/i.test(message.trim())) {
+                throw new RateLimitedRpcError(0);
+            }
             const retryable = this.isRetryableProviderError(envelope.error.code, message);
             throw new ChainRpcRequestError(
                 retryable ? 'RPC provider is temporarily unavailable' : 'RPC provider rejected the request',
@@ -227,7 +254,14 @@ export class ChainRpcService implements OnModuleInit {
                 } catch (error) {
                     const rpcError = this.toRpcError(error);
                     if (rpcError.retryable) {
-                        retryableError = rpcError;
+                        // Concurrent failures must not erase a provider's longest rate-limit cooldown.
+                        if (
+                            !(retryableError instanceof RateLimitedRpcError) ||
+                            (rpcError instanceof RateLimitedRpcError &&
+                                rpcError.retryAfterMs > retryableError.retryAfterMs)
+                        ) {
+                            retryableError = rpcError;
+                        }
                         return;
                     }
                     items[index] = {
@@ -338,8 +372,12 @@ export class ChainRpcService implements OnModuleInit {
     private recordFailure(network: string, alias: string, state: EndpointState, method: string, error: Error): void {
         state.failures += 1;
         state.verified = false;
-        if (state.failures >= this.positiveNumber('RPC_FAILURE_THRESHOLD', 3)) {
-            state.openUntil = Date.now() + this.positiveNumber('RPC_COOLDOWN_MS', 30000);
+        if (error instanceof RateLimitedRpcError || state.failures >= this.positiveNumber('RPC_FAILURE_THRESHOLD', 3)) {
+            const cooldown = Math.max(
+                this.positiveNumber('RPC_COOLDOWN_MS', 30000),
+                error instanceof RateLimitedRpcError ? error.retryAfterMs : 0,
+            );
+            state.openUntil = Math.max(state.openUntil, Date.now() + cooldown);
         }
         this.logger.warn(
             `RPC attempt failed network=${network} provider=${alias} method=${method} failures=${state.failures} reason=${error.message}`,
@@ -349,11 +387,17 @@ export class ChainRpcService implements OnModuleInit {
     private toRpcError(error: unknown): ChainRpcRequestError {
         if (error instanceof ChainRpcRequestError) return error;
         if (isAxiosError(error)) {
-            const retryable =
-                !error.response ||
-                error.code === 'ECONNABORTED' ||
-                error.response.status === 429 ||
-                error.response.status >= 500;
+            if (error.response?.status === 429) {
+                const value: unknown = error.response.headers?.['retry-after'];
+                const delay =
+                    typeof value === 'string' && /^\d+$/.test(value)
+                        ? Number(value) * 1000
+                        : typeof value === 'string'
+                          ? Date.parse(value) - Date.now()
+                          : 0;
+                return new RateLimitedRpcError(Number.isFinite(delay) ? Math.max(0, delay) : 0);
+            }
+            const retryable = !error.response || error.code === 'ECONNABORTED' || error.response.status >= 500;
             return new ChainRpcRequestError(
                 retryable ? 'RPC provider is temporarily unavailable' : 'RPC provider rejected the request',
                 retryable,
@@ -363,7 +407,7 @@ export class ChainRpcService implements OnModuleInit {
     }
 
     private isRetryableProviderError(code: number | undefined, message: string): boolean {
-        return code === -32005 || /rate.?limit|too many requests|temporar|timeout|unavailable/i.test(message);
+        return code === -32005 || /temporar|timeout|unavailable/i.test(message);
     }
 
     private positiveNumber(name: string, fallback: number): number {

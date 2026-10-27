@@ -271,3 +271,14 @@ asset catalogs and market history. Stale catalog data is marked explicitly and
 cannot authorize quotes or swap preparation. Market history is display data;
 provider failures retain the existing fallback behavior and never trigger
 transaction resubmission.
+
+Chain balance RPC reads coalesce identical in-flight batches by network and
+request parameters; completed results are not retained by the RPC layer.
+HTTP 429 immediately cools down that endpoint for at least the configured
+cooldown across configured networks and honors a longer `Retry-After` (seconds or
+HTTP date), allowing the configured backup to serve reads. Exhausted providers still produce incomplete
+balances. JSON-RPC limit errors also trigger cooldown even when HTTP succeeds.
+Concurrent failures preserve the longest rate-limit delay, and a late success
+cannot cancel an active cooldown. Numeric provider error codes alone are not
+universal rate-limit evidence. Provider rate limits may still require an
+operator-managed capacity or endpoint change.

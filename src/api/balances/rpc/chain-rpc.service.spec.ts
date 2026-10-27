@@ -127,7 +127,11 @@ describe('ChainRpcService', () => {
 
         expect(result.items).toEqual([
             { key: 'near:native', result: { amount: '7' } },
-            { key: 'nep141:missing.near', error: 'RPC provider rejected the request' },
+            {
+                key: 'nep141:missing.near',
+                error: 'RPC provider rejected the request',
+                providerError: { code: -32602, message: 'Unknown contract' },
+            },
         ]);
         expect(post).toHaveBeenCalledTimes(3);
         expect(post.mock.calls.every((call) => !Array.isArray(call[1]))).toBe(true);

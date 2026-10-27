@@ -18,6 +18,8 @@ export type ChainRpcBatchItem = {
     key: string;
     result?: unknown;
     error?: string;
+    // Internal provider evidence for network adapters; never return or log it.
+    providerError?: unknown;
 };
 
 export type ChainRpcBatchResult = {
@@ -40,6 +42,7 @@ export class ChainRpcRequestError extends Error {
     constructor(
         message: string,
         readonly retryable: boolean,
+        readonly providerError?: unknown,
     ) {
         super(message);
     }

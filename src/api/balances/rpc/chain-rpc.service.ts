@@ -67,7 +67,8 @@ export class ChainRpcService implements OnModuleInit {
             } catch (error) {
                 const rpcError = this.toRpcError(error);
                 lastError = rpcError;
-                if (!rpcError.retryable) throw rpcError;
+                // Provider evidence belongs only in internal batch items, never thrown public errors.
+                if (!rpcError.retryable) throw new ChainRpcRequestError(rpcError.message, false);
                 this.recordFailure(network, endpoint.alias, state, method, rpcError);
             }
         }
@@ -96,7 +97,8 @@ export class ChainRpcService implements OnModuleInit {
             } catch (error) {
                 const rpcError = this.toRpcError(error);
                 lastError = rpcError;
-                if (!rpcError.retryable) throw rpcError;
+                // Provider evidence belongs only in internal batch items, never thrown public errors.
+                if (!rpcError.retryable) throw new ChainRpcRequestError(rpcError.message, false);
                 this.recordFailure(network, endpoint.alias, state, 'batch', rpcError);
             }
         }
@@ -202,6 +204,7 @@ export class ChainRpcService implements OnModuleInit {
             throw new ChainRpcRequestError(
                 retryable ? 'RPC provider is temporarily unavailable' : 'RPC provider rejected the request',
                 retryable,
+                envelope.error,
             );
         }
         if (!envelope || envelope.result === undefined) {
@@ -227,7 +230,11 @@ export class ChainRpcService implements OnModuleInit {
                         retryableError = rpcError;
                         return;
                     }
-                    items[index] = { key: request.key, error: rpcError.message };
+                    items[index] = {
+                        key: request.key,
+                        error: rpcError.message,
+                        ...(rpcError.providerError ? { providerError: rpcError.providerError } : {}),
+                    };
                 }
             }
         };

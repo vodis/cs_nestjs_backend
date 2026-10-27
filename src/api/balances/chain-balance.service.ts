@@ -14,6 +14,8 @@ import {
     NEAR_NATIVE_DECIMALS,
     NEAR_NATIVE_SYMBOL,
 } from './near-balance.constants';
+import { readBalance } from './balance-read';
+import { isMissingNearTokenContract } from './near-token-balance';
 import { ChainRpcService } from './rpc/chain-rpc.service';
 import { TonCenterService } from './ton/ton-center.service';
 
@@ -41,6 +43,7 @@ type BalanceRequestSpec = {
     params: unknown;
     source: LiveChainBalance['source'];
     parse: (value: unknown) => string;
+    provesZero?: (providerError: unknown) => boolean;
 };
 
 export type ChainBalanceBatchResult = {
@@ -102,17 +105,11 @@ export class ChainBalanceService {
         for (const item of response.items) {
             const spec = specByKey.get(item.key);
             if (!spec) continue;
-            if (item.error) {
-                failures.push({ assetId: spec.assetId, reason: item.error });
-                continue;
-            }
-            try {
-                balances.push(this.result(network, spec, spec.parse(item.result), response.providerAlias));
-            } catch (error) {
-                failures.push({
-                    assetId: spec.assetId,
-                    reason: error instanceof Error ? error.message : 'Invalid RPC balance',
-                });
+            const outcome = readBalance(item, spec.parse, spec.provesZero);
+            if (outcome.status === 'known') {
+                balances.push(this.result(network, spec, outcome.balanceRaw, response.providerAlias));
+            } else {
+                failures.push({ assetId: spec.assetId, reason: outcome.reason });
             }
         }
         return { balances, failures };
@@ -223,6 +220,7 @@ export class ChainBalanceService {
             },
             source: 'near_rpc',
             parse: (value) => this.nearFunctionAmount(value),
+            provesZero: (error) => isMissingNearTokenContract(error, contract),
         };
     }
 

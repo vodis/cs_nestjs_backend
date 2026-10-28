@@ -52,6 +52,33 @@ authorize swaps until the owner completes the new proof flow.
 Disconnecting a browser wallet clears only the local connection; deleting a
 wallet link revokes swap authorization until a new proof is completed.
 
+### Add Funds receive instructions
+
+`POST /api/v1/deposits/instructions` requires a bearer-authenticated user and
+accepts `{ walletId, assetId, amount }` (a positive decimal string). The wallet must be that user's active primary
+link. The backend resolves the current server asset/network, validates wallet
+compatibility, and requests a 1Click `dry: false`, `EXACT_INPUT`
+quote with an exact atomic amount derived from server token decimals. The origin and destination asset are identical; recipient and refund
+both use the selected linked wallet on that asset's network. No client-provided
+address, custody mode, or deadline is accepted.
+
+This route requires provider support for the selected same-asset route. Validate
+that capability in staging
+before rollout. Provider rejection or malformed/expired instructions fail closed;
+there is no fabricated address or direct-transfer fallback.
+The response carries the wallet, recipient, asset, network, deposit address,
+requested amount, minimum received after fees, optional memo, and earliest
+provider/request deadline. `timeWhenInactive` is not treated as an expiry. The host displays exact-input and refund guidance along with the memo
+and does not issue an address-only QR when a memo is required.
+
+Concurrent requests share one allocation per user/wallet/asset/amount. Completed
+results are never cached: a subsequent request obtains a fresh quote because
+an earlier exact-input address might already have been used. This process-local
+singleflight is not durable idempotency or deposit tracking.
+Existing addresses remain governed by their provider deadlines. This endpoint
+never signs or sends funds and does not report settlement. Deploy backend before
+host; rolling back the host does not cancel already issued provider addresses.
+
 For signed-intent and origin-chain deposit swaps, `POST /api/v1/swaps/prepare` returns a short-lived `preparationId` inside
 `executionPackage.payload`. Preparation requires a Privy bearer token and an
 active linked wallet matching `signerId` and `authMethod`; an unlinked wallet

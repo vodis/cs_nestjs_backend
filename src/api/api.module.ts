@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { BalancesModule } from './balances/balances.module';
 import { PortfolioModule } from '../modules/portfolio';
 import { AgentAccessModule } from '../modules/agent-access';
+import { DepositsModule } from '../modules/deposits/deposits.module';
 
 @Module({
     imports: [
@@ -20,6 +21,7 @@ import { AgentAccessModule } from '../modules/agent-access';
         BalancesModule,
         PortfolioModule,
         AgentAccessModule,
+        DepositsModule,
     ],
 })
 export class ApiModule {}

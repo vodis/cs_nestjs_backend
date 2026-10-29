@@ -23,18 +23,33 @@ export class BalancesPortfolioAdapter implements PortfolioBalanceSource {
             if (responses.some((response) => response.meta.partial)) {
                 throw new ServiceUnavailableException('Portfolio balance is temporarily unavailable');
             }
-            return responses.flatMap((response) =>
-                response.data
-                    .filter((balance) => !/^0+$/.test(balance.balanceRaw))
-                    .map((balance) => ({
-                        walletReference: balance.walletId || balance.walletAddress,
-                        chain: balance.network,
-                        assetId: balance.assetId,
-                        symbol: balance.symbol,
-                        quantity: balance.balanceDecimal || formatTokenAmount(balance.balanceRaw, balance.decimals),
-                        balanceUpdatedAt: new Date(balance.fetchedAt),
-                    })),
+            // The unfiltered response can already contain cached token balances.
+            // Later explicit token reads replace those entries, including newly read zeros.
+            const balances = new Map(
+                responses.flatMap((response) =>
+                    response.data.map(
+                        (balance) =>
+                            [
+                                JSON.stringify([
+                                    balance.walletId || balance.walletAddress,
+                                    balance.network,
+                                    balance.assetId,
+                                ]),
+                                balance,
+                            ] as const,
+                    ),
+                ),
             );
+            return [...balances.values()]
+                .filter((balance) => !/^0+$/.test(balance.balanceRaw))
+                .map((balance) => ({
+                    walletReference: balance.walletId || balance.walletAddress,
+                    chain: balance.network,
+                    assetId: balance.assetId,
+                    symbol: balance.symbol,
+                    quantity: balance.balanceDecimal || formatTokenAmount(balance.balanceRaw, balance.decimals),
+                    balanceUpdatedAt: new Date(balance.fetchedAt),
+                }));
         }
 
         const wallets = await WalletLink.findAll({ where: { userId, status: 'active' }, attributes: ['id'] });

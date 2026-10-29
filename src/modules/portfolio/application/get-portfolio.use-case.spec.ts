@@ -5,7 +5,7 @@ describe('GetPortfolioUseCase', () => {
         const balances = {
             balancesForUser: jest.fn().mockResolvedValue([
                 {
-                    walletId: 'wallet-secret',
+                    walletReference: 'wallet-secret',
                     chain: 'near',
                     assetId: 'near',
                     symbol: 'NEAR',
@@ -13,7 +13,7 @@ describe('GetPortfolioUseCase', () => {
                     balanceUpdatedAt: new Date('2026-08-19T12:00:00Z'),
                 },
                 {
-                    walletId: 'wallet-other',
+                    walletReference: 'wallet-other',
                     chain: 'near',
                     assetId: 'usdc',
                     symbol: 'USDC',
@@ -44,7 +44,7 @@ describe('GetPortfolioUseCase', () => {
         const balances = {
             balancesForUser: jest.fn().mockResolvedValue([
                 {
-                    walletId: 'w',
+                    walletReference: 'w',
                     chain: 'near',
                     assetId: 'unknown',
                     symbol: 'NEW',
@@ -64,5 +64,14 @@ describe('GetPortfolioUseCase', () => {
             getAssets: async () => [],
         }).execute('u');
         expect(result.asOf).toBeNull();
+    });
+
+    it('passes an explicit wallet valuation query to the balance source', async () => {
+        const balances = { balancesForUser: jest.fn().mockResolvedValue([]) };
+        const query = { walletAddress: 'alice.tg', network: 'near:mainnet' };
+
+        await new GetPortfolioUseCase(balances as never, { getAssets: async () => [] }).execute('u', query);
+
+        expect(balances.balancesForUser).toHaveBeenCalledWith('u', query);
     });
 });

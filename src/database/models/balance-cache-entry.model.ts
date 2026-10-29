@@ -10,6 +10,7 @@ import { WalletLink } from './wallet-link.model';
         { fields: ['wallet_id'] },
         { fields: ['expires_at'] },
         { fields: ['user_id', 'wallet_id', 'asset_id'], unique: true },
+        { fields: ['user_id', 'wallet_id', 'network', 'asset_id'], unique: true },
     ],
 })
 export class BalanceCacheEntry extends Model<BalanceCacheEntry> {
@@ -33,6 +34,9 @@ export class BalanceCacheEntry extends Model<BalanceCacheEntry> {
 
     @Column({ type: DataType.STRING, allowNull: false })
     declare chainType: string;
+
+    @Column({ type: DataType.STRING, allowNull: true })
+    declare network: string | null;
 
     @Column({ type: DataType.STRING, allowNull: false })
     declare assetId: string;

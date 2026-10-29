@@ -5,3 +5,7 @@ export const WRAPPED_NEAR_SYMBOL = 'wNEAR';
 export const NEAR_NATIVE_DECIMALS = 24;
 export const NEAR_BALANCE_SOURCE = 'near_rpc';
 export const NEAR_BALANCE_TTL_MS = 15000;
+
+export function nearTokenContractFromAssetId(assetId: string): string | undefined {
+    return /^(?:nep141:|1cs_v1:near:nep141:)([a-z0-9._-]+)$/i.exec(assetId)?.[1];
+}

@@ -8,11 +8,16 @@ export class AssetsPortfolioAdapter implements PortfolioAssetSource {
 
     async getAssets() {
         const response = await this.assets.getAssets();
-        return response.data.map((asset) => ({
+        const assets = response.data.map((asset) => ({
             assetId: asset.assetId,
             priceUsd: this.decimalPrice(asset.price),
             priceUpdatedAt: asset.priceUpdatedAt ?? null,
         }));
+        const wrappedNear = assets.find((asset) => asset.assetId === 'nep141:wrap.near');
+        if (wrappedNear && !assets.some((asset) => asset.assetId === 'near:native')) {
+            assets.push({ ...wrappedNear, assetId: 'near:native' });
+        }
+        return assets;
     }
 
     private decimalPrice(value: string | number | undefined): string | null {

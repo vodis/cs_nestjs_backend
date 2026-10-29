@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 
 export class PostBalancesRequestDto {
     @ApiPropertyOptional({ description: 'Restrict balances to one active wallet owned by the authenticated user.' })
@@ -8,7 +8,8 @@ export class PostBalancesRequestDto {
     walletId?: string;
 
     @ApiPropertyOptional({
-        description: 'Restrict balances to one active wallet address owned by the authenticated user.',
+        description:
+            'Read one wallet address. If it is not linked to the user, network is required and the request is read-only.',
     })
     @IsOptional()
     @IsString()
@@ -31,4 +32,15 @@ export class PostBalancesRequestDto {
     @IsString()
     @MaxLength(256)
     assetId?: string;
+
+    @ApiPropertyOptional({
+        description: 'Restrict balances to at most 20 backend-supported asset ids.',
+        type: [String],
+    })
+    @IsOptional()
+    @IsArray()
+    @ArrayMaxSize(20)
+    @IsString({ each: true })
+    @MaxLength(256, { each: true })
+    assetIds?: string[];
 }

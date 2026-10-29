@@ -1,3 +1,4 @@
+import { balanceCacheNetwork } from '../../utils/chain-network.util';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Op } from 'sequelize';
 import { AssetDto } from '../assets/dto/get-assets-response.dto';
@@ -5,20 +6,21 @@ import { AssetsService } from '../assets/assets.service';
 import { BalanceCacheEntry } from '../../database/models/balance-cache-entry.model';
 import { WalletLink } from '../../database/models/wallet-link.model';
 import type { AuthenticatedUser } from '../auth/types';
+import { BalanceAccount, ChainBalanceService, LiveChainBalance } from './chain-balance.service';
 import { GetBalancesQueryDto } from './dto/get-balances-query.dto';
 import { BalanceDto, GetBalancesResponseDto } from './dto/get-balances-response.dto';
-import { NearNativeBalance, NearRpcBalanceService } from './near-rpc-balance.service';
 import { PostBalancesRequestDto } from './dto/post-balances-request.dto';
-import {
-    NEAR_BALANCE_SOURCE,
-    NEAR_NATIVE_ASSET_ID,
-    NEAR_NATIVE_SYMBOL,
-    WRAPPED_NEAR_ASSET_ID,
-    WRAPPED_NEAR_SYMBOL,
-} from './near-balance.constants';
+import { NEAR_NATIVE_ASSET_ID } from './near-balance.constants';
 
-const NEAR_NATIVE_ASSET_IDS = new Set([NEAR_NATIVE_ASSET_ID, WRAPPED_NEAR_ASSET_ID]);
 type BalancesRequest = GetBalancesQueryDto | PostBalancesRequestDto;
+type BalanceSubject = BalanceAccount & { walletId: string | null };
+type SelectedWallet = { wallet: BalanceSubject; network?: string };
+type RefreshTarget = { wallet: BalanceSubject; network: string; asset?: AssetDto; assetId: string };
+type RefreshGroup = { wallet: BalanceSubject; network: string; targets: RefreshTarget[] };
+
+// Sequelize emits explicit conflictFields verbatim, so underscored database
+// columns are required even though its TypeScript declaration expects attributes.
+const LEGACY_CACHE_CONFLICT_FIELDS = ['user_id', 'wallet_id', 'asset_id'] as unknown as Array<keyof BalanceCacheEntry>;
 
 @Injectable()
 export class BalancesService {
@@ -26,84 +28,229 @@ export class BalancesService {
 
     constructor(
         private readonly assetsService: AssetsService,
-        private readonly nearRpcBalanceService: NearRpcBalanceService,
+        private readonly chainBalances: ChainBalanceService,
     ) {}
 
     async getBalances(user: AuthenticatedUser, query: BalancesRequest): Promise<GetBalancesResponseDto> {
-        const now = new Date();
-        const wallets = await this.findWallets(user.id, query);
-        const asset = query.assetId ? await this.findSupportedAsset(query.assetId) : undefined;
-
-        if (wallets.length === 0) {
-            return this.toResponse([], now);
-        }
-
-        const entries = await BalanceCacheEntry.findAll({
-            where: {
-                userId: user.id,
-                walletId: { [Op.in]: wallets.map((wallet) => wallet.id) },
-                ...(asset ? { assetId: asset.assetId } : {}),
-                expiresAt: { [Op.gt]: now },
-            },
-            order: [
-                ['walletId', 'ASC'],
-                ['assetId', 'ASC'],
-            ],
-        });
-
-        const cachedBalances = entries.map((entry) => this.toDto(entry));
-        const cachedKeys = new Set(cachedBalances.map((balance) => `${balance.walletId}|${balance.assetId}`));
-        const refreshedNearBalances = await this.refreshUncachedNearNativeBalances(user.id, wallets, asset, cachedKeys);
-
-        return this.toResponse([...refreshedNearBalances, ...cachedBalances], now, refreshedNearBalances.length > 0);
+        return this.getBalancesForUser(user.id, query);
     }
 
-    private async findWallets(userId: string, query: BalancesRequest): Promise<WalletLink[]> {
-        const walletAddress = 'walletAddress' in query ? query.walletAddress : undefined;
-        const network = 'network' in query ? query.network : undefined;
+    async getBalancesForUser(userId: string, query: BalancesRequest): Promise<GetBalancesResponseDto> {
+        const now = new Date();
+        const selected = await this.findWallets(userId, query);
+        const assets = await this.findSupportedAssets(query);
+        if (selected.length === 0) return this.toResponse([], now, 0, 0);
 
-        if (query.walletId || walletAddress) {
+        const requestedNetwork = this.requestedNetwork(query);
+        const linkedWalletIds = selected.flatMap(({ wallet }) => (wallet.walletId ? [wallet.walletId] : []));
+        const entries = linkedWalletIds.length
+            ? await BalanceCacheEntry.findAll({
+                  where: {
+                      userId,
+                      walletId: { [Op.in]: linkedWalletIds },
+                      ...(assets.length ? { assetId: { [Op.in]: assets.map((asset) => asset.assetId) } } : {}),
+                      ...(requestedNetwork ? { network: requestedNetwork } : {}),
+                  },
+                  order: [
+                      ['walletId', 'ASC'],
+                      ['network', 'ASC'],
+                      ['assetId', 'ASC'],
+                  ],
+              })
+            : [];
+        const freshEntries = entries.filter((entry) => entry.expiresAt > now);
+        const freshKeys = new Set(
+            freshEntries.map((entry) => this.key(entry.walletId, balanceCacheNetwork(entry), entry.assetId)),
+        );
+        const targets = selected.flatMap(({ wallet, network }) => {
+            if (!network) return [];
+            const requestedAssets = assets.length ? assets : [undefined];
+            return requestedAssets.flatMap((asset) => {
+                const assetId = asset?.assetId || this.nativeAssetId(network);
+                return wallet.walletId && freshKeys.has(this.key(wallet.walletId, network, assetId))
+                    ? []
+                    : [{ wallet, network, asset, assetId }];
+            });
+        });
+
+        const groups = this.groupTargets(targets);
+        const results = await Promise.allSettled(groups.map(async (group) => this.refreshBalances(userId, group)));
+        const liveBalances: BalanceDto[] = [];
+        const failedTargets: RefreshTarget[] = [];
+        results.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+                liveBalances.push(...result.value.balances);
+                failedTargets.push(
+                    ...groups[index].targets.filter((target) => result.value.failedAssetIds.includes(target.assetId)),
+                );
+                return;
+            }
+            if (result.reason instanceof BadRequestException) throw result.reason;
+            const group = groups[index];
+            failedTargets.push(...group.targets);
+            this.logger.warn(
+                `Balance refresh failed wallet=${group.wallet.walletId || group.wallet.address} network=${group.network} reason=${
+                    result.reason?.message || 'provider unavailable'
+                }`,
+            );
+        });
+
+        const liveKeys = new Set(
+            liveBalances.map((balance) => this.key(balance.walletId, balance.network, balance.assetId)),
+        );
+        const cachedBalances = freshEntries
+            .filter((entry) => !liveKeys.has(this.key(entry.walletId, balanceCacheNetwork(entry), entry.assetId)))
+            .map((entry) => this.toDto(entry, false));
+        const staleFallbacks = failedTargets.flatMap((target) => {
+            const entry = entries.find(
+                (candidate) =>
+                    candidate.walletId === target.wallet.walletId &&
+                    balanceCacheNetwork(candidate) === target.network &&
+                    candidate.assetId === target.assetId &&
+                    candidate.expiresAt <= now,
+            );
+            return entry ? [this.toDto(entry, true)] : [];
+        });
+
+        return this.toResponse(
+            [...liveBalances, ...cachedBalances, ...staleFallbacks],
+            now,
+            liveBalances.length,
+            failedTargets.length,
+        );
+    }
+
+    private async findWallets(userId: string, query: BalancesRequest): Promise<SelectedWallet[]> {
+        const walletAddress = 'walletAddress' in query ? query.walletAddress : undefined;
+        const network = this.requestedNetwork(query);
+        const chainType = network ? this.chainTypeFilter(network) : undefined;
+
+        if (query.walletId) {
             const wallet = await WalletLink.findOne({
                 where: {
-                    ...(query.walletId ? { id: query.walletId } : {}),
+                    id: query.walletId,
                     ...(walletAddress ? { address: walletAddress } : {}),
-                    ...(network ? { chainType: this.normalizeNetwork(network) } : {}),
+                    ...(chainType ? { chainType } : {}),
                     userId,
                     status: 'active',
                 },
             });
-            if (!wallet) {
-                throw new NotFoundException('Wallet not found');
-            }
-            return [wallet];
+            if (!wallet) throw new NotFoundException('Wallet not found');
+            return [{ wallet: this.linkedSubject(wallet), network: network || this.inferNetwork(wallet) }];
         }
 
-        return WalletLink.findAll({
+        if (walletAddress) {
+            const normalizedAddress = this.normalizeAddress(walletAddress, network);
+            const wallet = await WalletLink.findOne({
+                where: {
+                    address: normalizedAddress,
+                    ...(chainType ? { chainType } : {}),
+                    userId,
+                    status: 'active',
+                },
+            });
+            if (wallet) return [{ wallet: this.linkedSubject(wallet), network: network || this.inferNetwork(wallet) }];
+            if (!network) throw new BadRequestException('network is required for an unlinked wallet address');
+            this.chainBalances.assertAddress(network, normalizedAddress);
+            return [
+                { wallet: { walletId: null, address: normalizedAddress, chainType: this.chainType(network) }, network },
+            ];
+        }
+
+        const wallets = await WalletLink.findAll({
             where: {
                 userId,
                 status: 'active',
-                ...(network ? { chainType: this.normalizeNetwork(network) } : {}),
+                ...(chainType ? { chainType } : {}),
             },
             order: [
                 ['isPrimary', 'DESC'],
                 ['createdAt', 'ASC'],
             ],
         });
+        return wallets.map((wallet) => ({
+            wallet: this.linkedSubject(wallet),
+            network: network || this.inferNetwork(wallet),
+        }));
     }
 
-    private async findSupportedAsset(assetId: string): Promise<AssetDto> {
-        const asset = await this.assetsService.findAssetById(assetId);
-        if (!asset) {
-            throw new BadRequestException('Unsupported asset');
+    private async findSupportedAssets(query: BalancesRequest): Promise<AssetDto[]> {
+        const assetIds = this.requestedAssetIds(query);
+        if (!assetIds.length) return [];
+
+        const { data } = await this.assetsService.getAssets();
+        const byId = new Map<string, AssetDto>();
+        for (const asset of data) {
+            byId.set(asset.assetId, asset);
+            byId.set(asset.defuseAssetId, asset);
         }
-        return asset;
+        const assets = assetIds.map((assetId) => byId.get(assetId));
+        if (assets.some((asset) => !asset)) throw new BadRequestException('Unsupported asset');
+        return assets as AssetDto[];
     }
 
-    private toDto(entry: BalanceCacheEntry): BalanceDto {
+    private requestedAssetIds(query: BalancesRequest): string[] {
+        const batch = 'assetIds' in query ? query.assetIds || [] : [];
+        if (query.assetId && batch.length) throw new BadRequestException('Use assetId or assetIds, not both');
+        return [...new Set(query.assetId ? [query.assetId] : batch)];
+    }
+
+    private groupTargets(targets: RefreshTarget[]): RefreshGroup[] {
+        const groups = new Map<string, RefreshGroup>();
+        for (const target of targets) {
+            const key = `${target.wallet.walletId || `external:${target.wallet.address}`}|${target.network}`;
+            const group = groups.get(key) || { wallet: target.wallet, network: target.network, targets: [] };
+            group.targets.push(target);
+            groups.set(key, group);
+        }
+        return [...groups.values()];
+    }
+
+    private async refreshBalances(
+        userId: string,
+        group: RefreshGroup,
+    ): Promise<{ balances: BalanceDto[]; failedAssetIds: string[] }> {
+        const result = await this.chainBalances.getBalances(
+            group.wallet,
+            group.network,
+            group.targets.map((target) => target.asset),
+        );
+        if (group.wallet.walletId) {
+            await Promise.all(
+                result.balances.map((balance) =>
+                    BalanceCacheEntry.upsert(
+                        {
+                            userId,
+                            walletId: group.wallet.walletId as string,
+                            walletAddress: group.wallet.address,
+                            chainType: group.wallet.chainType,
+                            network: group.network,
+                            assetId: balance.assetId,
+                            symbol: balance.symbol,
+                            decimals: balance.decimals,
+                            balanceRaw: balance.balanceRaw,
+                            balanceDecimal: balance.balanceDecimal,
+                            source: balance.source,
+                            fetchedAt: balance.fetchedAt,
+                            expiresAt: balance.expiresAt,
+                        },
+                        { conflictFields: LEGACY_CACHE_CONFLICT_FIELDS },
+                    ),
+                ),
+            );
+        }
+        return {
+            balances: result.balances.map((balance) => this.toLiveDto(group.wallet, balance)),
+            failedAssetIds: result.failures.map((failure) => failure.assetId),
+        };
+    }
+
+    private toDto(entry: BalanceCacheEntry, stale: boolean): BalanceDto {
         return {
             walletId: entry.walletId,
             walletAddress: entry.walletAddress,
             chainType: entry.chainType,
+            network: balanceCacheNetwork(entry),
             assetId: entry.assetId,
             symbol: entry.symbol,
             decimals: entry.decimals,
@@ -112,112 +259,81 @@ export class BalancesService {
             source: entry.source,
             fetchedAt: entry.fetchedAt.toISOString(),
             expiresAt: entry.expiresAt.toISOString(),
+            stale,
         };
     }
 
-    private async refreshUncachedNearNativeBalances(
-        userId: string,
-        wallets: WalletLink[],
-        asset: AssetDto | undefined,
-        cachedKeys: Set<string>,
-    ): Promise<BalanceDto[]> {
-        if (asset && !this.isNearNativeAsset(asset)) {
-            return [];
-        }
-
-        const nearWallets = wallets.filter(
-            (wallet) => wallet.chainType === 'near' && this.isNearAccount(wallet.address),
-        );
-        const missingNearWallets = nearWallets.filter(
-            (wallet) => !cachedKeys.has(`${wallet.id}|${NEAR_NATIVE_ASSET_ID}`),
-        );
-        const balances = await Promise.allSettled(
-            missingNearWallets.map(async (wallet) => this.refreshNearBalance(userId, wallet)),
-        );
-
-        return balances.flatMap((result, index) => {
-            if (result.status === 'fulfilled') {
-                return [result.value];
-            }
-
-            this.logger.warn(
-                `Skipping live NEAR balance for wallet ${missingNearWallets[index].id}: ${
-                    result.reason?.message ?? result.reason
-                }`,
-            );
-            return [];
-        });
-    }
-
-    private async refreshNearBalance(userId: string, wallet: WalletLink): Promise<BalanceDto> {
-        const balance = await this.nearRpcBalanceService.getNativeBalance(wallet.address);
-        const dto = this.toNearDto(wallet, balance);
-
-        await BalanceCacheEntry.upsert({
-            userId,
-            walletId: wallet.id,
-            walletAddress: wallet.address,
-            chainType: 'near',
-            assetId: dto.assetId,
-            symbol: dto.symbol,
-            decimals: dto.decimals,
-            balanceRaw: dto.balanceRaw,
-            balanceDecimal: dto.balanceDecimal,
-            source: dto.source,
-            fetchedAt: balance.fetchedAt,
-            expiresAt: balance.expiresAt,
-        });
-
-        return dto;
-    }
-
-    private isNearNativeAsset(asset: AssetDto): boolean {
-        return (
-            asset.symbol === NEAR_NATIVE_SYMBOL ||
-            asset.symbol === WRAPPED_NEAR_SYMBOL ||
-            NEAR_NATIVE_ASSET_IDS.has(asset.assetId)
-        );
-    }
-
-    private isNearAccount(address: string): boolean {
-        return /^[a-z0-9._-]+\.(?:near|testnet|tg)$/i.test(address);
-    }
-
-    private normalizeNetwork(network: NonNullable<PostBalancesRequestDto['network']>): string {
-        if (network === 'near:mainnet' || network === 'near:testnet') {
-            return 'near';
-        }
-
-        if (network.startsWith('eip155:')) {
-            return 'ethereum';
-        }
-
-        return network;
-    }
-
-    private toNearDto(wallet: WalletLink, balance: NearNativeBalance): BalanceDto {
+    private toLiveDto(wallet: BalanceSubject, balance: LiveChainBalance): BalanceDto {
         return {
-            walletId: wallet.id,
+            walletId: wallet.walletId,
             walletAddress: wallet.address,
-            chainType: 'near',
+            chainType: wallet.chainType,
+            network: balance.network,
             assetId: balance.assetId,
             symbol: balance.symbol,
             decimals: balance.decimals,
             balanceRaw: balance.balanceRaw,
             balanceDecimal: balance.balanceDecimal,
-            source: NEAR_BALANCE_SOURCE,
+            source: balance.source,
             fetchedAt: balance.fetchedAt.toISOString(),
             expiresAt: balance.expiresAt.toISOString(),
+            stale: false,
         };
     }
 
-    private toResponse(data: BalanceDto[], now: Date, hasLiveBalances = false): GetBalancesResponseDto {
+    private requestedNetwork(query: BalancesRequest): string | undefined {
+        return 'network' in query ? query.network : undefined;
+    }
+
+    private inferNetwork(wallet: WalletLink): string | undefined {
+        if (wallet.chainType === 'near') {
+            return /\.testnet$/i.test(wallet.address) ? 'near:testnet' : 'near:mainnet';
+        }
+        if (wallet.chainType === 'ton') return 'ton:mainnet';
+        return undefined;
+    }
+
+    private chainTypeFilter(network: string): string | object {
+        if (network.startsWith('near:')) return 'near';
+        if (network.startsWith('eip155:')) return { [Op.in]: ['ethereum', 'evm'] };
+        if (network === 'ton:mainnet' || network === 'ton:testnet') return 'ton';
+        throw new BadRequestException('Unsupported balance network');
+    }
+
+    private nativeAssetId(network: string): string {
+        if (network.startsWith('near:')) return NEAR_NATIVE_ASSET_ID;
+        if (network === 'ton:mainnet' || network === 'ton:testnet') return 'ton:native';
+        return `${network}/native`;
+    }
+
+    private key(walletId: string | null, network: string, assetId: string): string {
+        return `${walletId || 'unlinked'}|${network}|${assetId}`;
+    }
+
+    private linkedSubject(wallet: WalletLink): BalanceSubject {
+        return { walletId: wallet.id, address: wallet.address, chainType: wallet.chainType };
+    }
+
+    private normalizeAddress(address: string, network?: string): string {
+        const value = address.trim();
+        return network?.startsWith('eip155:') || /^0x/i.test(value) ? value.toLowerCase() : value;
+    }
+
+    private chainType(network: string): string {
+        if (network.startsWith('near:')) return 'near';
+        if (network.startsWith('eip155:')) return 'ethereum';
+        if (network === 'ton:mainnet' || network === 'ton:testnet') return 'ton';
+        throw new BadRequestException('Unsupported balance network');
+    }
+
+    private toResponse(data: BalanceDto[], now: Date, liveCount: number, failureCount: number): GetBalancesResponseDto {
         return {
             data,
             meta: {
-                source: hasLiveBalances && data.length > 0 ? 'mixed' : 'postgres_cache',
-                cached: !hasLiveBalances,
+                source: liveCount > 0 ? (data.length > liveCount ? 'mixed' : 'rpc') : 'postgres_cache',
+                cached: liveCount === 0,
                 fetchedAt: now.toISOString(),
+                partial: failureCount > 0,
             },
         };
     }

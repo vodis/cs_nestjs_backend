@@ -1,0 +1,201 @@
+import { BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { AssetDto } from '../assets/dto/get-assets-response.dto';
+import { WalletLink } from '../../database/models/wallet-link.model';
+import { ChainBalanceService } from './chain-balance.service';
+import { ChainRpcService } from './rpc/chain-rpc.service';
+import { TonCenterService } from './ton/ton-center.service';
+
+const usdcNear: AssetDto = {
+    assetId: 'nep141:usdc.near',
+    defuseAssetId: 'nep141:usdc.near',
+    symbol: 'USDC',
+    decimals: 6,
+    blockchain: 'near',
+};
+const usdcEthereum: AssetDto = {
+    assetId: 'nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near',
+    defuseAssetId: 'nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near',
+    symbol: 'USDC',
+    decimals: 6,
+    blockchain: 'eth',
+    contractAddress: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+};
+const zecNear: AssetDto = {
+    assetId: '1cs_v1:near:nep141:zec.omft.near',
+    defuseAssetId: '1cs_v1:near:nep141:zec.omft.near',
+    symbol: 'ZEC',
+    decimals: 8,
+    blockchain: 'near',
+};
+
+function wallet(address: string, chainType: string): WalletLink {
+    return { id: 'wallet-1', address, chainType } as WalletLink;
+}
+
+describe('ChainBalanceService', () => {
+    const config = new ConfigService({ BALANCE_CACHE_TTL_MS: 15000 });
+    const tonCenter = {
+        getNativeBalance: jest.fn(),
+        getJettonBalance: jest.fn(),
+    } as unknown as TonCenterService;
+
+    it('batches native NEAR and NEP-141 ft_balance_of reads', async () => {
+        const requestBatch = jest.fn(async (_network, requests) => ({
+            providerAlias: 'near-primary',
+            items: [
+                { key: requests[0].key, result: { amount: '2000000000000000000000000' } },
+                { key: requests[1].key, result: { result: [...Buffer.from('"1250000"')] } },
+                { key: requests[2].key, result: { result: [...Buffer.from('"50000000"')] } },
+            ],
+        }));
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
+
+        const result = await service.getBalances(wallet('alice.near', 'near'), 'near:mainnet', [
+            undefined,
+            usdcNear,
+            zecNear,
+        ]);
+
+        expect(requestBatch).toHaveBeenCalledWith(
+            'near:mainnet',
+            expect.arrayContaining([
+                expect.objectContaining({ key: 'near:native', method: 'query' }),
+                expect.objectContaining({ key: usdcNear.assetId, method: 'query' }),
+                expect.objectContaining({ key: zecNear.assetId, method: 'query' }),
+            ]),
+        );
+        const tokenRequest = requestBatch.mock.calls[0][1][1];
+        expect(tokenRequest.params).toMatchObject({
+            request_type: 'call_function',
+            account_id: 'usdc.near',
+            method_name: 'ft_balance_of',
+        });
+        const zecRequest = requestBatch.mock.calls[0][1][2];
+        expect(zecRequest.params).toMatchObject({
+            request_type: 'call_function',
+            account_id: 'zec.omft.near',
+            method_name: 'ft_balance_of',
+        });
+        expect(result.balances).toEqual([
+            expect.objectContaining({ assetId: 'near:native', balanceDecimal: '2' }),
+            expect.objectContaining({ assetId: usdcNear.assetId, balanceDecimal: '1.25' }),
+            expect.objectContaining({ assetId: zecNear.assetId, balanceDecimal: '0.5' }),
+        ]);
+    });
+
+    it('batches EVM native and ERC-20 balanceOf reads without floating point conversion', async () => {
+        const requestBatch = jest.fn(async (_network, requests) => ({
+            providerAlias: 'ethereum-primary',
+            items: [
+                { key: requests[0].key, result: '0xde0b6b3a7640000' },
+                { key: requests[1].key, result: '0x1312d00' },
+            ],
+        }));
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
+        const evmWallet = wallet('0x1111111111111111111111111111111111111111', 'ethereum');
+
+        const result = await service.getBalances(evmWallet, 'eip155:1', [undefined, usdcEthereum]);
+
+        expect(requestBatch.mock.calls[0][1]).toEqual([
+            expect.objectContaining({ method: 'eth_getBalance' }),
+            expect.objectContaining({
+                method: 'eth_call',
+                params: [
+                    expect.objectContaining({
+                        to: usdcEthereum.contractAddress,
+                        data: expect.stringMatching(/^0x70a08231[0-9a-f]{64}$/),
+                    }),
+                    'latest',
+                ],
+            }),
+        ]);
+        expect(result.balances).toEqual([
+            expect.objectContaining({ assetId: 'eip155:1/native', balanceRaw: '1000000000000000000' }),
+            expect.objectContaining({ assetId: usdcEthereum.assetId, balanceRaw: '20000000' }),
+        ]);
+    });
+
+    it('accepts implicit NEAR accounts and rejects cross-network assets', async () => {
+        const requestBatch = jest.fn(async () => ({ providerAlias: 'near-primary', items: [] }));
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
+        await expect(
+            service.getBalances(wallet('a'.repeat(64), 'near'), 'near:mainnet', [undefined]),
+        ).resolves.toMatchObject({ balances: [] });
+        await expect(
+            service.getBalances(wallet('0x1111111111111111111111111111111111111111', 'ethereum'), 'eip155:8453', [
+                usdcEthereum,
+            ]),
+        ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects an EVM token without authoritative contract metadata', async () => {
+        const requestBatch = jest.fn();
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
+
+        await expect(
+            service.getBalances(wallet('0x1111111111111111111111111111111111111111', 'ethereum'), 'eip155:1', [
+                { ...usdcEthereum, contractAddress: undefined },
+            ]),
+        ).rejects.toThrow('EVM token asset requires a valid contract address');
+        expect(requestBatch).not.toHaveBeenCalled();
+    });
+
+    it('uses network-specific native asset metadata', async () => {
+        const requestBatch = jest.fn(async (_network, requests) => ({
+            providerAlias: 'bsc-primary',
+            items: [{ key: requests[0].key, result: '0xde0b6b3a7640000' }],
+        }));
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
+
+        const result = await service.getBalances(
+            wallet('0x1111111111111111111111111111111111111111', 'ethereum'),
+            'eip155:56',
+            [undefined],
+        );
+
+        expect(result.balances).toEqual([
+            expect.objectContaining({ assetId: 'eip155:56/native', symbol: 'BNB', decimals: 18 }),
+        ]);
+    });
+
+    it('rejects a native balance request for an unregistered EVM network', async () => {
+        const requestBatch = jest.fn();
+        const service = new ChainBalanceService({ requestBatch } as unknown as ChainRpcService, config, tonCenter);
+
+        await expect(
+            service.getBalances(wallet('0x1111111111111111111111111111111111111111', 'ethereum'), 'eip155:999999', [
+                undefined,
+            ]),
+        ).rejects.toThrow('Native asset is not configured for EVM network');
+        expect(requestBatch).not.toHaveBeenCalled();
+    });
+
+    it('fetches native TON and an allowlisted Jetton through the TON adapter', async () => {
+        const getNativeBalance = jest.fn(async () => '2500000000');
+        const getJettonBalance = jest.fn(async () => '1250000');
+        const service = new ChainBalanceService({ requestBatch: jest.fn() } as unknown as ChainRpcService, config, {
+            getNativeBalance,
+            getJettonBalance,
+        } as unknown as TonCenterService);
+        const owner = `EQ${'a'.repeat(46)}`;
+        const master = `EQ${'b'.repeat(46)}`;
+        const jetton: AssetDto = {
+            assetId: 'ton:usdc',
+            defuseAssetId: 'ton:usdc',
+            symbol: 'USDC',
+            decimals: 6,
+            blockchain: 'ton',
+            contractAddress: master,
+        };
+
+        const result = await service.getBalances(wallet(owner, 'ton'), 'ton:mainnet', [undefined, jetton]);
+
+        expect(getNativeBalance).toHaveBeenCalledWith('ton:mainnet', owner);
+        expect(getJettonBalance).toHaveBeenCalledWith('ton:mainnet', owner, master);
+        expect(result.balances).toEqual([
+            expect.objectContaining({ assetId: 'ton:native', symbol: 'TON', balanceDecimal: '2.5' }),
+            expect.objectContaining({ assetId: jetton.assetId, symbol: 'USDC', balanceDecimal: '1.25' }),
+        ]);
+    });
+});

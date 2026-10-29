@@ -55,6 +55,13 @@ Promote by merging PRs: `develop` → `staging` → `master`.
 | Environment  | `staging`                             |
 | `git.branch` | `staging`                             |
 
+Every staging and production bundle also publishes
+`database.migrationFingerprint`, a SHA-256 fingerprint over the complete,
+ordered migration inventory. The orchestrator compares it with the last
+successful migration evidence and promotes a changed or unrecorded fingerprint
+to the approval flow. This keeps an undeployed migration gated across later
+pushes even when the latest Git diff does not contain the migration file.
+
 Each release run: lint/test/build → OCI image digest → Syft/Trivy → `deploy-metadata.json` → ORAS metadata push.
 
 **CI must not** SSH to VPS or run host deploy steps.
@@ -63,22 +70,92 @@ Each release run: lint/test/build → OCI image digest → Syft/Trivy → `deplo
 
 Required for production boot:
 
--   `DATABASE_URL`
--   `CS_I18N_SERVICE_URL`
--   `DEFAULT_LANGUAGE`
--   `COOKIES_DOMAIN`
+- `DATABASE_URL`
+- `CS_I18N_SERVICE_URL`
+- `DEFAULT_LANGUAGE`
+- `COOKIES_DOMAIN`
 
 Required for authenticated user flows:
 
--   `PRIVY_APP_ID`
--   `PRIVY_APP_SECRET`
--   `PRIVY_JWKS_URL`
+- `PRIVY_APP_ID`
+- `PRIVY_APP_SECRET`
+- `PRIVY_JWKS_URL`
+- `CHAIN_RPC_ENDPOINTS_JSON`
 
 Keep `EXTERNAL_WALLET_BINDING_ENABLED=false` until the signed ownership-challenge
 flow is deployed. Embedded Privy wallets are verified server-side against the
 authoritative Privy user record before persistence.
 
 Provider/config vars are documented in [.env.example](../.env.example). `API_SIGNING_KEY` is reserved in the environment contract but is not consumed by repository-visible code yet.
+
+### Balance RPC contract
+
+`CHAIN_RPC_ENDPOINTS_JSON` is a backend-only, orchestrator-managed secret. It is
+an object keyed by CAIP-2 network id. Each value is an ordered list of one to
+four `{ "alias", "url" }` providers. Aliases are safe for logs; URLs may contain
+provider credentials and must never be exposed to the browser or committed.
+
+During production-mode startup, the backend verifies that every configured
+network has at least one reachable provider reporting the expected chain. A
+failure prevents readiness, so the orchestrator does not switch traffic. The
+backend retries transport errors, timeouts, rate limits, and provider 5xx
+responses on the next configured endpoint, and temporarily opens a circuit
+after repeated failures. Logical balance batches are sent as bounded concurrent
+single JSON-RPC requests because some supported providers reject wire-level
+JSON-RPC batch arrays.
+Deterministic per-token errors remain partial batch results. When every provider
+fails, an expired cached value may be returned with `stale: true` and
+`meta.partial: true`; the API never invents a zero balance.
+
+`POST /api/v1/balances` accepts one `assetId` or up to 20 `assetIds`, plus an
+optional owned `walletId`/`walletAddress` and network. A `walletId` is always
+ownership-scoped. An address that is not linked to the authenticated user is an
+explicit read-only target: `network` is mandatory, `walletId` is returned as
+`null`, and the result is not written to the user's cache. Requested assets
+must exist in the backend asset allowlist.
+
+NEAR and EVM reads use the resilient JSON-RPC provider pool. EVM token reads
+use authoritative contract metadata and ERC-20 `balanceOf`; native reads use
+the network-specific native asset. TON uses the server-side TON Center adapter:
+API v2 for native nanotons and API v3 owner/master filtering for allowlisted
+Jettons. `TONCENTER_API_KEY` and `TONCENTER_TESTNET_API_KEY` are S3 provider
+credentials and must stay in Vault or the orchestrator's controlled secret
+backend; unauthenticated hosted access is limited to 1 request per second.
+See the official [TON Center v2 overview](https://docs.ton.org/api/v2/overview),
+[native balance endpoint](https://docs.ton.org/api/v2/accounts/get-address-balance),
+and [Jetton-wallet query](https://docs.ton.org/api/v3/jettons/get-jetton-wallets).
+
+Omitting asset ids from the balances endpoint refreshes only the chain's native
+asset. Asset-specific balance requests remain bounded to 20 IDs and use the
+1Click `/v0/tokens` catalog as their allowlist.
+
+`GET /api/v1/portfolio` may receive `walletAddress` and a CAIP-2 `network` to
+value one connected wallet from live balance reads. For NEAR mainnet, the
+backend loads the supported token universe and USD prices from 1Click
+`/v0/tokens`, requests the native balance plus every catalogued NEP-141 balance
+in bounded chunks, and returns only non-zero positions. This discovers bridged
+assets such as ZEC without an unbounded chain scan. Unlinked addresses remain
+read-only and require an explicit network; they are never persisted in the
+balance cache. Native NEAR (`near:native`) uses the market price published for wrapped NEAR
+(`nep141:wrap.near`), which represents the same underlying unit. If any live
+balance batch is partial because its provider is unavailable, the endpoint
+returns an availability error rather than understating the portfolio or
+reporting an invented zero valuation.
+
+The `20260830000100-add-balance-cache-network.js` migration must be applied by
+the orchestrator before this application version serves traffic. It is an
+expand/application-transition migration: `network` remains nullable, and the
+legacy `(user_id, wallet_id, asset_id)` unique index remains alongside the new
+network-aware index so both the active and rollback images can upsert safely.
+This transition application deliberately uses the legacy conflict key while
+writing `network`, so a row written by the old active image after the migration
+can be adopted rather than causing a unique-key failure after traffic switches.
+The legacy index temporarily prevents storing the same wallet/asset pair on two
+networks. After this version is active in both staging and production and its
+rollback windows close, a separately approved contract migration must backfill
+again, enforce `network NOT NULL`, remove the legacy index, and switch the model
+and upsert conflict key to the network-aware identity. Do not combine that
+contract step with this deployment.
 
 Passkey enrollment and passkey login are separate capabilities. Users first
 authenticate with an existing CCO method such as email, Google, or Apple, then

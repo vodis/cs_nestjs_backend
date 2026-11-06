@@ -1,3 +1,4 @@
+import { balanceCacheNetwork } from '../../utils/chain-network.util';
 import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
 
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
@@ -63,7 +64,7 @@ export class BalancesService {
             : [];
         const freshEntries = entries.filter((entry) => entry.expiresAt > now);
         const freshKeys = new Set(
-            freshEntries.map((entry) => this.key(entry.walletId, this.cacheNetwork(entry), entry.assetId)),
+            freshEntries.map((entry) => this.key(entry.walletId, balanceCacheNetwork(entry), entry.assetId)),
         );
         const targets = selected.flatMap(({ wallet, network }) => {
             if (!network) return [];
@@ -103,13 +104,13 @@ export class BalancesService {
             liveBalances.map((balance) => this.key(balance.walletId, balance.network, balance.assetId)),
         );
         const cachedBalances = freshEntries
-            .filter((entry) => !liveKeys.has(this.key(entry.walletId, this.cacheNetwork(entry), entry.assetId)))
+            .filter((entry) => !liveKeys.has(this.key(entry.walletId, balanceCacheNetwork(entry), entry.assetId)))
             .map((entry) => this.toDto(entry, false));
         const staleFallbacks = failedTargets.flatMap((target) => {
             const entry = entries.find(
                 (candidate) =>
                     candidate.walletId === target.wallet.walletId &&
-                    this.cacheNetwork(candidate) === target.network &&
+                    balanceCacheNetwork(candidate) === target.network &&
                     candidate.assetId === (target.asset?.balanceAssetId ?? target.assetId) &&
                     candidate.expiresAt <= now,
             );
@@ -265,7 +266,7 @@ export class BalancesService {
             walletId: entry.walletId,
             walletAddress: entry.walletAddress,
             chainType: entry.chainType,
-            network: this.cacheNetwork(entry),
+            network: balanceCacheNetwork(entry),
             assetId: entry.assetId,
             symbol: entry.symbol,
             decimals: entry.decimals,
@@ -323,13 +324,6 @@ export class BalancesService {
         if (network.startsWith('near:')) return NEAR_NATIVE_ASSET_ID;
         if (network === 'ton:mainnet' || network === 'ton:testnet') return 'ton:native';
         return `${network}/native`;
-    }
-
-    private cacheNetwork(entry: Pick<BalanceCacheEntry, 'network' | 'chainType'>): string {
-        if (entry.network) return entry.network;
-        if (entry.chainType === 'near') return 'near:mainnet';
-        if (entry.chainType === 'ethereum' || entry.chainType === 'evm') return 'eip155:1';
-        return entry.chainType;
     }
 
     private key(walletId: string | null, network: string, assetId: string): string {

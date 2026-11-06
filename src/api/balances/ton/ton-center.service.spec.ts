@@ -34,6 +34,16 @@ describe('TonCenterService', () => {
         await expect(service.getJettonBalance('ton:mainnet', 'EQ-owner', 'EQ-other')).resolves.toBe('0');
     });
 
+    it.each([{}, { jetton_wallets: null }, { jetton_wallets: {} }])(
+        'rejects malformed Jetton envelopes: %j',
+        async (data) => {
+            get.mockResolvedValueOnce({ data });
+            await expect(service.getJettonBalance('ton:mainnet', 'EQ-owner', 'EQ-master')).rejects.toThrow(
+                'Invalid Jetton wallets response',
+            );
+        },
+    );
+
     it('rejects malformed provider amounts', async () => {
         get.mockResolvedValueOnce({ data: { ok: true, result: 1.5 } });
         await expect(service.getNativeBalance('ton:mainnet', 'EQ-owner')).rejects.toThrow('invalid native balance');

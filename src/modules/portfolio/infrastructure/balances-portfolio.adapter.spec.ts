@@ -7,6 +7,57 @@ import { BalancesPortfolioAdapter } from './balances-portfolio.adapter';
 describe('BalancesPortfolioAdapter', () => {
     afterEach(() => jest.restoreAllMocks());
 
+    it('replaces a cached nonzero token with a later explicit zero balance', async () => {
+        const balance = {
+            walletId: 'wallet-1',
+            walletAddress: 'alice.near',
+            network: 'near:mainnet',
+            assetId: 'nep141:token.near',
+            symbol: 'TOK',
+            decimals: 0,
+            balanceRaw: '10',
+            balanceDecimal: '10',
+            fetchedAt: '2026-09-17T12:00:00.000Z',
+        };
+        const getBalancesForUser = jest
+            .fn()
+            .mockResolvedValueOnce({ data: [balance], meta: { partial: false } })
+            .mockResolvedValueOnce({
+                data: [{ ...balance, balanceRaw: '0', balanceDecimal: '0' }],
+                meta: { partial: false },
+            });
+        const getAssets = jest.fn().mockResolvedValue({
+            data: [{ assetId: balance.assetId, blockchain: 'near' }],
+        });
+
+        const result = await new BalancesPortfolioAdapter(
+            { getBalancesForUser } as never,
+            { getAssets } as never,
+        ).balancesForUser('user-1', { walletAddress: balance.walletAddress, network: balance.network });
+
+        expect(getBalancesForUser).toHaveBeenCalledTimes(2);
+        expect(result).toEqual([]);
+    });
+
+    it('normalizes the network of legacy cache-only portfolio positions', async () => {
+        jest.spyOn(WalletLink, 'findAll').mockResolvedValue([{ id: 'wallet-1' }] as never);
+        jest.spyOn(BalanceCacheEntry, 'findAll').mockResolvedValue([
+            {
+                walletId: 'wallet-1',
+                network: null,
+                chainType: 'near',
+                assetId: 'near:native',
+                symbol: 'NEAR',
+                balanceDecimal: '2',
+                fetchedAt: new Date(),
+            },
+        ] as never);
+
+        const result = await new BalancesPortfolioAdapter({} as never, {} as never).balancesForUser('user-1');
+
+        expect(result).toEqual([expect.objectContaining({ chain: 'near:mainnet', quantity: '2' })]);
+    });
+
     it('excludes expired cache entries from agent portfolio snapshots', async () => {
         jest.spyOn(WalletLink, 'findAll').mockResolvedValue([{ id: 'wallet-1' }] as never);
         const balances = jest.spyOn(BalanceCacheEntry, 'findAll').mockResolvedValue([]);

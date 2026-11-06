@@ -21,11 +21,18 @@
  */
 module.exports = {
     async up(queryInterface, Sequelize) {
-        await queryInterface.addColumn('balance_cache_entries', 'network', {
-            type: Sequelize.STRING,
-            allowNull: true,
-        });
-        await queryInterface.sequelize.query(`
+        await queryInterface.sequelize.transaction(async (transaction) => {
+            await queryInterface.addColumn(
+                'balance_cache_entries',
+                'network',
+                {
+                    type: Sequelize.STRING,
+                    allowNull: true,
+                },
+                { transaction },
+            );
+            await queryInterface.sequelize.query(
+                `
       UPDATE balance_cache_entries
       SET network = CASE
         WHEN chain_type = 'near' THEN 'near:mainnet'
@@ -33,14 +40,22 @@ module.exports = {
         ELSE chain_type
       END
       WHERE network IS NULL
-    `);
-        await queryInterface.addIndex('balance_cache_entries', ['user_id', 'wallet_id', 'network', 'asset_id'], {
-            unique: true,
+    `,
+                { transaction },
+            );
+            await queryInterface.addIndex('balance_cache_entries', ['user_id', 'wallet_id', 'network', 'asset_id'], {
+                unique: true,
+                transaction,
+            });
         });
     },
 
-    async down(queryInterface, Sequelize) {
-        await queryInterface.removeIndex('balance_cache_entries', ['user_id', 'wallet_id', 'network', 'asset_id']);
-        await queryInterface.removeColumn('balance_cache_entries', 'network');
+    async down(queryInterface) {
+        await queryInterface.sequelize.transaction(async (transaction) => {
+            await queryInterface.removeIndex('balance_cache_entries', ['user_id', 'wallet_id', 'network', 'asset_id'], {
+                transaction,
+            });
+            await queryInterface.removeColumn('balance_cache_entries', 'network', { transaction });
+        });
     },
 };

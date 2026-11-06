@@ -34,7 +34,8 @@ export class TonCenterService {
             limit: 1,
         });
         const wallets = response.data?.jetton_wallets;
-        if (!Array.isArray(wallets) || wallets.length === 0) return '0';
+        if (!Array.isArray(wallets)) throw new ServiceUnavailableException('Invalid Jetton wallets response');
+        if (wallets.length === 0) return '0';
         return this.unsignedAmount(wallets[0].balance, 'Jetton');
     }
 

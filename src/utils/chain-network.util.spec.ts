@@ -1,4 +1,4 @@
-import { parseEvmRpcChainId, parseSupportedChainNetwork } from './chain-network.util';
+import { balanceCacheNetwork, parseEvmRpcChainId, parseSupportedChainNetwork } from './chain-network.util';
 
 describe('chain network utilities', () => {
     it.each([
@@ -37,5 +37,19 @@ describe('chain network utilities', () => {
 
     it.each(['1', '0x', '0xz', '', null, 1])('rejects malformed EVM RPC chain ID %p', (value) => {
         expect(parseEvmRpcChainId(value)).toBeUndefined();
+    });
+});
+
+describe('balanceCacheNetwork', () => {
+    it.each([
+        ['near', 'near:mainnet'],
+        ['ethereum', 'eip155:1'],
+        ['evm', 'eip155:1'],
+        ['ton:mainnet', 'ton:mainnet'],
+    ])('normalizes legacy %s rows', (chainType, expected) => {
+        expect(balanceCacheNetwork({ network: null, chainType })).toBe(expected);
+    });
+    it('preserves an explicit network', () => {
+        expect(balanceCacheNetwork({ network: 'near:testnet', chainType: 'near' })).toBe('near:testnet');
     });
 });

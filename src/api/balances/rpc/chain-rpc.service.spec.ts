@@ -178,7 +178,7 @@ describe('ChainRpcService', () => {
         post.mockRejectedValue({ isAxiosError: true, code: 'ECONNABORTED' });
 
         await expect(service.onModuleInit()).rejects.toThrow(
-            'RPC startup verification failed for near:mainnet: RPC provider is temporarily unavailable',
+            'RPC startup verification failed for near:mainnet: RPC provider request timed out',
         );
     });
 

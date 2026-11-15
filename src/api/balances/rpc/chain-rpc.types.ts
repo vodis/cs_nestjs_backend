@@ -1,3 +1,15 @@
+import { ServiceUnavailableException } from '@nestjs/common';
+
+export class RpcUnavailableException extends ServiceUnavailableException {
+    constructor(
+        readonly network: string,
+        readonly code: string,
+        message: string,
+    ) {
+        super({ statusCode: 503, code, network, message });
+    }
+}
+
 export type ChainRpcEndpoint = {
     alias: string;
     url: string;
@@ -43,6 +55,7 @@ export class ChainRpcRequestError extends Error {
         message: string,
         readonly retryable: boolean,
         readonly providerError?: unknown,
+        readonly code = 'RPC_UNAVAILABLE',
     ) {
         super(message);
     }

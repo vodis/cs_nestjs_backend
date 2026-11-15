@@ -1,3 +1,4 @@
+import { RpcUnavailableException } from './rpc/chain-rpc.types';
 import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
 import { EVM_NETWORKS, isNativeProviderRoute } from '@vodis/cs-assets/one-click';
 import { SolanaFundingService } from './solana-funding.service';
@@ -48,7 +49,7 @@ type BalanceRequestSpec = {
 
 export type ChainBalanceBatchResult = {
     balances: LiveChainBalance[];
-    failures: { assetId: string; reason: string }[];
+    failures: { assetId: string; reason: string; rpcIssue?: RpcUnavailableException }[];
 };
 
 const EVM_NETWORK_BY_BLOCKCHAIN = { ...EVM_NETWORKS, ethereum: 'eip155:1' };
@@ -109,7 +110,7 @@ export class ChainBalanceService {
             if (outcome.status === 'known') {
                 balances.push(this.result(network, spec, outcome.balanceRaw, response.providerAlias));
             } else {
-                failures.push({ assetId: spec.assetId, reason: outcome.reason });
+                failures.push({ assetId: spec.key, reason: outcome.reason });
             }
         }
         return { balances, failures };
@@ -173,6 +174,7 @@ export class ChainBalanceService {
                 failures.push({
                     assetId: asset?.assetId ?? assetId,
                     reason: error instanceof Error ? error.message : 'Balance provider failed',
+                    ...(error instanceof RpcUnavailableException ? { rpcIssue: error } : {}),
                 });
             }
         }
@@ -230,6 +232,9 @@ export class ChainBalanceService {
         if (!asset) return this.evmNativeRequest(address, network);
 
         this.assertEvmAssetNetwork(asset, network);
+        if (!asset.contractAddress && isNativeProviderRoute(asset.blockchain, asset.defuseAssetId)) {
+            return { ...this.evmNativeRequest(address, network), key: asset.assetId };
+        }
         const contract = asset.contractAddress?.toLowerCase();
         if (!contract || !/^0x[a-f0-9]{40}$/.test(contract)) {
             throw new BadRequestException('EVM token asset requires a valid contract address');
@@ -253,7 +258,12 @@ export class ChainBalanceService {
     ): Promise<ChainBalanceBatchResult> {
         this.assertTonAccount(wallet.address);
         const requests = assets.map(async (asset): Promise<LiveChainBalance> => {
-            if (!asset) {
+            if (
+                !asset ||
+                (asset.blockchain.toLowerCase() === 'ton' &&
+                    !asset.contractAddress &&
+                    isNativeProviderRoute(asset.blockchain, asset.defuseAssetId))
+            ) {
                 return this.tonResult(
                     network,
                     'ton:native',

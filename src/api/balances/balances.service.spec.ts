@@ -1,3 +1,4 @@
+import { RpcUnavailableException } from './rpc/chain-rpc.types';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
@@ -268,7 +269,9 @@ describe('BalancesService', () => {
     it('returns an explicitly stale cache entry when every provider fails', async () => {
         const { user, wallet } = await userWallet();
         await cache(user.id, wallet, usdc, new Date(Date.now() - 60000));
-        chainBalances.getBalances.mockRejectedValueOnce(new Error('RPC unavailable'));
+        chainBalances.getBalances.mockRejectedValueOnce(
+            new RpcUnavailableException('near:mainnet', 'RPC_RATE_LIMITED', 'RPC provider rate limited the request'),
+        );
 
         const result = await service.getBalances(
             { id: user.id, privyUserId: user.privyUserId, sessionId: 'session-1', passkeyEnabled: false },
@@ -276,7 +279,14 @@ describe('BalancesService', () => {
         );
 
         expect(result.data).toEqual([expect.objectContaining({ assetId: usdc.assetId, stale: true })]);
-        expect(result.meta).toMatchObject({ source: 'postgres_cache', cached: true, partial: true });
+        expect(result.meta).toMatchObject({
+            source: 'postgres_cache',
+            cached: true,
+            partial: true,
+            issues: [
+                { network: 'near:mainnet', code: 'RPC_RATE_LIMITED', message: 'RPC provider rate limited the request' },
+            ],
+        });
     });
 
     it('returns successful batch items and marks deterministic token failures as partial', async () => {
@@ -305,6 +315,28 @@ describe('BalancesService', () => {
         );
 
         expect(result.data).toEqual([expect.objectContaining({ assetId: usdc.assetId })]);
+        expect(result.meta.partial).toBe(true);
+    });
+
+    it('preserves per-asset RPC diagnostics without exposing raw failure evidence', async () => {
+        const { user, wallet } = await userWallet();
+        const rpcIssue = new RpcUnavailableException('near:mainnet', 'RPC_TIMEOUT', 'RPC provider request timed out');
+        chainBalances.getBalances.mockResolvedValueOnce({
+            balances: [],
+            failures: [
+                { assetId: usdc.assetId, reason: 'private upstream evidence', rpcIssue },
+                { assetId: wrappedNear.assetId, reason: 'private upstream evidence', rpcIssue },
+            ],
+        });
+        const result = await service.getBalancesForUser(user.id, {
+            walletId: wallet.id,
+            network: 'near:mainnet',
+            assetIds: [usdc.assetId, wrappedNear.assetId],
+        });
+        expect(result.meta.issues).toEqual([
+            { network: 'near:mainnet', code: 'RPC_TIMEOUT', message: 'RPC provider request timed out' },
+        ]);
+        expect(JSON.stringify(result)).not.toContain('private upstream evidence');
         expect(result.meta.partial).toBe(true);
     });
 

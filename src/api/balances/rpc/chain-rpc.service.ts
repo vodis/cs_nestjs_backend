@@ -1,5 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, Logger, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { isAxiosError } from 'axios';
 import { parseEvmRpcChainId, parseSupportedChainNetwork } from '../../../utils/chain-network.util';
@@ -10,12 +10,14 @@ import {
     ChainRpcRequestError,
     ChainRpcResult,
     JsonRpcEnvelope,
+    RpcUnavailableException,
 } from './chain-rpc.types';
 
 type EndpointState = {
     failures: number;
     openUntil: number;
     verified: boolean;
+    lastError?: ChainRpcRequestError;
 };
 
 type NearStatus = { chain_id?: string };
@@ -25,7 +27,7 @@ const LOGICAL_BATCH_CONCURRENCY = 4;
 
 class RateLimitedRpcError extends ChainRpcRequestError {
     constructor(readonly retryAfterMs: number) {
-        super('RPC provider rate limited the request', true);
+        super('RPC provider rate limited the request', true, undefined, 'RPC_RATE_LIMITED');
     }
 }
 
@@ -55,15 +57,22 @@ export class ChainRpcService implements OnModuleInit {
     async request<T>(network: string, method: string, params: unknown): Promise<ChainRpcResult<T>> {
         const endpoints = this.endpoints.get(network);
         if (!endpoints?.length) {
-            throw new ServiceUnavailableException(`RPC network is not configured: ${network}`);
+            throw new RpcUnavailableException(
+                network,
+                'RPC_NOT_CONFIGURED',
+                `RPC network is not configured: ${network}`,
+            );
         }
 
         const deadline = Date.now() + this.positiveNumber('RPC_TOTAL_TIMEOUT_MS', 6000);
-        let lastError: Error | undefined;
+        let lastError: ChainRpcRequestError | undefined;
 
         for (const endpoint of endpoints) {
             const state = this.state(network, endpoint.alias);
-            if (state.openUntil > Date.now()) continue;
+            if (state.openUntil > Date.now()) {
+                lastError = state.lastError ?? lastError;
+                continue;
+            }
 
             try {
                 await this.verifyNetwork(network, endpoint, state, deadline);
@@ -79,7 +88,11 @@ export class ChainRpcService implements OnModuleInit {
             }
         }
 
-        throw new ServiceUnavailableException(lastError?.message || `No healthy RPC endpoint for ${network}`);
+        throw new RpcUnavailableException(
+            network,
+            lastError?.code ?? 'RPC_UNAVAILABLE',
+            lastError?.message || `No healthy RPC endpoint for ${network}`,
+        );
     }
 
     async requestBatch(network: string, requests: ChainRpcBatchRequest[]): Promise<ChainRpcBatchResult> {
@@ -103,14 +116,21 @@ export class ChainRpcService implements OnModuleInit {
     private async fetchBatch(network: string, requests: ChainRpcBatchRequest[]): Promise<ChainRpcBatchResult> {
         const endpoints = this.endpoints.get(network);
         if (!endpoints?.length) {
-            throw new ServiceUnavailableException(`RPC network is not configured: ${network}`);
+            throw new RpcUnavailableException(
+                network,
+                'RPC_NOT_CONFIGURED',
+                `RPC network is not configured: ${network}`,
+            );
         }
 
         const deadline = Date.now() + this.positiveNumber('RPC_TOTAL_TIMEOUT_MS', 6000);
-        let lastError: Error | undefined;
+        let lastError: ChainRpcRequestError | undefined;
         for (const endpoint of endpoints) {
             const state = this.state(network, endpoint.alias);
-            if (state.openUntil > Date.now()) continue;
+            if (state.openUntil > Date.now()) {
+                lastError = state.lastError ?? lastError;
+                continue;
+            }
             try {
                 await this.verifyNetwork(network, endpoint, state, deadline);
                 const items = await this.callBatch(endpoint, requests, deadline);
@@ -125,7 +145,11 @@ export class ChainRpcService implements OnModuleInit {
                 this.recordFailure(network, endpoint.alias, state, 'batch', rpcError);
             }
         }
-        throw new ServiceUnavailableException(lastError?.message || `No healthy RPC endpoint for ${network}`);
+        throw new RpcUnavailableException(
+            network,
+            lastError?.code ?? 'RPC_UNAVAILABLE',
+            lastError?.message || `No healthy RPC endpoint for ${network}`,
+        );
     }
 
     private async verifyNetwork(
@@ -207,7 +231,8 @@ export class ChainRpcService implements OnModuleInit {
 
     private async call<T>(endpoint: ChainRpcEndpoint, method: string, params: unknown, deadline: number): Promise<T> {
         const remaining = deadline - Date.now();
-        if (remaining <= 0) throw new ChainRpcRequestError('RPC request deadline exceeded', true);
+        if (remaining <= 0)
+            throw new ChainRpcRequestError('RPC request deadline exceeded', true, undefined, 'RPC_TIMEOUT');
 
         const timeout = Math.min(this.positiveNumber('RPC_ATTEMPT_TIMEOUT_MS', 2500), remaining);
         const response = await this.http.axiosRef.post<JsonRpcEnvelope<T>>(
@@ -370,6 +395,9 @@ export class ChainRpcService implements OnModuleInit {
     }
 
     private recordFailure(network: string, alias: string, state: EndpointState, method: string, error: Error): void {
+        if (error instanceof ChainRpcRequestError) {
+            state.lastError = new ChainRpcRequestError(error.message, error.retryable, undefined, error.code);
+        }
         state.failures += 1;
         state.verified = false;
         if (error instanceof RateLimitedRpcError || state.failures >= this.positiveNumber('RPC_FAILURE_THRESHOLD', 3)) {
@@ -396,6 +424,9 @@ export class ChainRpcService implements OnModuleInit {
                           ? Date.parse(value) - Date.now()
                           : 0;
                 return new RateLimitedRpcError(Number.isFinite(delay) ? Math.max(0, delay) : 0);
+            }
+            if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+                return new ChainRpcRequestError('RPC provider request timed out', true, undefined, 'RPC_TIMEOUT');
             }
             const retryable = !error.response || error.code === 'ECONNABORTED' || error.response.status >= 500;
             return new ChainRpcRequestError(

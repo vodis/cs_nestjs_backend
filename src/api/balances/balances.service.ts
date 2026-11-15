@@ -1,3 +1,4 @@
+import { RpcUnavailableException } from './rpc/chain-rpc.types';
 import { balanceCacheNetwork } from '../../utils/chain-network.util';
 import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
 
@@ -10,7 +11,7 @@ import { WalletLink } from '../../database/models/wallet-link.model';
 import type { AuthenticatedUser } from '../auth/types';
 import { BalanceAccount, ChainBalanceService, LiveChainBalance } from './chain-balance.service';
 import { GetBalancesQueryDto } from './dto/get-balances-query.dto';
-import { BalanceDto, GetBalancesResponseDto } from './dto/get-balances-response.dto';
+import { BalanceDto, BalanceIssueDto, GetBalancesResponseDto } from './dto/get-balances-response.dto';
 import { PostBalancesRequestDto } from './dto/post-balances-request.dto';
 import { NEAR_NATIVE_ASSET_ID, NEAR_NATIVE_DECIMALS, NEAR_NATIVE_SYMBOL } from './near-balance.constants';
 
@@ -82,9 +83,11 @@ export class BalancesService {
         const results = await Promise.allSettled(groups.map(async (group) => this.refreshBalances(userId, group)));
         const liveBalances: BalanceDto[] = [];
         const failedTargets: RefreshTarget[] = [];
+        const issues: BalanceIssueDto[] = [];
         results.forEach((result, index) => {
             if (result.status === 'fulfilled') {
                 liveBalances.push(...result.value.balances);
+                issues.push(...result.value.issues);
                 failedTargets.push(
                     ...groups[index].targets.filter((target) => result.value.failedAssetIds.includes(target.assetId)),
                 );
@@ -93,6 +96,12 @@ export class BalancesService {
             if (result.reason instanceof BadRequestException) throw result.reason;
             const group = groups[index];
             failedTargets.push(...group.targets);
+            const error: unknown = result.reason;
+            issues.push({
+                network: group.network,
+                code: error instanceof RpcUnavailableException ? error.code : 'BALANCE_READ_FAILED',
+                message: error instanceof RpcUnavailableException ? error.message : 'Balance provider read failed.',
+            });
             this.logger.warn(
                 `Balance refresh failed wallet=${group.wallet.walletId || group.wallet.address} network=${group.network} reason=${
                     result.reason?.message || 'provider unavailable'
@@ -122,6 +131,7 @@ export class BalancesService {
             now,
             liveBalances.length,
             failedTargets.length,
+            issues,
         );
     }
 
@@ -224,7 +234,7 @@ export class BalancesService {
     private async refreshBalances(
         userId: string,
         group: RefreshGroup,
-    ): Promise<{ balances: BalanceDto[]; failedAssetIds: string[] }> {
+    ): Promise<{ balances: BalanceDto[]; failedAssetIds: string[]; issues: BalanceIssueDto[] }> {
         const result = await this.chainBalances.getBalances(
             group.wallet,
             group.network,
@@ -258,6 +268,11 @@ export class BalancesService {
         return {
             balances: result.balances.map((balance) => this.toLiveDto(group.wallet, balance)),
             failedAssetIds: result.failures.map((failure) => failure.assetId),
+            issues: result.failures.map((failure) => ({
+                network: group.network,
+                code: failure.rpcIssue?.code ?? 'BALANCE_READ_FAILED',
+                message: failure.rpcIssue?.message ?? 'Some token balances could not be read from the provider.',
+            })),
         };
     }
 
@@ -348,7 +363,13 @@ export class BalancesService {
         throw new BadRequestException('Unsupported balance network');
     }
 
-    private toResponse(data: BalanceDto[], now: Date, liveCount: number, failureCount: number): GetBalancesResponseDto {
+    private toResponse(
+        data: BalanceDto[],
+        now: Date,
+        liveCount: number,
+        failureCount: number,
+        issues: BalanceIssueDto[] = [],
+    ): GetBalancesResponseDto {
         return {
             data,
             meta: {
@@ -356,6 +377,12 @@ export class BalancesService {
                 cached: liveCount === 0,
                 fetchedAt: now.toISOString(),
                 partial: failureCount > 0,
+                issues: issues.filter(
+                    (issue, index) =>
+                        issues.findIndex(
+                            (candidate) => candidate.network === issue.network && candidate.code === issue.code,
+                        ) === index,
+                ),
             },
         };
     }

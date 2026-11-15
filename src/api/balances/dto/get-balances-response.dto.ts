@@ -44,7 +44,21 @@ export class BalanceDto {
     stale: boolean;
 }
 
+export class BalanceIssueDto {
+    @ApiProperty()
+    network: string;
+
+    @ApiProperty()
+    code: string;
+
+    @ApiProperty()
+    message: string;
+}
+
 export class BalancesMetaDto {
+    @ApiProperty({ type: [BalanceIssueDto] })
+    issues: BalanceIssueDto[];
+
     @ApiProperty({ enum: ['postgres_cache', 'rpc', 'mixed'] })
     source: 'postgres_cache' | 'rpc' | 'mixed';
 

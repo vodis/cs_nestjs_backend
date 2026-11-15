@@ -232,7 +232,11 @@ describe('Ethereum RPC rate-limit regression (2026-10-27)', () => {
             .mockRejectedValueOnce(rateLimit('120'));
         await expect(service.requestBatch('eip155:1', request)).rejects.toThrow('rate limited');
         now += 119000;
-        await expect(service.requestBatch('eip155:1', request)).rejects.toThrow('No healthy RPC endpoint');
+        await expect(service.requestBatch('eip155:1', request)).rejects.toMatchObject({
+            code: 'RPC_RATE_LIMITED',
+            network: 'eip155:1',
+            message: 'RPC provider rate limited the request',
+        });
         expect(post).toHaveBeenCalledTimes(4);
         now += 1001;
         post.mockResolvedValueOnce(response({ result: '0x1' })).mockResolvedValueOnce(response({ result: '0x2a' }));

@@ -1,3 +1,4 @@
+import { RpcUnavailableException } from './rpc/chain-rpc.types';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { Keypair } from '@solana/web3.js';
@@ -62,6 +63,20 @@ describe('PR 266 native funding balance identity', () => {
             expect(failed.failures).toEqual([{ assetId, reason: 'Provider unavailable' }]);
         },
     );
+
+    it('preserves safe Solana RPC diagnostics on per-asset failures', async () => {
+        const error = new RpcUnavailableException(
+            SOLANA_MAINNET,
+            'RPC_RATE_LIMITED',
+            'RPC provider rate limited the request',
+        );
+        nativeBalance.mockRejectedValue(error);
+        const result = await service.getBalances({ address: solanaAddress, chainType: 'solana' }, SOLANA_MAINNET, [
+            undefined,
+        ]);
+        expect(result.failures[0].rpcIssue).toBe(error);
+        expect(result.balances).toEqual([]);
+    });
 
     it('preserves SPL token identity independently of native SOL', async () => {
         const asset: AssetDto = {

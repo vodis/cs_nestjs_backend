@@ -309,3 +309,10 @@ Concurrent failures preserve the longest rate-limit delay, and a late success
 cannot cancel an active cooldown. Numeric provider error codes alone are not
 universal rate-limit evidence. Provider rate limits may still require an
 operator-managed capacity or endpoint change.
+
+Explicit catalog native EVM and TON routes use native balance reads and canonical
+holding identities; missing token contracts alone never imply a native asset.
+Partial balance responses include `meta.issues` with safe `network`, `code`, and
+`message` fields. RPC codes distinguish rate limits, timeouts, missing configuration,
+and unavailability; cooldown retains the last sanitized failure reason. Provider
+payloads and credential-bearing URLs are never included in these diagnostics.

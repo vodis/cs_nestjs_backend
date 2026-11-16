@@ -14,6 +14,10 @@ export class AgentAuthorization extends Model<AgentAuthorization> {
     @Column({ type: DataType.UUID, allowNull: true }) declare connectionId?: string | null;
     @Column({ type: DataType.STRING, allowNull: false }) declare clientId: string;
     @Column({ type: DataType.STRING, allowNull: false }) declare clientName: string;
+    @Column({ type: DataType.STRING(2048), allowNull: true }) declare clientUri?: string | null;
+    @Column({ type: DataType.STRING(2048), allowNull: true }) declare logoUri?: string | null;
+    @Column({ type: DataType.STRING(32), allowNull: true }) declare clientVerification?:
+        'metadata_document' | 'first_party' | 'unverified' | null;
     @Column({ type: DataType.STRING, allowNull: true }) declare redirectUri?: string | null;
     @Column({ type: DataType.STRING, allowNull: true }) declare state?: string | null;
     @Column({ type: DataType.STRING, allowNull: false }) declare resource: string;

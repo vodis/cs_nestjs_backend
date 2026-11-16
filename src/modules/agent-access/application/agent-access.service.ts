@@ -10,6 +10,13 @@ import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { AGENT_ACCESS_REPOSITORY, AgentAccessRepository } from './agent-access.repository';
 import {
+    CLIENT_METADATA_RESOLVER,
+    ClientMetadataError,
+    ClientMetadataResolver,
+    ClientVerification,
+} from './client-metadata';
+import { isLoopbackRedirect, redirectUriMatches } from './redirect-uri';
+import {
     AGENT_SCOPES,
     AgentScope,
     BrowserAuthorizationInput,
@@ -21,11 +28,19 @@ const AUTHORIZATION_LIFETIME_MS = 10 * 60 * 1000;
 const ACCESS_LIFETIME_SECONDS = 10 * 60;
 const GRANT_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 
+type ResolvedClient = {
+    clientName: string;
+    clientUri?: string | null;
+    logoUri?: string | null;
+    clientVerification: ClientVerification;
+};
+
 @Injectable()
 export class AgentAccessService {
     constructor(
         @Inject(AGENT_ACCESS_REPOSITORY) private readonly repository: AgentAccessRepository,
         private readonly config: ConfigService,
+        @Inject(CLIENT_METADATA_RESOLVER) private readonly clientMetadata: ClientMetadataResolver,
     ) {}
 
     integrationConfig() {
@@ -71,14 +86,14 @@ export class AgentAccessService {
     async beginBrowserAuthorization(input: BrowserAuthorizationInput): Promise<string> {
         this.requireEnabled();
         this.validateResource(input.resource);
-        const clientName = this.validateClient(input.clientId, input.redirectUri);
         if (!/^[A-Za-z0-9_-]{43,128}$/.test(input.codeChallenge))
             throw this.oauthError('invalid_request', 'Invalid PKCE challenge');
         const scopes = this.validateScopes(input.scopes);
+        const client = await this.resolveBrowserClient(input.clientId, input.redirectUri);
         const authorization = await this.repository.transaction(async (repository) => {
             const created = await repository.createAuthorization({
                 clientId: input.clientId,
-                clientName,
+                ...client,
                 redirectUri: input.redirectUri,
                 state: input.state,
                 resource: input.resource,
@@ -104,6 +119,7 @@ export class AgentAccessService {
             const authorization = await repository.createAuthorization({
                 clientId: input.clientId,
                 clientName,
+                clientVerification: 'unverified',
                 resource: input.resource,
                 scopes,
                 deviceCodeHash: this.hash(deviceCode),
@@ -456,13 +472,25 @@ export class AgentAccessService {
 
     private toAuthorizationResponse(authorization: {
         id: string;
+        clientId: string;
         clientName: string;
+        clientUri?: string | null;
+        logoUri?: string | null;
+        clientVerification?: string | null;
+        redirectUri?: string | null;
         scopes: string[];
         expiresAt: Date;
     }) {
+        const redirect = authorization.redirectUri ? new URL(authorization.redirectUri) : null;
         return {
             id: authorization.id,
             clientName: authorization.clientName,
+            clientHost: new URL(authorization.clientId).host,
+            clientUri: authorization.clientUri ?? null,
+            logoUri: authorization.logoUri ?? null,
+            clientVerification: (authorization.clientVerification ?? 'unverified') as ClientVerification,
+            redirectHost: redirect?.host ?? null,
+            loopbackRedirect: redirect ? isLoopbackRedirect(redirect) : false,
             scopes: authorization.scopes,
             expiresAt: authorization.expiresAt.toISOString(),
         };
@@ -475,26 +503,46 @@ export class AgentAccessService {
         return unique as AgentScope[];
     }
 
-    private validateClient(clientId: string, redirectUri: string): string {
-        let client: URL;
-        let redirect: URL;
+    /**
+     * Browser clients must publish a Client ID Metadata Document at their client_id URL and the redirect URI must
+     * be registered there (loopback redirects may use any port). ChatGPT is resolved the same way; only if its
+     * document cannot be fetched do we fall back to the pinned chatgpt.com redirect rule, so a transient outage
+     * or bot challenge does not break the tested first-party client. No other origin can self-declare.
+     */
+    private async resolveBrowserClient(clientId: string, redirectUri: string): Promise<ResolvedClient> {
         try {
-            client = new URL(clientId);
-            redirect = new URL(redirectUri);
-        } catch {
-            throw this.oauthError('invalid_client');
+            const metadata = await this.clientMetadata.resolve(clientId);
+            if (!redirectUriMatches(redirectUri, metadata.redirectUris)) throw this.oauthError('invalid_redirect_uri');
+            return {
+                clientName: metadata.clientName,
+                clientUri: metadata.clientUri ?? null,
+                logoUri: metadata.logoUri ?? null,
+                clientVerification: 'metadata_document',
+            };
+        } catch (error) {
+            if (!(error instanceof ClientMetadataError)) throw error;
+            if (error.reason === 'unreachable' && this.isPinnedChatGptClient(clientId, redirectUri))
+                return { clientName: 'ChatGPT / Codex', clientVerification: 'first_party' };
+            throw this.oauthError('invalid_client', error.message);
         }
-        if (client.protocol !== 'https:' || redirect.protocol !== 'https:') throw this.oauthError('invalid_client');
-        if (client.hostname === 'chatgpt.com') {
-            const allowed =
+    }
+
+    private isPinnedChatGptClient(clientId: string, redirectUri: string): boolean {
+        try {
+            const client = new URL(clientId);
+            const redirect = new URL(redirectUri);
+            return (
+                client.protocol === 'https:' &&
+                client.hostname === 'chatgpt.com' &&
+                redirect.protocol === 'https:' &&
                 redirect.hostname === 'chatgpt.com' &&
+                !redirect.port &&
                 (redirect.pathname === '/connector_platform_oauth_redirect' ||
-                    redirect.pathname.startsWith('/connector/oauth/'));
-            if (!allowed) throw this.oauthError('invalid_redirect_uri');
-            return 'ChatGPT / Codex';
+                    redirect.pathname.startsWith('/connector/oauth/'))
+            );
+        } catch {
+            return false;
         }
-        if (client.origin !== redirect.origin) throw this.oauthError('invalid_redirect_uri');
-        return client.hostname;
     }
 
     private validateDeviceClient(clientId: string): string {

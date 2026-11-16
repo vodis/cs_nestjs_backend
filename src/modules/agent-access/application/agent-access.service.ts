@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes, randomUUID } from 'crypto';
+import { AgentConnection } from '../../../database/models/agent-connection.model';
 import { AGENT_ACCESS_REPOSITORY, AgentAccessRepository } from './agent-access.repository';
 import {
     AGENT_SCOPES,
@@ -270,6 +271,7 @@ export class AgentAccessService {
             if (credential.usedAt || credential.revokedAt) {
                 await repository.revokeFamily(credential.familyId);
                 if (connection) {
+                    await this.markConnectionRevoked(repository, connection);
                     await repository.createAuditEvent({
                         userId: connection.userId,
                         eventType: 'agent.token.refresh_reuse',
@@ -373,6 +375,7 @@ export class AgentAccessService {
             const connection = await repository.connectionById(credential.connectionId, true);
             await repository.revokeConnectionCredentials(credential.connectionId);
             if (connection) {
+                await this.markConnectionRevoked(repository, connection);
                 await repository.createAuditEvent({
                     userId: connection.userId,
                     eventType: 'agent.token.revoked',
@@ -380,6 +383,16 @@ export class AgentAccessService {
                 });
             }
         });
+    }
+
+    /**
+     * Every credential of the connection is dead once a token is revoked or refresh reuse is detected,
+     * so the connection itself must stop being reported as active to the user.
+     */
+    private async markConnectionRevoked(repository: AgentAccessRepository, connection: AgentConnection) {
+        if (connection.status === 'revoked') return;
+        connection.status = 'revoked';
+        await repository.saveConnection(connection);
     }
 
     private async issueTokens(

@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'crypto';
 import { AgentAccessService } from './agent-access.service';
@@ -173,6 +173,44 @@ describe('AgentAccessService', () => {
         );
         expect(revokedFamilies).toHaveLength(1);
         expect(auditEvents.map((event) => event.eventType)).toContain('agent.token.refresh_reuse');
+        const [connection] = await service.connectionsForUser('user-1');
+        expect(connection.status).toBe('revoked');
+    });
+
+    async function connectDeviceAgent(userId = 'user-1') {
+        const clientId = 'https://agent.example/client.json';
+        const device = await service.beginDeviceAuthorization({
+            clientId,
+            resource: 'https://api.craftscript.test/mcp',
+            scopes: ['portfolio:read', 'offline_access'],
+        });
+        const request = await service.authorizationForDeviceCode(device.user_code, userId);
+        await service.decide(request.id, userId, 'approve');
+        return service.exchangeDeviceCode({ deviceCode: device.device_code, clientId });
+    }
+
+    it.each(['access_token', 'refresh_token'] as const)(
+        'reports the connection as revoked after its %s is revoked by the client',
+        async (kind) => {
+            const pair = await connectDeviceAgent();
+            await service.revokeToken(pair[kind]);
+
+            const [connection] = await service.connectionsForUser('user-1');
+            expect(connection.status).toBe('revoked');
+            await expect(service.authenticateAccessToken(pair.access_token)).rejects.toBeInstanceOf(
+                UnauthorizedException,
+            );
+            await expect(
+                service.refresh(pair.refresh_token, 'https://agent.example/client.json'),
+            ).rejects.toBeInstanceOf(BadRequestException);
+        },
+    );
+
+    it('ignores revocation requests for unknown tokens', async () => {
+        await connectDeviceAgent();
+        await service.revokeToken('not-a-real-token');
+        const [connection] = await service.connectionsForUser('user-1');
+        expect(connection.status).toBe('active');
     });
 
     it('rejects redirect URIs that are not owned by the client', async () => {

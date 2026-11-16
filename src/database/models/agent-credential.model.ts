@@ -5,7 +5,11 @@ import { AgentConnection } from './agent-connection.model';
     tableName: 'agent_credentials',
     underscored: true,
     updatedAt: false,
-    indexes: [{ fields: ['token_hash'], unique: true }, { fields: ['family_id'] }],
+    indexes: [
+        { fields: ['token_hash'], unique: true },
+        { fields: ['family_id'] },
+        { name: 'agent_credentials_connection_id', fields: ['connection_id'] },
+    ],
 })
 export class AgentCredential extends Model<AgentCredential> {
     @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, primaryKey: true }) declare id: string;

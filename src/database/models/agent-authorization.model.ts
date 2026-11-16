@@ -6,6 +6,11 @@ import { Column, CreatedAt, DataType, Model, Table, UpdatedAt } from 'sequelize-
     indexes: [
         { fields: ['user_code'], unique: true },
         { fields: ['device_code_hash'], unique: true },
+        {
+            name: 'agent_authorizations_authorization_code_hash_unique',
+            fields: ['authorization_code_hash'],
+            unique: true,
+        },
     ],
 })
 export class AgentAuthorization extends Model<AgentAuthorization> {

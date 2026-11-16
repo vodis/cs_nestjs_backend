@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Req, Res, VERSION_NEUTRAL } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res, VERSION_NEUTRAL } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { GetPortfolioUseCase } from '../../portfolio/application/get-portfolio.use-case';
 import { ManagePreferencesUseCase } from '../../portfolio/application/manage-preferences.use-case';
@@ -6,6 +6,12 @@ import { AgentAccessService } from '../application/agent-access.service';
 import { AgentScope } from '../application/agent-access.types';
 
 type McpRequest = { jsonrpc?: string; id?: string | number | null; method?: string; params?: { name?: string } };
+type ToolName = 'get_portfolio_snapshot' | 'get_investment_profile';
+
+const TOOL_SCOPES = new Map<string, AgentScope>([
+    ['get_portfolio_snapshot', 'portfolio:read'],
+    ['get_investment_profile', 'investment_profile:read'],
+]);
 
 @Controller({ version: VERSION_NEUTRAL, path: 'mcp' })
 export class McpController {
@@ -24,6 +30,7 @@ export class McpController {
     async handle(@Req() request: Request, @Res() response: Response, @Body() body: McpRequest) {
         const token = this.bearer(request.headers.authorization);
         if (!token) return this.unauthorized(response);
+        let requiredScope: AgentScope | undefined;
         try {
             if (body.id === undefined && body.method?.startsWith('notifications/')) {
                 await this.agents.authenticateAccessToken(token);
@@ -44,7 +51,13 @@ export class McpController {
                 return response.json(this.ok(body.id, { tools: this.tools() }));
             }
             if (body.method === 'tools/call') {
-                return response.json(this.ok(body.id, await this.callTool(token, body.params?.name)));
+                const name = body.params?.name;
+                requiredScope = typeof name === 'string' ? TOOL_SCOPES.get(name) : undefined;
+                if (!requiredScope) {
+                    await this.agents.authenticateAccessToken(token);
+                    return response.json(this.failure(body.id, -32602, 'Unknown tool'));
+                }
+                return response.json(this.ok(body.id, await this.callTool(token, name as ToolName, requiredScope)));
             }
             if (body.method === 'ping') {
                 await this.agents.authenticateAccessToken(token);
@@ -57,6 +70,7 @@ export class McpController {
                     ? Number((error as { getStatus(): number }).getStatus())
                     : 500;
             if (status === 401) return this.unauthorized(response);
+            if (status === 403 && requiredScope) this.insufficientScope(response, requiredScope);
             return response
                 .status(status)
                 .json(
@@ -69,13 +83,12 @@ export class McpController {
         }
     }
 
-    private async callTool(token: string, name?: string) {
-        const scope: AgentScope = name === 'get_portfolio_snapshot' ? 'portfolio:read' : 'investment_profile:read';
+    private async callTool(token: string, name: ToolName, scope: AgentScope) {
         const connection = await this.agents.authenticateAccessToken(token, scope);
-        let data: unknown;
-        if (name === 'get_portfolio_snapshot') data = await this.portfolio.execute(connection.userId);
-        else if (name === 'get_investment_profile') data = await this.preferences.get(connection.userId);
-        else throw new BadRequestException('Unknown tool');
+        const data =
+            name === 'get_portfolio_snapshot'
+                ? await this.portfolio.execute(connection.userId)
+                : await this.preferences.get(connection.userId);
         const safeData = {
             data,
             notice: 'Informational portfolio context only. Values may be stale or unpriced and cannot guarantee profit.',
@@ -108,14 +121,20 @@ export class McpController {
         return match?.[1];
     }
     private unauthorized(response: Response) {
-        const metadataUrl = this.agents
-            .integrationConfig()
-            .mcpUrl.replace('/mcp', '/.well-known/oauth-protected-resource');
         response.setHeader(
             'WWW-Authenticate',
-            `Bearer resource_metadata="${metadataUrl}", scope="portfolio:read investment_profile:read"`,
+            `Bearer resource_metadata="${this.resourceMetadataUrl()}", scope="portfolio:read investment_profile:read"`,
         );
         return response.status(401).json({ error: 'unauthorized' });
+    }
+    private insufficientScope(response: Response, scope: AgentScope) {
+        response.setHeader(
+            'WWW-Authenticate',
+            `Bearer error="insufficient_scope", scope="${scope}", resource_metadata="${this.resourceMetadataUrl()}"`,
+        );
+    }
+    private resourceMetadataUrl() {
+        return this.agents.integrationConfig().mcpUrl.replace('/mcp', '/.well-known/oauth-protected-resource');
     }
     private ok(id: McpRequest['id'], result: unknown) {
         return { jsonrpc: '2.0', id: id ?? null, result };

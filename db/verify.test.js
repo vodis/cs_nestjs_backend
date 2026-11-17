@@ -262,3 +262,27 @@ test('agent access index migration enforces single-use code hashes and indexes c
     await db.close();
   }
 });
+
+test('agent authorization client metadata migration adds and removes nullable display columns', async () => {
+  const { Sequelize, DataTypes } = require('sequelize');
+  const migration = require('./migrations/20261116000200-add-agent-authorization-client-metadata');
+  const db = new Sequelize({ dialect: 'sqlite', storage: ':memory:', logging: false });
+  const query = db.getQueryInterface();
+  try {
+    await query.createTable('agent_authorizations', {
+      id: { type: DataTypes.UUID, primaryKey: true },
+      client_name: { type: DataTypes.STRING, allowNull: false },
+    });
+    const id = '11111111-1111-4111-8111-111111111111';
+    await query.bulkInsert('agent_authorizations', [{ id, client_name: 'Legacy' }]);
+    await migration.up(query, DataTypes);
+    const columns = await query.describeTable('agent_authorizations');
+    for (const key of ['client_uri', 'logo_uri', 'client_verification']) assert.equal(columns[key].allowNull, true);
+    const [rows] = await db.query('SELECT client_uri, logo_uri, client_verification FROM agent_authorizations');
+    assert.deepEqual(rows, [{ client_uri: null, logo_uri: null, client_verification: null }]);
+    await migration.down(query);
+    assert.deepEqual(Object.keys(await query.describeTable('agent_authorizations')).sort(), ['client_name', 'id']);
+  } finally {
+    await db.close();
+  }
+});

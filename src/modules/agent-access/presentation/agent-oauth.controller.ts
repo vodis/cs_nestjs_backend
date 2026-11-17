@@ -9,8 +9,10 @@ import {
     Query,
     Res,
     VERSION_NEUTRAL,
+    UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { AgentAuthorizeRateLimitGuard } from './agent-authorize-rate-limit.guard';
 import { AgentAccessService } from '../application/agent-access.service';
 import { AgentScope } from '../application/agent-access.types';
 import { AuthorizeQueryDto, DeviceAuthorizationDto, RevokeTokenDto, TokenRequestDto } from './agent-oauth.dto';
@@ -30,6 +32,7 @@ export class AgentOauthController {
     }
 
     @Get('oauth/authorize')
+    @UseGuards(AgentAuthorizeRateLimitGuard)
     async authorize(@Query() query: AuthorizeQueryDto, @Res() response: Response) {
         const location = await this.agents.beginBrowserAuthorization({
             clientId: query.client_id,

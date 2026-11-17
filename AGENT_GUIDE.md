@@ -213,6 +213,7 @@ Backend authority and implementation location are separate decisions.
 - Cookie-auth mutations require an explicit CSRF/origin policy before they are used for sensitive state changes.
 - Public docs/debug surfaces such as Swagger must be explicitly approved for production or gated by config/edge controls.
 - HTTP and websocket origins must follow the same production allowlist policy.
+- Agent OAuth: never trust a self-declared `client_id`. Browser clients are identified only through a fetched Client ID Metadata Document, with exact redirect matching (loopback port excepted). Every server-side fetch of a client-supplied URL must go through `SafeMetadataFetcher` or an equivalent SSRF guard. See [agent portfolio integration](docs/integration/agent-portfolio.md#oauth-client-metadata-and-consent-identity).
 
 ## Use Case Architecture (Required Pattern)
 

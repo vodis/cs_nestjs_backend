@@ -316,3 +316,10 @@ Partial balance responses include `meta.issues` with safe `network`, `code`, and
 `message` fields. RPC codes distinguish rate limits, timeouts, missing configuration,
 and unavailability; cooldown retains the last sanitized failure reason. Provider
 payloads and credential-bearing URLs are never included in these diagnostics.
+
+### Agent OAuth clients (MCP)
+
+External agents use public-client OAuth with PKCE or device authorization to
+access the read-only MCP resource. See [agent portfolio integration](docs/integration/agent-portfolio.md)
+for client metadata requirements, consent identity, admission limits, migration
+and rollout compatibility.

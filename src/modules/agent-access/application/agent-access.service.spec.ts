@@ -2,6 +2,7 @@ import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'crypto';
 import { AgentAccessService } from './agent-access.service';
+import { ClientMetadata, ClientMetadataError } from './client-metadata';
 
 function record<T extends object>(value: T): T & { save: jest.Mock } {
     return Object.assign(value, { save: jest.fn().mockResolvedValue(undefined) });
@@ -13,6 +14,7 @@ describe('AgentAccessService', () => {
     let credentials: any[];
     let auditEvents: any[];
     let revokedFamilies: string[];
+    let clientDocuments: Map<string, ClientMetadata | ClientMetadataError>;
     let service: AgentAccessService;
 
     beforeEach(() => {
@@ -21,6 +23,37 @@ describe('AgentAccessService', () => {
         credentials = [];
         auditEvents = [];
         revokedFamilies = [];
+        clientDocuments = new Map<string, ClientMetadata | ClientMetadataError>([
+            [
+                'https://chatgpt.com/oauth/client.json',
+                {
+                    clientId: 'https://chatgpt.com/oauth/client.json',
+                    host: 'chatgpt.com',
+                    clientName: 'ChatGPT',
+                    redirectUris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+                    clientUri: 'https://chatgpt.com/',
+                    logoUri: 'https://persistent.oaistatic.com/sonic/misc/openai-logo.png',
+                },
+            ],
+            [
+                'https://agent.example/client.json',
+                {
+                    clientId: 'https://agent.example/client.json',
+                    host: 'agent.example',
+                    clientName: 'Example CLI',
+                    redirectUris: ['https://agent.example/callback', 'http://127.0.0.1/callback'],
+                },
+            ],
+        ]);
+        const clientMetadata = {
+            resolve: jest.fn(async (clientId: string) => {
+                const entry = clientDocuments.get(clientId);
+                if (!entry)
+                    throw new ClientMetadataError('unreachable', 'Client metadata document could not be fetched');
+                if (entry instanceof ClientMetadataError) throw entry;
+                return entry;
+            }),
+        };
         let transactionTail = Promise.resolve<unknown>(undefined);
         const repository: any = {
             transaction: jest.fn((callback) => {
@@ -92,7 +125,7 @@ describe('AgentAccessService', () => {
             AGENT_PUBLIC_BASE_URL: 'https://api.craftscript.test',
             APP_PUBLIC_BASE_URL: 'https://craftscript.test',
         });
-        service = new AgentAccessService(repository, config);
+        service = new AgentAccessService(repository, config, clientMetadata);
     });
 
     it('completes PKCE authorization once and stores only token hashes', async () => {
@@ -223,5 +256,182 @@ describe('AgentAccessService', () => {
                 codeChallenge: 'x'.repeat(43),
             }),
         ).rejects.toMatchObject({ response: { error: 'invalid_redirect_uri' } });
+    });
+    const resource = 'https://api.craftscript.test/mcp';
+    const challenge = createHash('sha256').update('v'.repeat(43)).digest('base64url');
+
+    it('refuses clients that only self-declare an https origin without a metadata document', async () => {
+        await expect(
+            service.beginBrowserAuthorization({
+                clientId: 'https://attacker.example/client.json',
+                redirectUri: 'https://attacker.example/callback',
+                resource,
+                scopes: ['portfolio:read'],
+                codeChallenge: challenge,
+            }),
+        ).rejects.toMatchObject({ response: { error: 'invalid_client' } });
+        expect(authorizations).toHaveLength(0);
+    });
+
+    it('refuses a client whose metadata document is invalid even when it claims chatgpt.com', async () => {
+        clientDocuments.set(
+            'https://chatgpt.com/oauth/client.json',
+            new ClientMetadataError('invalid_document', 'Client metadata document is invalid: client_id mismatch'),
+        );
+        await expect(
+            service.beginBrowserAuthorization({
+                clientId: 'https://chatgpt.com/oauth/client.json',
+                redirectUri: 'https://chatgpt.com/connector_platform_oauth_redirect',
+                resource,
+                scopes: ['portfolio:read'],
+                codeChallenge: challenge,
+            }),
+        ).rejects.toMatchObject({ response: { error: 'invalid_client' } });
+    });
+
+    it('falls back to the pinned ChatGPT redirect rule only when its document is unreachable', async () => {
+        clientDocuments.delete('https://chatgpt.com/oauth/client.json');
+        await service.beginBrowserAuthorization({
+            clientId: 'https://chatgpt.com/oauth/client.json',
+            redirectUri: 'https://chatgpt.com/connector_platform_oauth_redirect',
+            resource,
+            scopes: ['portfolio:read'],
+            codeChallenge: challenge,
+        });
+        const consent = await service.authorizationForUser(authorizations[0].id, 'user-1');
+        expect(consent).toMatchObject({ clientName: 'ChatGPT / Codex', clientVerification: 'first_party' });
+
+        await expect(
+            service.beginBrowserAuthorization({
+                clientId: 'https://chatgpt.com/oauth/client.json',
+                redirectUri: 'https://evil.example/connector_platform_oauth_redirect',
+                resource,
+                scopes: ['portfolio:read'],
+                codeChallenge: challenge,
+            }),
+        ).rejects.toMatchObject({ response: { error: 'invalid_client' } });
+    });
+
+    it('PR #283: keeps the hostname visible to legacy consent screens for impersonating documents', async () => {
+        const clientId = 'https://attacker.example/client.json';
+        clientDocuments.set(clientId, {
+            clientId,
+            host: 'attacker.example',
+            clientName: 'ChatGPT / Codex',
+            redirectUris: ['https://attacker.example/callback'],
+        });
+        await service.beginBrowserAuthorization({
+            clientId,
+            redirectUri: 'https://attacker.example/callback',
+            resource,
+            scopes: ['portfolio:read'],
+            codeChallenge: challenge,
+        });
+        const consent = await service.authorizationForUser(authorizations[0].id, 'user-1');
+        expect(consent.clientName).toBe('attacker.example');
+        await service.decide(authorizations[0].id, 'user-1', 'approve');
+        expect((await service.connectionsForUser('user-1'))[0].clientName).toBe('attacker.example');
+    });
+
+    it('PR #283: never falls back to pinned identity when metadata capacity is exhausted', async () => {
+        clientDocuments.set(
+            'https://chatgpt.com/oauth/client.json',
+            new ClientMetadataError('overloaded', 'Client metadata service is busy'),
+        );
+        await expect(
+            service.beginBrowserAuthorization({
+                clientId: 'https://chatgpt.com/oauth/client.json',
+                redirectUri: 'https://chatgpt.com/connector_platform_oauth_redirect',
+                resource,
+                scopes: ['portfolio:read'],
+                codeChallenge: challenge,
+            }),
+        ).rejects.toMatchObject({ response: { error: 'invalid_client' } });
+        expect(authorizations).toHaveLength(0);
+    });
+
+    it('exposes verified client identity for the consent screen', async () => {
+        await service.beginBrowserAuthorization({
+            clientId: 'https://chatgpt.com/oauth/client.json',
+            redirectUri: 'https://chatgpt.com/connector_platform_oauth_redirect',
+            resource,
+            scopes: ['portfolio:read'],
+            codeChallenge: challenge,
+        });
+        const consent = await service.authorizationForUser(authorizations[0].id, 'user-1');
+        expect(consent).toMatchObject({
+            clientName: 'chatgpt.com',
+            clientHost: 'chatgpt.com',
+            clientUri: 'https://chatgpt.com/',
+            logoUri: 'https://persistent.oaistatic.com/sonic/misc/openai-logo.png',
+            clientVerification: 'metadata_document',
+            redirectHost: 'chatgpt.com',
+            loopbackRedirect: false,
+        });
+    });
+
+    it('lets a CLI client use any loopback port registered without a port and completes on that exact URI', async () => {
+        const redirectUri = 'http://127.0.0.1:53682/callback';
+        await service.beginBrowserAuthorization({
+            clientId: 'https://agent.example/client.json',
+            redirectUri,
+            state: 'cli-state',
+            resource,
+            scopes: ['portfolio:read'],
+            codeChallenge: challenge,
+        });
+        const authorization = authorizations[0];
+        const consent = await service.authorizationForUser(authorization.id, 'user-1');
+        expect(consent).toMatchObject({
+            clientName: 'agent.example',
+            clientHost: 'agent.example',
+            clientVerification: 'metadata_document',
+            redirectHost: '127.0.0.1:53682',
+            loopbackRedirect: true,
+        });
+        await service.decide(authorization.id, 'user-1', 'approve');
+        const callback = new URL(await service.completeBrowserAuthorization(authorization.id));
+        expect(`${callback.origin}${callback.pathname}`).toBe('http://127.0.0.1:53682/callback');
+        const tokens = await service.exchangeAuthorizationCode({
+            code: callback.searchParams.get('code'),
+            clientId: 'https://agent.example/client.json',
+            redirectUri,
+            verifier: 'v'.repeat(43),
+            resource,
+        });
+        expect(tokens.access_token).toBeTruthy();
+    });
+
+    it.each([
+        'http://localhost:53682/callback',
+        'http://127.0.0.1:53682/other',
+        'http://agent.example/callback',
+        'https://agent.example:8443/callback',
+    ])('rejects unregistered redirect %s', async (redirectUri) => {
+        await expect(
+            service.beginBrowserAuthorization({
+                clientId: 'https://agent.example/client.json',
+                redirectUri,
+                resource,
+                scopes: ['portfolio:read'],
+                codeChallenge: challenge,
+            }),
+        ).rejects.toMatchObject({ response: { error: 'invalid_redirect_uri' } });
+    });
+
+    it('marks device-flow clients as unverified on the consent screen', async () => {
+        const device = await service.beginDeviceAuthorization({
+            clientId: 'https://agent.example/client.json',
+            resource,
+            scopes: ['portfolio:read'],
+        });
+        const consent = await service.authorizationForDeviceCode(device.user_code, 'user-1');
+        expect(consent).toMatchObject({
+            clientName: 'agent.example',
+            clientHost: 'agent.example',
+            clientVerification: 'unverified',
+            redirectHost: null,
+            loopbackRedirect: false,
+        });
     });
 });

@@ -113,5 +113,5 @@ jobs:
       - name: Unit tests
         run: pnpm run test --ci --runInBand
 
-      - name: Deposit HTTP integration tests
-        run: pnpm exec jest --config test/jest-e2e.json --ci --runInBand deposits
+      - name: Deposit and agent authorization HTTP integration tests
+        run: pnpm exec jest --config test/jest-e2e.json --ci --runInBand 'deposits|agent-authorize-rate-limit'

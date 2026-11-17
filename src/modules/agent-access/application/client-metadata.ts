@@ -14,7 +14,7 @@ export type ClientMetadata = {
 /** How the authorization server established the identity shown on the consent screen. */
 export type ClientVerification = 'metadata_document' | 'first_party' | 'unverified';
 
-export type ClientMetadataFailure = 'invalid_client_id' | 'unreachable' | 'invalid_document';
+export type ClientMetadataFailure = 'invalid_client_id' | 'unreachable' | 'invalid_document' | 'overloaded';
 
 export class ClientMetadataError extends Error {
     constructor(

@@ -1,3 +1,4 @@
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { McpController } from './mcp.controller';
 
 function response() {
@@ -80,6 +81,61 @@ describe('McpController', () => {
         expect(res.statusCode).toBe(202);
         expect(res.send).toHaveBeenCalledWith();
         expect(res.json).not.toHaveBeenCalled();
+    });
+
+    it('rejects unknown tools as invalid params without demanding an unrelated scope', async () => {
+        const res = response();
+        await controller.handle({ headers: { authorization: 'Bearer opaque-token' } } as never, res, {
+            jsonrpc: '2.0',
+            id: 4,
+            method: 'tools/call',
+            params: { name: 'transfer_funds' },
+        });
+        expect(agents.authenticateAccessToken).toHaveBeenCalledWith('opaque-token');
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ jsonrpc: '2.0', id: 4, error: { code: -32602, message: 'Unknown tool' } });
+        expect(portfolio.execute).not.toHaveBeenCalled();
+        expect(preferences.get).not.toHaveBeenCalled();
+    });
+
+    it('does not resolve tool names from the object prototype', async () => {
+        const res = response();
+        await controller.handle({ headers: { authorization: 'Bearer opaque-token' } } as never, res, {
+            jsonrpc: '2.0',
+            id: 5,
+            method: 'tools/call',
+            params: { name: 'constructor' },
+        });
+        expect(res.body.error.code).toBe(-32602);
+    });
+
+    it('still requires a valid token before reporting an unknown tool', async () => {
+        agents.authenticateAccessToken.mockRejectedValueOnce(new UnauthorizedException());
+        const res = response();
+        await controller.handle({ headers: { authorization: 'Bearer revoked-token' } } as never, res, {
+            jsonrpc: '2.0',
+            id: 6,
+            method: 'tools/call',
+            params: { name: 'transfer_funds' },
+        });
+        expect(res.statusCode).toBe(401);
+    });
+
+    it('signals the missing scope so clients can step up authorization', async () => {
+        agents.authenticateAccessToken.mockRejectedValueOnce(new ForbiddenException());
+        const res = response();
+        await controller.handle({ headers: { authorization: 'Bearer opaque-token' } } as never, res, {
+            jsonrpc: '2.0',
+            id: 7,
+            method: 'tools/call',
+            params: { name: 'get_investment_profile' },
+        });
+        expect(agents.authenticateAccessToken).toHaveBeenCalledWith('opaque-token', 'investment_profile:read');
+        expect(res.statusCode).toBe(403);
+        expect(res.headers['WWW-Authenticate']).toContain('error="insufficient_scope"');
+        expect(res.headers['WWW-Authenticate']).toContain('scope="investment_profile:read"');
+        expect(res.body.error.code).toBe(-32003);
+        expect(preferences.get).not.toHaveBeenCalled();
     });
 
     it('returns method not allowed when the client requests an SSE stream', () => {

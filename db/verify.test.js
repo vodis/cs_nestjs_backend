@@ -213,6 +213,56 @@ test('swap history migration preserves legacy rows through expansion and rollbac
   }
 });
 
+test('agent access index migration enforces single-use code hashes and indexes credential lookups', async () => {
+  const { Sequelize, DataTypes } = require('sequelize');
+  const migration = require('./migrations/20261116000100-add-agent-access-lookup-indexes');
+  const db = new Sequelize({ dialect: 'sqlite', storage: ':memory:', logging: false });
+  const query = db.getQueryInterface();
+  try {
+    await query.createTable('agent_authorizations', {
+      id: { type: DataTypes.UUID, primaryKey: true },
+      authorization_code_hash: { type: DataTypes.STRING(64), allowNull: true },
+    });
+    await query.createTable('agent_credentials', {
+      id: { type: DataTypes.UUID, primaryKey: true },
+      connection_id: { type: DataTypes.UUID, allowNull: false },
+    });
+    await query.bulkInsert('agent_authorizations', [
+      { id: '11111111-1111-4111-8111-111111111111', authorization_code_hash: null },
+      { id: '22222222-2222-4222-8222-222222222222', authorization_code_hash: null },
+      { id: '33333333-3333-4333-8333-333333333333', authorization_code_hash: 'a'.repeat(64) },
+    ]);
+
+    await migration.up(query);
+    const authorizationIndexes = await query.showIndex('agent_authorizations');
+    const codeIndex = authorizationIndexes.find(
+      (index) => index.name === 'agent_authorizations_authorization_code_hash_unique',
+    );
+    assert.ok(codeIndex);
+    assert.equal(codeIndex.unique, true);
+    assert.ok(
+      (await query.showIndex('agent_credentials')).some((index) => index.name === 'agent_credentials_connection_id'),
+    );
+    await assert.rejects(
+      query.bulkInsert('agent_authorizations', [
+        { id: '44444444-4444-4444-8444-444444444444', authorization_code_hash: 'a'.repeat(64) },
+      ]),
+    );
+
+    await migration.down(query);
+    assert.ok(
+      !(await query.showIndex('agent_authorizations')).some(
+        (index) => index.name === 'agent_authorizations_authorization_code_hash_unique',
+      ),
+    );
+    assert.ok(
+      !(await query.showIndex('agent_credentials')).some((index) => index.name === 'agent_credentials_connection_id'),
+    );
+  } finally {
+    await db.close();
+  }
+});
+
 test('agent authorization client metadata migration adds and removes nullable display columns', async () => {
   const { Sequelize, DataTypes } = require('sequelize');
   const migration = require('./migrations/20261116000200-add-agent-authorization-client-metadata');

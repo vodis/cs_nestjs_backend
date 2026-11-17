@@ -7,6 +7,8 @@ const MIN_TTL_MS = 60 * 1000;
 const MAX_TTL_MS = 24 * 60 * 60 * 1000;
 const FAILURE_TTL_MS = 30 * 1000;
 const MAX_CACHE_ENTRIES = 1000;
+const MAX_CONCURRENT_FETCHES = 16;
+const MAX_CONCURRENT_FETCHES_PER_ORIGIN = 4;
 const MAX_CLIENT_ID_LENGTH = 255;
 const MAX_REDIRECT_URIS = 20;
 const MAX_URI_LENGTH = 2048;
@@ -24,6 +26,8 @@ export class CachedClientMetadataResolver implements ClientMetadataResolver {
     private readonly cache = new Map<string, CacheEntry>();
     private readonly inflight = new Map<string, Promise<ClientMetadata>>();
 
+    private readonly activeOrigins = new Map<string, number>();
+
     constructor(
         private readonly fetcher: MetadataFetcher,
         private readonly now: () => number = Date.now,
@@ -38,7 +42,18 @@ export class CachedClientMetadataResolver implements ClientMetadataResolver {
         }
         const pending = this.inflight.get(clientId);
         if (pending) return pending;
-        const load = this.load(clientId, url).finally(() => this.inflight.delete(clientId));
+        const active = this.activeOrigins.get(url.origin) ?? 0;
+        if (this.inflight.size >= MAX_CONCURRENT_FETCHES || active >= MAX_CONCURRENT_FETCHES_PER_ORIGIN) {
+            // Reject without queuing/caching; overload must not trigger the pinned-client fallback.
+            throw new ClientMetadataError('overloaded', 'Client metadata service is busy');
+        }
+        this.activeOrigins.set(url.origin, active + 1);
+        const load = this.load(clientId, url).finally(() => {
+            this.inflight.delete(clientId);
+            const remaining = this.activeOrigins.get(url.origin)! - 1;
+            if (remaining) this.activeOrigins.set(url.origin, remaining);
+            else this.activeOrigins.delete(url.origin);
+        });
         this.inflight.set(clientId, load);
         return load;
     }

@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'crypto';
 import { AgentAccessService } from './agent-access.service';
@@ -206,6 +206,44 @@ describe('AgentAccessService', () => {
         );
         expect(revokedFamilies).toHaveLength(1);
         expect(auditEvents.map((event) => event.eventType)).toContain('agent.token.refresh_reuse');
+        const [connection] = await service.connectionsForUser('user-1');
+        expect(connection.status).toBe('revoked');
+    });
+
+    async function connectDeviceAgent(userId = 'user-1') {
+        const clientId = 'https://agent.example/client.json';
+        const device = await service.beginDeviceAuthorization({
+            clientId,
+            resource: 'https://api.craftscript.test/mcp',
+            scopes: ['portfolio:read', 'offline_access'],
+        });
+        const request = await service.authorizationForDeviceCode(device.user_code, userId);
+        await service.decide(request.id, userId, 'approve');
+        return service.exchangeDeviceCode({ deviceCode: device.device_code, clientId });
+    }
+
+    it.each(['access_token', 'refresh_token'] as const)(
+        'reports the connection as revoked after its %s is revoked by the client',
+        async (kind) => {
+            const pair = await connectDeviceAgent();
+            await service.revokeToken(pair[kind]);
+
+            const [connection] = await service.connectionsForUser('user-1');
+            expect(connection.status).toBe('revoked');
+            await expect(service.authenticateAccessToken(pair.access_token)).rejects.toBeInstanceOf(
+                UnauthorizedException,
+            );
+            await expect(
+                service.refresh(pair.refresh_token, 'https://agent.example/client.json'),
+            ).rejects.toBeInstanceOf(BadRequestException);
+        },
+    );
+
+    it('ignores revocation requests for unknown tokens', async () => {
+        await connectDeviceAgent();
+        await service.revokeToken('not-a-real-token');
+        const [connection] = await service.connectionsForUser('user-1');
+        expect(connection.status).toBe('active');
     });
 
     it('rejects redirect URIs that are not owned by the client', async () => {
@@ -274,6 +312,44 @@ describe('AgentAccessService', () => {
         ).rejects.toMatchObject({ response: { error: 'invalid_client' } });
     });
 
+    it('PR #283: keeps the hostname visible to legacy consent screens for impersonating documents', async () => {
+        const clientId = 'https://attacker.example/client.json';
+        clientDocuments.set(clientId, {
+            clientId,
+            host: 'attacker.example',
+            clientName: 'ChatGPT / Codex',
+            redirectUris: ['https://attacker.example/callback'],
+        });
+        await service.beginBrowserAuthorization({
+            clientId,
+            redirectUri: 'https://attacker.example/callback',
+            resource,
+            scopes: ['portfolio:read'],
+            codeChallenge: challenge,
+        });
+        const consent = await service.authorizationForUser(authorizations[0].id, 'user-1');
+        expect(consent.clientName).toBe('attacker.example');
+        await service.decide(authorizations[0].id, 'user-1', 'approve');
+        expect((await service.connectionsForUser('user-1'))[0].clientName).toBe('attacker.example');
+    });
+
+    it('PR #283: never falls back to pinned identity when metadata capacity is exhausted', async () => {
+        clientDocuments.set(
+            'https://chatgpt.com/oauth/client.json',
+            new ClientMetadataError('overloaded', 'Client metadata service is busy'),
+        );
+        await expect(
+            service.beginBrowserAuthorization({
+                clientId: 'https://chatgpt.com/oauth/client.json',
+                redirectUri: 'https://chatgpt.com/connector_platform_oauth_redirect',
+                resource,
+                scopes: ['portfolio:read'],
+                codeChallenge: challenge,
+            }),
+        ).rejects.toMatchObject({ response: { error: 'invalid_client' } });
+        expect(authorizations).toHaveLength(0);
+    });
+
     it('exposes verified client identity for the consent screen', async () => {
         await service.beginBrowserAuthorization({
             clientId: 'https://chatgpt.com/oauth/client.json',
@@ -284,7 +360,7 @@ describe('AgentAccessService', () => {
         });
         const consent = await service.authorizationForUser(authorizations[0].id, 'user-1');
         expect(consent).toMatchObject({
-            clientName: 'ChatGPT',
+            clientName: 'chatgpt.com',
             clientHost: 'chatgpt.com',
             clientUri: 'https://chatgpt.com/',
             logoUri: 'https://persistent.oaistatic.com/sonic/misc/openai-logo.png',
@@ -307,7 +383,7 @@ describe('AgentAccessService', () => {
         const authorization = authorizations[0];
         const consent = await service.authorizationForUser(authorization.id, 'user-1');
         expect(consent).toMatchObject({
-            clientName: 'Example CLI',
+            clientName: 'agent.example',
             clientHost: 'agent.example',
             clientVerification: 'metadata_document',
             redirectHost: '127.0.0.1:53682',

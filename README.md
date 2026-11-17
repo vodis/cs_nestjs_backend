@@ -319,45 +319,7 @@ payloads and credential-bearing URLs are never included in these diagnostics.
 
 ### Agent OAuth clients (MCP)
 
-External agents connect to `/mcp` through the OAuth endpoints advertised at
-`/.well-known/oauth-authorization-server`. Only public clients are supported:
-PKCE `S256` is required and the token endpoint uses `none` authentication.
-
-- **Browser / CLI authorization-code flow.** The `client_id` must be an HTTPS
-  [Client ID Metadata Document](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/)
-  URL. It must be canonical, on the default port, with a path, and with no
-  fragment or credentials. The server fetches the document and checks that its
-  `client_id` equals that URL and that it allows `none` token authentication.
-  It then reads `redirect_uris`, `client_name` and the optional
-  `client_uri`/`logo_uri`.
-  - The requested `redirect_uri` must exactly match a registered one.
-  - Loopback redirects (`http://127.0.0.1/...`, `http://[::1]/...`, and
-    `http://localhost/...` when registered literally) may use any port, per
-    RFC 8252 §7.3. Scheme, host, path and query must still match.
-  - An HTTPS origin without a valid document is refused.
-  - ChatGPT (`https://chatgpt.com/oauth/client.json`) goes through the same
-    path. Only when its document cannot be fetched does the server fall back to
-    the pinned `chatgpt.com` connector redirects.
-- **Fetch safety.**
-  - HTTPS on port 443 only.
-  - Every resolved address must be public. Loopback, private, link-local,
-    CGNAT, NAT64/6to4, ULA and metadata ranges are refused. The check runs in
-    the socket lookup, so the vetted address is the one connected to.
-  - No redirects, a 3 s deadline and a 5 KB size cap.
-  - Fetch errors are reported generically so the endpoint can't be used to
-    probe the network.
-- **Caching.** Documents are cached in-process for `Cache-Control: max-age`,
-  kept between 1 minute and 24 hours (5 minutes by default). `no-store` and
-  `no-cache` disable caching. Failures are cached for 30 seconds.
-- **Device flow** (`/oauth/device_authorization`) has no redirect, so nothing
-  proves who started it. Its consent data is marked
-  `clientVerification: "unverified"` and shows only the `client_id` host.
-- **Consent data.** `GET /api/v1/agent-authorizations/:id` and the device-code
-  lookup return:
-  - `clientName`, `clientHost`, `clientUri`, `logoUri`
-  - `clientVerification` (`metadata_document` | `first_party` | `unverified`)
-  - `redirectHost`, and `loopbackRedirect` (the code goes to an app on the
-    user's own computer)
-- Dynamic client registration (RFC 7591) is intentionally not offered. It would
-  reopen unauthenticated, self-declared client creation, and MCP clients prefer
-  metadata documents.
+External agents use public-client OAuth with PKCE or device authorization to
+access the read-only MCP resource. See [agent portfolio integration](docs/integration/agent-portfolio.md)
+for client metadata requirements, consent identity, admission limits, migration
+and rollout compatibility.

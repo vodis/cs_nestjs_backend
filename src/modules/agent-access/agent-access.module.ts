@@ -10,6 +10,7 @@ import { CachedClientMetadataResolver } from './infrastructure/cached-client-met
 import { SafeMetadataFetcher } from './infrastructure/safe-metadata-fetcher';
 import { SequelizeAgentAccessRepository } from './infrastructure/sequelize-agent-access.repository';
 import { AgentConnectionsController } from './presentation/agent-connections.controller';
+import { AgentAuthorizeRateLimitGuard } from './presentation/agent-authorize-rate-limit.guard';
 import { AgentOauthController } from './presentation/agent-oauth.controller';
 import { McpController } from './presentation/mcp.controller';
 
@@ -18,6 +19,7 @@ import { McpController } from './presentation/mcp.controller';
     controllers: [AgentConnectionsController, AgentOauthController, McpController],
     providers: [
         AgentAccessService,
+        AgentAuthorizeRateLimitGuard,
         { provide: AGENT_ACCESS_REPOSITORY, useClass: SequelizeAgentAccessRepository },
         {
             provide: CLIENT_METADATA_RESOLVER,

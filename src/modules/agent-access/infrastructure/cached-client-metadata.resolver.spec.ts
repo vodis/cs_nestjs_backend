@@ -134,6 +134,62 @@ describe('CachedClientMetadataResolver', () => {
         await expect(resolver.resolve(CLIENT_ID)).resolves.toMatchObject({ host: 'cli.example' });
     });
 
+    it.each(['success', 'fetch failure', 'invalid document'])(
+        'PR #283: bounds per-origin work and releases slots after %s',
+        async (outcome) => {
+            const releases: (() => void)[] = [];
+            fetch.mockImplementation(
+                (url: URL) =>
+                    new Promise((resolve, reject) => {
+                        releases.push(() => {
+                            if (outcome === 'fetch failure') reject(new Error('offline'));
+                            else
+                                resolve({
+                                    body: outcome === 'invalid document' ? '{}' : document({ client_id: url.href }),
+                                });
+                        });
+                    }),
+            );
+            const ids = Array.from({ length: 4 }, (_, i) => `${CLIENT_ID}?id=${i}`);
+            const pending = ids.map((id) => resolver.resolve(id));
+            const settled = Promise.allSettled(pending);
+            const duplicate = resolver.resolve(ids[0]);
+            const duplicateSettled = Promise.allSettled([duplicate]);
+            await expect(resolver.resolve(`${CLIENT_ID}?id=overflow`)).rejects.toMatchObject({ reason: 'overloaded' });
+            expect(fetch).toHaveBeenCalledTimes(4);
+            releases.forEach((release) => release());
+            await settled;
+            await duplicateSettled;
+            fetch.mockImplementation(async (url: URL) => ({ body: document({ client_id: url.href }) }));
+            await expect(resolver.resolve(`${CLIENT_ID}?id=overflow`)).resolves.toMatchObject({ host: 'cli.example' });
+        },
+    );
+
+    it('PR #283: caps a burst of distinct origins without queuing and still serves cached clients', async () => {
+        await resolver.resolve(CLIENT_ID);
+        const releases: (() => void)[] = [];
+        fetch.mockImplementation(
+            (url: URL) =>
+                new Promise((resolve) => {
+                    releases.push(() => resolve({ body: document({ client_id: url.href }) }));
+                }),
+        );
+        const requests = Array.from({ length: 1500 }, (_, i) =>
+            resolver.resolve(`https://client${i}.example/client.json`),
+        );
+        const settled = Promise.allSettled(requests);
+        expect(fetch).toHaveBeenCalledTimes(17); // One cached document plus sixteen active fetches.
+        await expect(resolver.resolve(CLIENT_ID)).resolves.toMatchObject({ host: 'cli.example' });
+        releases.forEach((release) => release());
+        const results = await settled;
+        expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(16);
+        expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1484);
+        fetch.mockImplementation(async (url: URL) => ({ body: document({ client_id: url.href }) }));
+        await expect(resolver.resolve('https://recovered.example/client.json')).resolves.toMatchObject({
+            host: 'recovered.example',
+        });
+    });
+
     it('rejects malformed client_ids without fetching', async () => {
         await expect(resolver.resolve('http://cli.example/client.json')).rejects.toMatchObject({
             reason: 'invalid_client_id',

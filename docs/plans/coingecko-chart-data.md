@@ -2,7 +2,7 @@
 
 Status: draft for discussion. No code in this change.
 
-Goal: store CoinGecko market history in our Postgres database and serve charts from our API, following the near.com pattern (CoinGecko → cron jobs → our DB → our API). The browser must never call CoinGecko. Start on the CoinGecko **Basic** plan at **$29/month billed yearly**.
+Goal: ingest CoinGecko market history on a schedule, store it in our Postgres database, and serve charts from our API (CoinGecko → our cron jobs → our DB → our API → our chart). The browser must never call CoinGecko. Start on the CoinGecko **Basic** plan at **$29/month billed yearly**.
 
 This document marks **existing** code and config as they are on `develop` today, and **proposed** work as a checklist of small follow-up PRs.
 
@@ -33,7 +33,7 @@ Charts should keep working if CoinGecko is slow or rate-limited, and we should n
 
 Introduce `@nestjs/schedule` inside `MarketsModule` (proposed). Guard every job with a Postgres advisory lock so multiple API instances do not double-run and double-spend credits. Temporal is mentioned in `DEVELOPMENT_GUIDE.md` as a future orchestration path; it is not in this repo today, so start with in-process cron plus a lock.
 
-Times below are UTC. CoinGecko publishes the previous day's completed daily point after 00:35 UTC, so the daily job is at **00:40**, not 00:20 (near.com's schedule is too early for a reliable final daily close).
+Times below are UTC. CoinGecko publishes the previous day's completed daily point after 00:35 UTC, so the daily job runs at **00:40** to pick up that close.
 
 | Job | Schedule | CoinGecko endpoint | What it writes | Notes |
 |---|---|---|---|---|
@@ -95,7 +95,7 @@ Sequelize + PostgreSQL, same pattern as existing models (`@Table`, underscored, 
 
 ### `market_token_mappings`
 
-Resolves our symbol / asset to a CoinGecko id. Seed from **existing** `coinGeckoIdsBySymbol`. Keep env `MARKET_COINGECKO_ID_<SYMBOL>` as an emergency override during rollout, then prefer this table for manual fixes (for example NEAR-listed tokens such as nTTWO that do not share the obvious CoinGecko id).
+Resolves our symbol / asset to a CoinGecko id. Seed from **existing** `coinGeckoIdsBySymbol`. Keep env `MARKET_COINGECKO_ID_<SYMBOL>` as an emergency override during rollout, then prefer this table for manual fixes when a symbol's CoinGecko id is not the obvious mapping.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -201,7 +201,7 @@ All PRs target `develop`. Acceptance criteria are in each step.
 
 ## 8. Risks and open questions
 
-- **Aggregated history, not per-exchange.** CoinGecko `market_chart` is a blended price. There is no verified endpoint for a single listing's history (for example Backpack's TTWO). Manual `market_token_mappings` overrides fix identity, not venue-specific series. If a listing must diverge from the CoinGecko aggregate, we need another source.
+- **Aggregated history, not per-exchange.** CoinGecko history is aggregated across markets; there is no verified per-exchange historical endpoint. Manual `market_token_mappings` overrides fix identity, not venue-specific series. If a listing must diverge from the CoinGecko aggregate, we need another source.
 - **Tokens missing on CoinGecko.** GeckoTerminal is already an optional on-demand fallback and **shares the same credit pool** if we later use a paid CoinGecko on-chain API. Keep it off until a specific unmapped asset needs it. Mark those mappings `unsupported` rather than retrying forever.
 - **CoinGecko terms.** Cache refresh must be at least every 24 hours for stored data (our hourly/daily jobs satisfy this for active tokens; confirm the clause for daily-only tokens). If the subscription ends, delete stored CoinGecko data from these tables.
 - **Tracked-token count is still unknown.** 54 mapped symbols fit Basic even with hourly-for-all. The 1Click catalog may add more. Count distinct catalog symbols vs mapped ids before buying the key; that number is what decides Basic vs Analyst.

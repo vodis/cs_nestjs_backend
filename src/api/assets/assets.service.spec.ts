@@ -37,6 +37,7 @@ describe('AssetsService', () => {
                 {
                     assetId: 'nep141:wrap.near',
                     defuseAssetId: 'nep141:wrap.near',
+                    balanceNetwork: 'near:mainnet',
                     symbol: 'wNEAR',
                     name: 'NEAR Protocol',
                     icon: 'https://s2.coinmarketcap.com/static/img/coins/128x128/6535.png',

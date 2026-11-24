@@ -82,8 +82,8 @@ importers:
         specifier: 0.62.0
         version: 0.62.0(@ton/crypto@3.3.0)
       '@vodis/cs-assets':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.2.0
+        version: 0.2.0
       axios:
         specifier: ^1.6.2
         version: 1.18.1
@@ -1269,8 +1269,8 @@ packages:
   '@ungap/structured-clone@1.3.3':
     resolution: {integrity: sha512-60YRaenCQcVjYEKOcG824+DRGGIQ3VKErcBoAEDJZz5bKIs2ZG+X/H9Nk+Q6EVkwJk5QNApxbrc5QtBSwtrXAg==}
 
-  '@vodis/cs-assets@0.1.0':
-    resolution: {integrity: sha512-Gv9y1GWy+8PVLgDfGaGsTx2TpHbSnUffPABAwp2BtG49WqWxejMeaRNzWnBxTQjn+3sMNUxkhjC06cm752RHKw==, tarball: https://npm.pkg.github.com/download/@vodis/cs-assets/0.1.0/d9081ee33e7c612a8cf3b6734cdac7c900da3bd1}
+  '@vodis/cs-assets@0.2.0':
+    resolution: {integrity: sha512-Akt0o0QkVFdv5kUEr3GLGxSxW3NQXcD1ySlHIisvOoXPasRMLE2lXpz37iJIXoBgY0EU5pAXeF90QenZ3dnBhA==, tarball: https://npm.pkg.github.com/download/@vodis/cs-assets/0.2.0/e2820d5ee428fe59507ba5ee37ee2578fbbd370b}
 
   '@webassemblyjs/ast@1.14.1':
     resolution: {integrity: sha512-nuBEDgQfm1ccRp/8bCQrx1frohyufl4JlbMMZ4P1wpeOfDhF6FQkxZJ1b/e+PLwr6X1Nhw6OLme5usuBWYBvuQ==}
@@ -5603,7 +5603,7 @@ snapshots:
 
   '@ungap/structured-clone@1.3.3': {}
 
-  '@vodis/cs-assets@0.1.0': {}
+  '@vodis/cs-assets@0.2.0': {}
 
   '@webassemblyjs/ast@1.14.1':
     dependencies:

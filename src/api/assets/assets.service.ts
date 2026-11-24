@@ -1,4 +1,4 @@
-import { SOURCE_NETWORKS, nativeBalanceAssetId } from '@vodis/cs-assets/one-click';
+import { SOURCE_NETWORKS, nativeBalanceAssetId, balanceNetworkForBlockchain } from '@vodis/cs-assets/one-click';
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OneClickApiHttpClient } from '../../http-clients/one-click-api/one-click-api.http-client';
@@ -102,6 +102,7 @@ export class AssetsService {
             assetId: token.assetId,
             defuseAssetId: token.assetId,
             balanceAssetId: nativeBalanceAssetId(token.blockchain, token.assetId),
+            balanceNetwork: balanceNetworkForBlockchain(token.blockchain),
             sourceNetwork: Object.prototype.hasOwnProperty.call(SOURCE_NETWORKS, token.blockchain)
                 ? SOURCE_NETWORKS[token.blockchain]
                 : undefined,

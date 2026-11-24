@@ -118,6 +118,96 @@ describe('BalancesService', () => {
         });
     }
 
+    it('deduplicates BNB aliases before reads and returns one canonical holding', async () => {
+        const { user, wallet } = await userWallet();
+        await wallet.update({ chainType: 'ethereum', address: '0x' + '1'.repeat(40) });
+        const aliases = ['nep141:bnb.omdep.near', 'nep245:v2_1.omni.hot.tg:56_11111111111111111111'].map((id) => ({
+            assetId: id,
+            defuseAssetId: id,
+            blockchain: 'bsc',
+            symbol: 'BNB',
+            decimals: 18,
+            balanceAssetId: 'eip155:56/native',
+            balanceNetwork: 'eip155:56',
+        }));
+        assets.getAssets.mockResolvedValue({
+            data: aliases,
+            meta: { source: '1click', stale: false, cached: false, fetchedAt: new Date().toISOString() },
+        });
+        chainBalances.getBalances.mockResolvedValue({
+            balances: [
+                {
+                    network: 'eip155:56',
+                    assetId: 'eip155:56/native',
+                    symbol: 'BNB',
+                    decimals: 18,
+                    balanceRaw: '42',
+                    balanceDecimal: '0.000000000000000042',
+                    source: 'evm_rpc',
+                    providerAlias: 'test',
+                    fetchedAt: new Date(),
+                    expiresAt: new Date(Date.now() + 30000),
+                },
+            ],
+            failures: [],
+        });
+        const query = { walletAddress: wallet.address, network: 'eip155:56', assetIds: aliases.map((a) => a.assetId) };
+        const fresh = await service.getBalancesForUser(user.id, query);
+        expect(chainBalances.getBalances.mock.calls[0][2]).toHaveLength(1);
+        expect(fresh.data).toHaveLength(1);
+        const cached = await service.getBalancesForUser(user.id, query);
+        expect(cached.data).toHaveLength(1);
+        expect(chainBalances.getBalances).toHaveBeenCalledTimes(1);
+        await BalanceCacheEntry.update({ expiresAt: new Date(0) }, { where: { userId: user.id } });
+        chainBalances.getBalances.mockImplementation(async (_wallet, _network, requested) => ({
+            balances: [],
+            failures: requested.map((a) => ({ assetId: a!.assetId, reason: 'offline' })),
+        }));
+        const stale = await service.getBalancesForUser(user.id, query);
+        expect(stale.data).toHaveLength(1);
+        expect(stale.data[0].stale).toBe(true);
+    });
+    it('dispatches an unlinked balance-only address and preserves missing-provider diagnostics', async () => {
+        const { user } = await userWallet();
+        const xlm = {
+            assetId: 'xlm',
+            defuseAssetId: 'xlm',
+            blockchain: 'stellar',
+            symbol: 'XLM',
+            decimals: 7,
+            balanceNetwork: 'oneclick:stellar',
+        };
+        assets.getAssets.mockResolvedValue({
+            data: [xlm],
+            meta: { source: '1click', stale: false, cached: false, fetchedAt: new Date().toISOString() },
+        });
+        chainBalances.getBalances.mockResolvedValue({
+            balances: [],
+            failures: [
+                {
+                    assetId: 'xlm',
+                    reason: 'missing',
+                    rpcIssue: new RpcUnavailableException(
+                        'oneclick:stellar',
+                        'RPC_NOT_CONFIGURED',
+                        'Balance access is not configured',
+                    ),
+                },
+            ],
+        });
+        const result = await service.getBalancesForUser(user.id, {
+            walletAddress: 'GACCOUNT',
+            network: 'oneclick:stellar',
+            assetIds: ['xlm'],
+        });
+        expect(chainBalances.getBalances).toHaveBeenCalledWith(
+            expect.objectContaining({ walletId: null, chainType: 'stellar' }),
+            'oneclick:stellar',
+            [xlm],
+        );
+        expect(result.data).toEqual([]);
+        expect(result.meta.issues).toContainEqual(expect.objectContaining({ code: 'RPC_NOT_CONFIGURED' }));
+    });
     it('batches allowlisted asset reads for an owned wallet and persists the network', async () => {
         const { user, wallet } = await userWallet();
         const result = await service.getBalances(

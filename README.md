@@ -359,7 +359,10 @@ so fresh and cached responses do not double-count holdings.
 
 Release the SDK addition first, then pin its exact released version and regenerate
 the backend lockfile. Packed SDK validation alone is not a deployable consumer
-release. Roll out the backend before the host; enable verified providers through
-the operator Vault workflow and check authenticated balance reads as well as
-health. No database migration is required. Rollback uses the previous immutable
+release. Roll out the backend before the host. Provision `BALANCE_PROVIDERS_JSON`
+before activating its staging `requiredSecrets` declaration; undeclared Vault
+keys are not injected into containers. Follow the orchestrator's
+[provider runbook](https://github.com/vodis/cs_orchestrator/blob/main/docs/runbook/17_backend-rpc-providers.md)
+for catalog activation and redeployment, then check authenticated balance reads
+as well as health. No database migration is required. Rollback uses the previous immutable
 application image and preserves other secret keys when reverting provider config.

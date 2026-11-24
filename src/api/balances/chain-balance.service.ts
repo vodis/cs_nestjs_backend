@@ -1,3 +1,4 @@
+import { PublicChainBalancesService } from './public-chain-balances.service';
 import { RpcUnavailableException } from './rpc/chain-rpc.types';
 import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
 import { EVM_NETWORKS, isNativeProviderRoute } from '@vodis/cs-assets/one-click';
@@ -29,7 +30,7 @@ export type LiveChainBalance = {
     decimals: number;
     balanceRaw: string;
     balanceDecimal: string;
-    source: 'near_rpc' | 'evm_rpc' | 'toncenter_api' | 'solana_rpc' | 'bitcoin_esplora';
+    source: 'near_rpc' | 'evm_rpc' | 'toncenter_api' | 'solana_rpc' | 'bitcoin_esplora' | 'public_chain_api';
     providerAlias: string;
     fetchedAt: Date;
     expiresAt: Date;
@@ -82,6 +83,7 @@ export class ChainBalanceService {
         private readonly tonCenter: TonCenterService,
         @Optional() private readonly solana?: SolanaFundingService,
         @Optional() private readonly bitcoin?: BitcoinBalanceService,
+        @Optional() private readonly publicChains?: PublicChainBalancesService,
     ) {}
 
     async getBalances(
@@ -89,6 +91,10 @@ export class ChainBalanceService {
         network: string,
         assets: Array<AssetDto | undefined>,
     ): Promise<ChainBalanceBatchResult> {
+        if (network.startsWith('oneclick:')) {
+            if (!this.publicChains) throw new ServiceUnavailableException('Balance adapter unavailable');
+            return this.publicChains.getBalances(wallet, network, assets);
+        }
         if (network === SOLANA_MAINNET || network === BITCOIN_MAINNET)
             return this.additionalFamilyBalances(wallet, network, assets);
         if (network === 'ton:mainnet' || network === 'ton:testnet') {
@@ -117,6 +123,10 @@ export class ChainBalanceService {
     }
 
     assertAddress(network: string, address: string): void {
+        if (network.startsWith('oneclick:')) {
+            if (!this.publicChains) throw new BadRequestException('Unsupported balance network');
+            return this.publicChains.assertAddress(network, address);
+        }
         if (network === SOLANA_MAINNET || network === BITCOIN_MAINNET) {
             const validator: SwapAddressValidationService = new SwapAddressValidationService();
             validator.assertSignerAddress(network === SOLANA_MAINNET ? 'solana' : 'bitcoin', address);

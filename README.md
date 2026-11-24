@@ -323,3 +323,46 @@ External agents use public-client OAuth with PKCE or device authorization to
 access the read-only MCP resource. See [agent portfolio integration](docs/integration/agent-portfolio.md)
 for client metadata requirements, consent identity, admission limits, migration
 and rollout compatibility.
+
+### Additional read-only balance families
+
+Assets expose additive `balanceNetwork` independently from `sourceNetwork`.
+Clients send this value with explicit catalog `assetIds` to the authenticated
+balances API. Existing source networks retain their identifiers; additional
+families use the application namespace `oneclick:<blockchain>`. This metadata
+does not enable ownership proofs, wallet connection, signing or funding.
+
+`PublicChainBalancesService` reads Stellar Horizon, HyperCore HIP-1 spot state,
+Aptos/Movement views, Sui GraphQL, XRP validated ledgers, Cardano Koios, Fogo,
+Starknet, TRON and transparent BCH/Dash/Dogecoin/Litecoin/Zcash Blockchair
+address balances. Reads are address-scoped: UTXO results do not aggregate an
+HD wallet's other addresses or shielded funds. HyperCore ERC-20 routes require
+a separately verified token mapping and are not inferred from their symbols.
+Aleo/Miden report wallet-assisted access required; Pearl/Quantus currently
+report unsupported. These outcomes are partial responses, never fabricated zero.
+
+Configure backend-only `BALANCE_PROVIDERS_JSON` as blockchain-slug keys with
+ordered arrays of one to four `{ "alias": "primary", "url": "https://..." }`
+entries. Provider roots must match the adapter protocol (e.g. Horizon root,
+Aptos `/v1`, Koios `/api/v1`, Sui GraphQL endpoint, Hyperliquid root); these
+are not interchangeable EVM RPC URLs. HTTPS is required; redirects, embedded
+credentials, query strings and fragments are rejected. Configure authenticated
+providers through an approved gateway when their authentication cannot fit this
+contract. Existing EVM pools continue using `CHAIN_RPC_ENDPOINTS_JSON`.
+
+Adapters verify network identity where the protocol exposes it, preserve atomic
+precision, coalesce in-flight reads, cap response size/time, and fail over with
+HTTP 429 cooldown. Missing configuration and malformed/upstream responses
+produce safe diagnostics. An absent asset means zero only after a valid complete
+account list proves absence. Native route aliases are coalesced before refresh
+so fresh and cached responses do not double-count holdings.
+
+Release the SDK addition first, then pin its exact released version and regenerate
+the backend lockfile. Packed SDK validation alone is not a deployable consumer
+release. Roll out the backend before the host. Provision `BALANCE_PROVIDERS_JSON`
+before activating its staging `requiredSecrets` declaration; undeclared Vault
+keys are not injected into containers. Follow the orchestrator's
+[provider runbook](https://github.com/vodis/cs_orchestrator/blob/main/docs/runbook/17_backend-rpc-providers.md)
+for catalog activation and redeployment, then check authenticated balance reads
+as well as health. No database migration is required. Rollback uses the previous immutable
+application image and preserves other secret keys when reverting provider config.

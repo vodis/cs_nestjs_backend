@@ -17,13 +17,13 @@ export class PostBalancesRequestDto {
     walletAddress?: string;
 
     @ApiPropertyOptional({
-        description: 'Restrict balances to one CAIP-2 network id.',
+        description: 'Use the asset registry balanceNetwork: a CAIP-2 id or a balance-only oneclick namespace.',
         example: 'near:mainnet',
     })
     @IsOptional()
     @IsString()
     @Matches(/^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$/, {
-        message: 'network must be a CAIP-2 chain id such as near:mainnet or eip155:8453',
+        message: 'network must be a registry balanceNetwork such as eip155:8453 or oneclick:stellar',
     })
     network?: string;
 

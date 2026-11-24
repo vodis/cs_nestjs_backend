@@ -13,6 +13,9 @@ export class AssetDto {
     @ApiPropertyOptional()
     sourceNetwork?: string;
 
+    @ApiPropertyOptional({ description: 'Read-only balance network; does not grant swap funding support.' })
+    balanceNetwork?: string;
+
     @ApiProperty()
     symbol: string;
 

@@ -1,3 +1,4 @@
+import { balanceNetworkForBlockchain } from '@vodis/cs-assets/one-click';
 import { RpcUnavailableException } from './rpc/chain-rpc.types';
 import { balanceCacheNetwork } from '../../utils/chain-network.util';
 import { SOLANA_MAINNET, BITCOIN_MAINNET } from '@vodis/cs-assets';
@@ -115,6 +116,7 @@ export class BalancesService {
         const cachedBalances = freshEntries
             .filter((entry) => !liveKeys.has(this.key(entry.walletId, balanceCacheNetwork(entry), entry.assetId)))
             .map((entry) => this.toDto(entry, false));
+        const staleKeys = new Set<string>();
         const staleFallbacks = failedTargets.flatMap((target) => {
             const entry = entries.find(
                 (candidate) =>
@@ -123,7 +125,11 @@ export class BalancesService {
                     candidate.assetId === (target.asset?.balanceAssetId ?? target.assetId) &&
                     candidate.expiresAt <= now,
             );
-            return entry ? [this.toDto(entry, true)] : [];
+            if (!entry) return [];
+            const key = this.key(entry.walletId, balanceCacheNetwork(entry), entry.assetId);
+            if (staleKeys.has(key)) return [];
+            staleKeys.add(key);
+            return [this.toDto(entry, true)];
         });
 
         return this.toResponse(
@@ -235,10 +241,12 @@ export class BalancesService {
         userId: string,
         group: RefreshGroup,
     ): Promise<{ balances: BalanceDto[]; failedAssetIds: string[]; issues: BalanceIssueDto[] }> {
+        const identity = (target: RefreshTarget) => target.asset?.balanceAssetId ?? target.assetId;
+        const unique = new Map(group.targets.map((target) => [identity(target), target]));
         const result = await this.chainBalances.getBalances(
             group.wallet,
             group.network,
-            group.targets.map((target) => target.asset),
+            [...unique.values()].map((target) => target.asset),
         );
         const walletId = group.wallet.walletId;
         if (walletId) {
@@ -267,7 +275,11 @@ export class BalancesService {
         }
         return {
             balances: result.balances.map((balance) => this.toLiveDto(group.wallet, balance)),
-            failedAssetIds: result.failures.map((failure) => failure.assetId),
+            failedAssetIds: group.targets
+                .filter((target) =>
+                    result.failures.some((failure) => failure.assetId === unique.get(identity(target))?.assetId),
+                )
+                .map((target) => target.assetId),
             issues: result.failures.map((failure) => ({
                 network: group.network,
                 code: failure.rpcIssue?.code ?? 'BALANCE_READ_FAILED',
@@ -327,6 +339,8 @@ export class BalancesService {
     }
 
     private chainTypeFilter(network: string): string | object {
+        const chain = this.balanceOnlyChain(network);
+        if (chain) return chain === 'hypercore' ? { [Op.in]: ['ethereum', 'evm'] } : chain;
         if (network === SOLANA_MAINNET) return 'solana';
         if (network === BITCOIN_MAINNET) return 'bitcoin';
         if (network.startsWith('near:')) return 'near';
@@ -354,7 +368,14 @@ export class BalancesService {
         return network?.startsWith('eip155:') || /^0x/i.test(value) ? value.toLowerCase() : value;
     }
 
+    private balanceOnlyChain(network: string): string | undefined {
+        const chain = network.startsWith('oneclick:') ? network.slice(9) : undefined;
+        return chain && balanceNetworkForBlockchain(chain) === network ? chain : undefined;
+    }
+
     private chainType(network: string): string {
+        const chain = this.balanceOnlyChain(network);
+        if (chain) return chain === 'hypercore' ? 'ethereum' : chain;
         if (network === SOLANA_MAINNET) return 'solana';
         if (network === BITCOIN_MAINNET) return 'bitcoin';
         if (network.startsWith('near:')) return 'near';

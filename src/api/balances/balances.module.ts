@@ -1,3 +1,4 @@
+import { PublicChainBalancesService } from './public-chain-balances.service';
 import { SolanaFundingService } from './solana-funding.service';
 import { BitcoinBalanceService } from './bitcoin-balance.service';
 import { Module } from '@nestjs/common';
@@ -17,6 +18,7 @@ import { TonCenterService } from './ton/ton-center.service';
     controllers: [BalancesController],
     providers: [
         BalancesService,
+        PublicChainBalancesService,
         ChainBalanceService,
         ChainRpcService,
         TonCenterService,

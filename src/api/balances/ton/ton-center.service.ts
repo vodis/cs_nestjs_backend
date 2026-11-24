@@ -1,3 +1,4 @@
+import { providerPools } from '../rpc/provider-config';
 import { Address } from '@ton/core';
 import { HttpService } from '@nestjs/axios';
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
@@ -59,11 +60,12 @@ export class TonCenterService {
     }
 
     async getWalletPublicKey(address: string): Promise<Buffer> {
-        const key = this.apiKey('ton:mainnet');
+        const baseUrl = this.baseUrl('ton:mainnet');
+        const key = this.apiKey('ton:mainnet', baseUrl);
         const response = await this.http.axiosRef.post<TonCenterEnvelope<{ exit_code?: number; stack?: unknown[][] }>>(
-            'https://toncenter.com/api/v2/runGetMethod',
+            `${baseUrl}/api/v2/runGetMethod`,
             { address, method: 'get_public_key', stack: [] },
-            { headers: key ? { 'X-API-Key': key } : undefined, timeout: this.timeoutMs() },
+            { headers: key ? { 'X-API-Key': key } : undefined, timeout: this.timeoutMs(), maxRedirects: 0 },
         );
         const result = response.data.result;
         const value = result?.stack?.[0]?.[1];
@@ -78,14 +80,14 @@ export class TonCenterService {
     }
 
     private async get<T>(network: string, path: string, params: Record<string, string | number>) {
-        const baseUrl = TONCENTER_BASE_URL[network];
-        if (!baseUrl) throw new ServiceUnavailableException(`TON network is not configured: ${network}`);
-        const apiKey = this.apiKey(network);
+        const baseUrl = this.baseUrl(network);
+        const apiKey = this.apiKey(network, baseUrl);
         try {
             return await this.http.axiosRef.get<T>(`${baseUrl}${path}`, {
                 params,
                 headers: apiKey ? { 'X-API-Key': apiKey } : undefined,
                 timeout: this.timeoutMs(),
+                maxRedirects: 0,
             });
         } catch (error) {
             if (isAxiosError(error)) {
@@ -107,7 +109,14 @@ export class TonCenterService {
         return value;
     }
 
-    private apiKey(network: string): string | undefined {
+    private baseUrl(network: string): string {
+        if (!TONCENTER_BASE_URL[network]) throw new ServiceUnavailableException('TON network is not configured');
+        return providerPools(this.config)?.get(network)?.[0].url ?? TONCENTER_BASE_URL[network];
+    }
+
+    private apiKey(network: string, baseUrl: string): string | undefined {
+        // Legacy credentials belong only to the original Toncenter origin.
+        if (new URL(baseUrl).origin !== TONCENTER_BASE_URL[network]) return undefined;
         const key = network === 'ton:testnet' ? 'TONCENTER_TESTNET_API_KEY' : 'TONCENTER_API_KEY';
         return this.config.get<string>(key)?.trim() || undefined;
     }

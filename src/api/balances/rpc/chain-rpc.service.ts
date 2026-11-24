@@ -1,3 +1,4 @@
+import { providerPools, validateProviderUrl } from './provider-config';
 import { HttpService } from '@nestjs/axios';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -22,7 +23,6 @@ type EndpointState = {
 
 type NearStatus = { chain_id?: string };
 
-const ALIAS_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 const LOGICAL_BATCH_CONCURRENCY = 4;
 
 class RateLimitedRpcError extends ChainRpcRequestError {
@@ -304,64 +304,14 @@ export class ChainRpcService implements OnModuleInit {
     }
 
     private loadEndpoints(): Map<string, ChainRpcEndpoint[]> {
-        const raw = this.config.get<string>('CHAIN_RPC_ENDPOINTS_JSON')?.trim();
-        if (!raw) return this.legacyEndpoints();
-
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(raw);
-        } catch {
-            throw new Error('CHAIN_RPC_ENDPOINTS_JSON must be valid JSON');
-        }
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            throw new Error('CHAIN_RPC_ENDPOINTS_JSON must be an object keyed by CAIP-2 network');
-        }
-
-        const result = new Map<string, ChainRpcEndpoint[]>();
-        for (const [network, value] of Object.entries(parsed)) {
-            if (
-                !parseSupportedChainNetwork(network) ||
-                !Array.isArray(value) ||
-                value.length === 0 ||
-                value.length > 4
-            ) {
-                throw new Error(`Invalid RPC endpoint list for ${network}`);
-            }
-            const endpoints = value.map((candidate) => this.parseEndpoint(network, candidate));
-            if (new Set(endpoints.map((endpoint) => endpoint.alias)).size !== endpoints.length) {
-                throw new Error(`RPC endpoint aliases must be unique for ${network}`);
-            }
-            result.set(network, endpoints);
-        }
-        if (result.size === 0) throw new Error('CHAIN_RPC_ENDPOINTS_JSON must configure at least one network');
-        return result;
+        const pools = providerPools(this.config);
+        return pools
+            ? new Map([...pools].filter(([network]) => parseSupportedChainNetwork(network)))
+            : this.legacyEndpoints();
     }
 
-    private parseEndpoint(network: string, candidate: unknown): ChainRpcEndpoint {
-        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
-            throw new Error(`Invalid RPC endpoint for ${network}`);
-        }
-        const alias = Reflect.get(candidate, 'alias');
-        const url = Reflect.get(candidate, 'url');
-        if (typeof alias !== 'string' || !ALIAS_PATTERN.test(alias) || typeof url !== 'string') {
-            throw new Error(`Invalid RPC endpoint for ${network}`);
-        }
-        this.validateUrl(url);
-        return { alias, url };
-    }
-
-    private validateUrl(value: string): void {
-        let url: URL;
-        try {
-            url = new URL(value);
-        } catch {
-            throw new Error('RPC endpoint URL is invalid');
-        }
-        const localHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
-        if (url.protocol !== 'https:' && !(localHttp && !this.isProduction())) {
-            throw new Error('RPC endpoint URLs must use HTTPS outside local development');
-        }
-        if (url.username || url.password) throw new Error('RPC endpoint URLs must not use basic authentication');
+    private validateUrl(url: string): void {
+        validateProviderUrl(url, this.isProduction());
     }
 
     private legacyEndpoints(): Map<string, ChainRpcEndpoint[]> {

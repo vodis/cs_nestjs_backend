@@ -287,3 +287,35 @@ it('rejects malformed HyperCore token indexes before inferring absence', async (
     expect(result.balances).toEqual([]);
     expect(result.failures).toHaveLength(1);
 });
+
+it.each([false, true])(
+    'uses centralized Stellar configuration; invalid entry cannot fall back (%s)',
+    async (invalid) => {
+        const request = jest.fn().mockImplementation(async (options) => ({
+            data: options.url.includes('/accounts/')
+                ? { account_id: stellar, balances: [{ asset_type: 'native', balance: '2.0000000' }] }
+                : { network_passphrase: 'Public Global Stellar Network ; September 2015' },
+        }));
+        const service = new PublicChainBalancesService(
+            new ConfigService({
+                CHAIN_RPC_ENDPOINTS_JSON: JSON.stringify({
+                    'oneclick:stellar': invalid ? [] : [{ alias: 'central', url: 'https://central.example/' }],
+                }),
+                BALANCE_PROVIDERS_JSON: JSON.stringify({
+                    stellar: [{ alias: 'legacy', url: 'https://legacy.example' }],
+                }),
+            }),
+            { axiosRef: { request } } as unknown as HttpService,
+        );
+        const result = await read(service, 'stellar', stellar, [{ ...asset('stellar'), decimals: 7 }]);
+        if (invalid) {
+            expect(result.failures).toHaveLength(1);
+            expect(request).not.toHaveBeenCalled();
+        } else {
+            expect(result.balances[0].balanceRaw).toBe('20000000');
+            expect(request.mock.calls.every(([options]) => options.url.startsWith('https://central.example'))).toBe(
+                true,
+            );
+        }
+    },
+);

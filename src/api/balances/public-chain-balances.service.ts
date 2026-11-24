@@ -1,3 +1,4 @@
+import { providerPools, PUBLIC_BALANCE_CHAINS } from './rpc/provider-config';
 import { HttpService } from '@nestjs/axios';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -12,23 +13,7 @@ import { RpcUnavailableException } from './rpc/chain-rpc.types';
 import type { BalanceAccount, ChainBalanceBatchResult, LiveChainBalance } from './chain-balance.service';
 
 // These adapters only read holdings. They do not implement funding or grant wallet ownership.
-const READERS = new Set([
-    'fogo',
-    'starknet',
-    'tron',
-    'stellar',
-    'hypercore',
-    'xrp',
-    'aptos',
-    'movement',
-    'sui',
-    'cardano',
-    'bch',
-    'dash',
-    'doge',
-    'ltc',
-    'zec',
-]);
+const READERS = PUBLIC_BALANCE_CHAINS;
 const BLOCKCHAIR: Record<string, string> = {
     bch: 'bitcoin-cash',
     dash: 'dash',
@@ -175,6 +160,8 @@ export class PublicChainBalancesService {
         return new RpcUnavailableException(network, 'RPC_UNAVAILABLE', message);
     }
     private endpoints(chain: string, network: string): Endpoint[] {
+        const centralized = providerPools(this.config)?.get(network);
+        if (centralized) return centralized;
         let config: ObjectData;
         try {
             config = object(JSON.parse(this.config.get<string>('BALANCE_PROVIDERS_JSON') || '{}'));

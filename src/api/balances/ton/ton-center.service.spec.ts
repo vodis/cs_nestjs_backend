@@ -60,3 +60,32 @@ describe('TonCenterService', () => {
         await expect(service.getJettonWalletAddress('ton:mainnet', owner, jetton)).rejects.toThrow('No funded');
     });
 });
+
+it.each(['https://gateway.example', 'https://toncenter.com'])(
+    'uses centralized TON root %s and scopes credentials',
+    async (root) => {
+        const get = jest.fn().mockResolvedValue({ data: { ok: true, result: '1' } });
+        const post = jest
+            .fn()
+            .mockResolvedValue({ data: { ok: true, result: { exit_code: 0, stack: [['num', '0x01']] } } });
+        const service = new TonCenterService(
+            { axiosRef: { get, post } } as unknown as HttpService,
+            new ConfigService({
+                TONCENTER_API_KEY: 'private-key',
+                CHAIN_RPC_ENDPOINTS_JSON: JSON.stringify({ 'ton:mainnet': [{ alias: 'ton', url: root }] }),
+            }),
+        );
+        await expect(service.getNativeBalance('ton:mainnet', 'owner')).resolves.toBe('1');
+        await expect(service.getWalletPublicKey('owner')).resolves.toHaveLength(32);
+        const headers = root === 'https://toncenter.com' ? { 'X-API-Key': 'private-key' } : undefined;
+        expect(get).toHaveBeenCalledWith(
+            root + '/api/v2/getAddressBalance',
+            expect.objectContaining({ headers, maxRedirects: 0 }),
+        );
+        expect(post).toHaveBeenCalledWith(
+            root + '/api/v2/runGetMethod',
+            expect.anything(),
+            expect.objectContaining({ headers, maxRedirects: 0 }),
+        );
+    },
+);

@@ -41,11 +41,12 @@ export class TonCenterService {
     }
 
     async getJettonWalletAddress(network: string, owner: string, jetton: string): Promise<string> {
-        const response = await this.get<JettonWalletsResponse>(network, '/api/v3/jetton/wallets', {
-            owner_address: owner,
-            jetton_address: jetton,
-            limit: 1,
-        });
+        const response = await this.get<JettonWalletsResponse>(
+            network,
+            '/api/v3/jetton/wallets',
+            { owner_address: owner, jetton_address: jetton, limit: 1 },
+            this.toncenterBaseUrl(network),
+        );
         const wallet = response.data.jetton_wallets?.[0];
         const address = wallet?.address;
         if (!address) throw new BadRequestException('No funded jetton wallet for this token');
@@ -60,7 +61,8 @@ export class TonCenterService {
     }
 
     async getWalletPublicKey(address: string): Promise<Buffer> {
-        const baseUrl = this.baseUrl('ton:mainnet');
+        // Only the trusted mainnet endpoint supplies the key used to verify wallet ownership.
+        const baseUrl = TONCENTER_BASE_URL['ton:mainnet'];
         const key = this.apiKey('ton:mainnet', baseUrl);
         const response = await this.http.axiosRef.post<TonCenterEnvelope<{ exit_code?: number; stack?: unknown[][] }>>(
             `${baseUrl}/api/v2/runGetMethod`,
@@ -79,8 +81,12 @@ export class TonCenterService {
         return Buffer.from(value.slice(2).padStart(64, '0'), 'hex');
     }
 
-    private async get<T>(network: string, path: string, params: Record<string, string | number>) {
-        const baseUrl = this.baseUrl(network);
+    private async get<T>(
+        network: string,
+        path: string,
+        params: Record<string, string | number>,
+        baseUrl = this.balanceBaseUrl(network),
+    ) {
         const apiKey = this.apiKey(network, baseUrl);
         try {
             return await this.http.axiosRef.get<T>(`${baseUrl}${path}`, {
@@ -109,9 +115,15 @@ export class TonCenterService {
         return value;
     }
 
-    private baseUrl(network: string): string {
-        if (!TONCENTER_BASE_URL[network]) throw new ServiceUnavailableException('TON network is not configured');
-        return providerPools(this.config)?.get(network)?.[0].url ?? TONCENTER_BASE_URL[network];
+    private balanceBaseUrl(network: string): string {
+        const original = this.toncenterBaseUrl(network);
+        return providerPools(this.config)?.get(network)?.[0].url ?? original;
+    }
+
+    private toncenterBaseUrl(network: string): string {
+        if (!Object.prototype.hasOwnProperty.call(TONCENTER_BASE_URL, network))
+            throw new ServiceUnavailableException('TON network is not configured');
+        return TONCENTER_BASE_URL[network];
     }
 
     private apiKey(network: string, baseUrl: string): string | undefined {

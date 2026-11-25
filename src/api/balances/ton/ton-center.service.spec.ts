@@ -62,7 +62,7 @@ describe('TonCenterService', () => {
 });
 
 it.each(['https://gateway.example', 'https://toncenter.com'])(
-    'uses centralized TON root %s and scopes credentials',
+    'uses centralized TON root %s for balances and keeps ownership and funding lookups on Toncenter',
     async (root) => {
         const get = jest.fn().mockResolvedValue({ data: { ok: true, result: '1' } });
         const post = jest
@@ -77,15 +77,24 @@ it.each(['https://gateway.example', 'https://toncenter.com'])(
         );
         await expect(service.getNativeBalance('ton:mainnet', 'owner')).resolves.toBe('1');
         await expect(service.getWalletPublicKey('owner')).resolves.toHaveLength(32);
+        const owner = `0:${'11'.repeat(32)}`;
+        const jetton = `0:${'22'.repeat(32)}`;
+        const address = `0:${'33'.repeat(32)}`;
+        get.mockResolvedValueOnce({ data: { jetton_wallets: [{ address, owner, jetton }] } });
+        await expect(service.getJettonWalletAddress('ton:mainnet', owner, jetton)).resolves.toBe(address);
         const headers = root === 'https://toncenter.com' ? { 'X-API-Key': 'private-key' } : undefined;
         expect(get).toHaveBeenCalledWith(
             root + '/api/v2/getAddressBalance',
             expect.objectContaining({ headers, maxRedirects: 0 }),
         );
         expect(post).toHaveBeenCalledWith(
-            root + '/api/v2/runGetMethod',
-            expect.anything(),
-            expect.objectContaining({ headers, maxRedirects: 0 }),
+            'https://toncenter.com/api/v2/runGetMethod',
+            { address: 'owner', method: 'get_public_key', stack: [] },
+            expect.objectContaining({ headers: { 'X-API-Key': 'private-key' }, maxRedirects: 0 }),
+        );
+        expect(get).toHaveBeenCalledWith(
+            'https://toncenter.com/api/v3/jetton/wallets',
+            expect.objectContaining({ headers: { 'X-API-Key': 'private-key' }, maxRedirects: 0 }),
         );
     },
 );

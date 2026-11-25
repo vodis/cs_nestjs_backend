@@ -359,6 +359,8 @@ outside production). Non-JSON-RPC roots also reject queries and fragments.
 These readers reject redirects. Toncenter API keys remain separate credentials
 and are sent only to the original network-specific Toncenter origin, never a
 custom gateway; configure custom authentication at an approved gateway.
+TON ownership proofs and Jetton funding address lookups continue to use the
+original Toncenter endpoints. The configured TON root serves balance reads.
 
 During migration, a canonical network entry takes precedence. Absent entries
 for additional readers fall back to legacy slug-keyed `BALANCE_PROVIDERS_JSON`;

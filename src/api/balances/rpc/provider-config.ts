@@ -75,13 +75,13 @@ function parseEndpoint(network: string, candidate: unknown, production: boolean)
         throw new Error(`Invalid RPC endpoint for ${network}`);
     }
     const jsonRpc = !!parseSupportedChainNetwork(network);
-    validateProviderUrl(url, production || !jsonRpc);
-    if (!jsonRpc && (new URL(url).search || new URL(url).hash))
+    const parsedUrl = validateProviderUrl(url, production || !jsonRpc);
+    if (!jsonRpc && (parsedUrl.search || parsedUrl.hash))
         throw new Error('Provider roots must not contain queries or fragments');
     return { alias, url: jsonRpc ? url : url.replace(/\/$/, '') };
 }
 
-export function validateProviderUrl(value: string, production: boolean): void {
+export function validateProviderUrl(value: string, production: boolean): URL {
     let url: URL;
     try {
         url = new URL(value);
@@ -93,4 +93,5 @@ export function validateProviderUrl(value: string, production: boolean): void {
         throw new Error('RPC endpoint URLs must use HTTPS outside local development');
     }
     if (url.username || url.password) throw new Error('RPC endpoint URLs must not use basic authentication');
+    return url;
 }

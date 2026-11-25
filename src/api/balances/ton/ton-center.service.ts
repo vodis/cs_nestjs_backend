@@ -1,3 +1,4 @@
+import { providerPools } from '../rpc/provider-config';
 import { Address } from '@ton/core';
 import { HttpService } from '@nestjs/axios';
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
@@ -40,11 +41,12 @@ export class TonCenterService {
     }
 
     async getJettonWalletAddress(network: string, owner: string, jetton: string): Promise<string> {
-        const response = await this.get<JettonWalletsResponse>(network, '/api/v3/jetton/wallets', {
-            owner_address: owner,
-            jetton_address: jetton,
-            limit: 1,
-        });
+        const response = await this.get<JettonWalletsResponse>(
+            network,
+            '/api/v3/jetton/wallets',
+            { owner_address: owner, jetton_address: jetton, limit: 1 },
+            this.toncenterBaseUrl(network),
+        );
         const wallet = response.data.jetton_wallets?.[0];
         const address = wallet?.address;
         if (!address) throw new BadRequestException('No funded jetton wallet for this token');
@@ -59,11 +61,13 @@ export class TonCenterService {
     }
 
     async getWalletPublicKey(address: string): Promise<Buffer> {
-        const key = this.apiKey('ton:mainnet');
+        // Only the trusted mainnet endpoint supplies the key used to verify wallet ownership.
+        const baseUrl = TONCENTER_BASE_URL['ton:mainnet'];
+        const key = this.apiKey('ton:mainnet', baseUrl);
         const response = await this.http.axiosRef.post<TonCenterEnvelope<{ exit_code?: number; stack?: unknown[][] }>>(
-            'https://toncenter.com/api/v2/runGetMethod',
+            `${baseUrl}/api/v2/runGetMethod`,
             { address, method: 'get_public_key', stack: [] },
-            { headers: key ? { 'X-API-Key': key } : undefined, timeout: this.timeoutMs() },
+            { headers: key ? { 'X-API-Key': key } : undefined, timeout: this.timeoutMs(), maxRedirects: 0 },
         );
         const result = response.data.result;
         const value = result?.stack?.[0]?.[1];
@@ -77,15 +81,19 @@ export class TonCenterService {
         return Buffer.from(value.slice(2).padStart(64, '0'), 'hex');
     }
 
-    private async get<T>(network: string, path: string, params: Record<string, string | number>) {
-        const baseUrl = TONCENTER_BASE_URL[network];
-        if (!baseUrl) throw new ServiceUnavailableException(`TON network is not configured: ${network}`);
-        const apiKey = this.apiKey(network);
+    private async get<T>(
+        network: string,
+        path: string,
+        params: Record<string, string | number>,
+        baseUrl = this.balanceBaseUrl(network),
+    ) {
+        const apiKey = this.apiKey(network, baseUrl);
         try {
             return await this.http.axiosRef.get<T>(`${baseUrl}${path}`, {
                 params,
                 headers: apiKey ? { 'X-API-Key': apiKey } : undefined,
                 timeout: this.timeoutMs(),
+                maxRedirects: 0,
             });
         } catch (error) {
             if (isAxiosError(error)) {
@@ -107,7 +115,20 @@ export class TonCenterService {
         return value;
     }
 
-    private apiKey(network: string): string | undefined {
+    private balanceBaseUrl(network: string): string {
+        const original = this.toncenterBaseUrl(network);
+        return providerPools(this.config)?.get(network)?.[0].url ?? original;
+    }
+
+    private toncenterBaseUrl(network: string): string {
+        if (!Object.prototype.hasOwnProperty.call(TONCENTER_BASE_URL, network))
+            throw new ServiceUnavailableException('TON network is not configured');
+        return TONCENTER_BASE_URL[network];
+    }
+
+    private apiKey(network: string, baseUrl: string): string | undefined {
+        // Legacy credentials belong only to the original Toncenter origin.
+        if (new URL(baseUrl).origin !== TONCENTER_BASE_URL[network]) return undefined;
         const key = network === 'ton:testnet' ? 'TONCENTER_TESTNET_API_KEY' : 'TONCENTER_API_KEY';
         return this.config.get<string>(key)?.trim() || undefined;
     }

@@ -1,3 +1,5 @@
+import { BITCOIN_MAINNET } from '@vodis/cs-assets';
+import { providerPools } from './rpc/provider-config';
 import { HttpService } from '@nestjs/axios';
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,7 +13,8 @@ export class BitcoinBalanceService {
     ) {}
 
     private base(): string {
-        const configured = this.config.get<string>('BITCOIN_ESPLORA_URL');
+        const configured =
+            providerPools(this.config)?.get(BITCOIN_MAINNET)?.[0].url ?? this.config.get<string>('BITCOIN_ESPLORA_URL');
         if (!configured) throw new ServiceUnavailableException('Bitcoin funding is not configured');
         const url = new URL(configured);
         if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash)

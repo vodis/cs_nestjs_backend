@@ -17,6 +17,21 @@ function createService(values: Record<string, unknown> = {}) {
 }
 
 describe('ChainRpcService', () => {
+    it('only probes JSON-RPC networks in a mixed centralized map at startup', async () => {
+        const { service, post } = createService({
+            NODE_ENV: 'production',
+            CHAIN_RPC_ENDPOINTS_JSON: JSON.stringify({
+                'eip155:56': [{ alias: 'bsc', url: 'https://evm.example' }],
+                'oneclick:stellar': [{ alias: 'horizon', url: 'https://stellar.example' }],
+                'ton:mainnet': [{ alias: 'ton', url: 'https://ton.example' }],
+            }),
+        });
+        post.mockResolvedValue({ data: { result: '0x38' } });
+        await service.onModuleInit();
+        expect(post).toHaveBeenCalledTimes(1);
+        expect(post.mock.calls[0][0]).toBe('https://evm.example');
+        await expect(service.request('oneclick:stellar', 'eth_chainId', [])).rejects.toThrow('not configured');
+    });
     it('rejects a wrong Solana genesis before requesting balances', async () => {
         const network = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp';
         const { service, post } = createService({

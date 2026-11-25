@@ -341,14 +341,33 @@ a separately verified token mapping and are not inferred from their symbols.
 Aleo/Miden report wallet-assisted access required; Pearl/Quantus currently
 report unsupported. These outcomes are partial responses, never fabricated zero.
 
-Configure backend-only `BALANCE_PROVIDERS_JSON` as blockchain-slug keys with
-ordered arrays of one to four `{ "alias": "primary", "url": "https://..." }`
-entries. Provider roots must match the adapter protocol (e.g. Horizon root,
-Aptos `/v1`, Koios `/api/v1`, Sui GraphQL endpoint, Hyperliquid root); these
-are not interchangeable EVM RPC URLs. HTTPS is required; redirects, embedded
-credentials, query strings and fragments are rejected. Configure authenticated
-providers through an approved gateway when their authentication cannot fit this
-contract. Existing EVM pools continue using `CHAIN_RPC_ENDPOINTS_JSON`.
+Configure all backend provider roots in `CHAIN_RPC_ENDPOINTS_JSON`, keyed by
+`balanceNetwork`: for example `eip155:56`, `near:mainnet`,
+`solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp`,
+`bip122:000000000019d6689c085ae165831e93`, `ton:mainnet`, or `oneclick:stellar`.
+Each value is an ordered array of `{ "alias": "primary", "url": "https://..." }`.
+EVM/NEAR/Solana and additional readers accept one to four endpoints; Bitcoin
+and TON accept exactly one (their existing adapters do not implement failover).
+The network selects the adapter protocol: Horizon root, Aptos `/v1`, Koios
+`/api/v1`, Sui GraphQL endpoint, Hyperliquid root, Bitcoin Esplora root or
+Toncenter-compatible root. These are not interchangeable EVM RPC URLs.
+
+Invalid configuration fails startup. Only EVM/NEAR/Solana identity probes run
+at startup; other adapters check their responses during requests. HTTPS and
+no basic authentication are required (JSON-RPC alone allows localhost HTTP
+outside production). Non-JSON-RPC roots also reject queries and fragments.
+These readers reject redirects. Toncenter API keys remain separate credentials
+and are sent only to the original network-specific Toncenter origin, never a
+custom gateway; configure custom authentication at an approved gateway.
+TON ownership proofs and Jetton funding address lookups continue to use the
+original Toncenter endpoints. The configured TON root serves balance reads.
+
+During migration, a canonical network entry takes precedence. Absent entries
+for additional readers fall back to legacy slug-keyed `BALANCE_PROVIDERS_JSON`;
+Bitcoin falls back to `BITCOIN_ESPLORA_URL`, and TON to its previous defaults.
+EVM/NEAR legacy URL variables apply only when the entire canonical map is absent,
+as before. Invalid canonical entries never fall back. Keep legacy values for
+rollback, but maintain endpoint changes in the canonical map after migration.
 
 Adapters verify network identity where the protocol exposes it, preserve atomic
 precision, coalesce in-flight reads, cap response size/time, and fail over with
@@ -359,10 +378,12 @@ so fresh and cached responses do not double-count holdings.
 
 Release the SDK addition first, then pin its exact released version and regenerate
 the backend lockfile. Packed SDK validation alone is not a deployable consumer
-release. Roll out the backend before the host. Provision `BALANCE_PROVIDERS_JSON`
-before activating its staging `requiredSecrets` declaration; undeclared Vault
-keys are not injected into containers. Follow the orchestrator's
+release. Deploy the centralized-config backend before extending the existing
+`CHAIN_RPC_ENDPOINTS_JSON` value: older images reject the new network keys.
+The existing orchestrator declaration already injects this key; no additional
+`BALANCE_PROVIDERS_JSON` declaration is needed. Follow the orchestrator's
 [provider runbook](https://github.com/vodis/cs_orchestrator/blob/main/docs/runbook/17_backend-rpc-providers.md)
-for catalog activation and redeployment, then check authenticated balance reads
-as well as health. No database migration is required. Rollback uses the previous immutable
-application image and preserves other secret keys when reverting provider config.
+for the operator-only merge and redeployment, then check authenticated balance
+reads as well as health. No database migration is required. Before rolling back
+to an older image, restore its compatible endpoint map while preserving unrelated
+Vault keys; never deploy that image with the extended map.

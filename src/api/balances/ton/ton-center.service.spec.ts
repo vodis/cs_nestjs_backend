@@ -60,3 +60,41 @@ describe('TonCenterService', () => {
         await expect(service.getJettonWalletAddress('ton:mainnet', owner, jetton)).rejects.toThrow('No funded');
     });
 });
+
+it.each(['https://gateway.example', 'https://toncenter.com'])(
+    'uses centralized TON root %s for balances and keeps ownership and funding lookups on Toncenter',
+    async (root) => {
+        const get = jest.fn().mockResolvedValue({ data: { ok: true, result: '1' } });
+        const post = jest
+            .fn()
+            .mockResolvedValue({ data: { ok: true, result: { exit_code: 0, stack: [['num', '0x01']] } } });
+        const service = new TonCenterService(
+            { axiosRef: { get, post } } as unknown as HttpService,
+            new ConfigService({
+                TONCENTER_API_KEY: 'private-key',
+                CHAIN_RPC_ENDPOINTS_JSON: JSON.stringify({ 'ton:mainnet': [{ alias: 'ton', url: root }] }),
+            }),
+        );
+        await expect(service.getNativeBalance('ton:mainnet', 'owner')).resolves.toBe('1');
+        await expect(service.getWalletPublicKey('owner')).resolves.toHaveLength(32);
+        const owner = `0:${'11'.repeat(32)}`;
+        const jetton = `0:${'22'.repeat(32)}`;
+        const address = `0:${'33'.repeat(32)}`;
+        get.mockResolvedValueOnce({ data: { jetton_wallets: [{ address, owner, jetton }] } });
+        await expect(service.getJettonWalletAddress('ton:mainnet', owner, jetton)).resolves.toBe(address);
+        const headers = root === 'https://toncenter.com' ? { 'X-API-Key': 'private-key' } : undefined;
+        expect(get).toHaveBeenCalledWith(
+            root + '/api/v2/getAddressBalance',
+            expect.objectContaining({ headers, maxRedirects: 0 }),
+        );
+        expect(post).toHaveBeenCalledWith(
+            'https://toncenter.com/api/v2/runGetMethod',
+            { address: 'owner', method: 'get_public_key', stack: [] },
+            expect.objectContaining({ headers: { 'X-API-Key': 'private-key' }, maxRedirects: 0 }),
+        );
+        expect(get).toHaveBeenCalledWith(
+            'https://toncenter.com/api/v3/jetton/wallets',
+            expect.objectContaining({ headers: { 'X-API-Key': 'private-key' }, maxRedirects: 0 }),
+        );
+    },
+);

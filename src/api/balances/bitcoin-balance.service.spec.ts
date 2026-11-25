@@ -1,3 +1,4 @@
+import { BITCOIN_MAINNET } from '@vodis/cs-assets';
 import { Test } from '@nestjs/testing';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
@@ -22,7 +23,10 @@ describe('Bitcoin balance and fee checks', () => {
         const module = await Test.createTestingModule({
             providers: [
                 BitcoinBalanceService,
-                { provide: ConfigService, useValue: { get: () => 'https://bitcoin.example/api' } },
+                {
+                    provide: ConfigService,
+                    useValue: new ConfigService({ BITCOIN_ESPLORA_URL: 'https://bitcoin.example/api' }),
+                },
                 { provide: HttpService, useValue: { axiosRef: { get } } },
             ],
         }).compile();
@@ -30,6 +34,19 @@ describe('Bitcoin balance and fee checks', () => {
     });
     it('uses only confirmed funds and reserves coin-selection fees', async () => {
         expect(await service.funds('account')).toEqual({ balance: 100000n, feeRate: 3, reserve: 732n });
+    });
+    it('prefers the centralized Esplora root while retaining genesis and fee checks', async () => {
+        service = new BitcoinBalanceService(
+            new ConfigService({
+                BITCOIN_ESPLORA_URL: 'https://legacy.example',
+                CHAIN_RPC_ENDPOINTS_JSON: JSON.stringify({
+                    [BITCOIN_MAINNET]: [{ alias: 'btc', url: 'https://central.example/api/' }],
+                }),
+            }),
+            { axiosRef: { get } } as unknown as HttpService,
+        );
+        expect((await service.funds('account')).balance).toBe(100000n);
+        expect(get.mock.calls.every(([url]) => url.startsWith('https://central.example/api/'))).toBe(true);
     });
     it('rejects the wrong network before reading balances', async () => {
         genesis = 'testnet';
